@@ -11,3 +11,9 @@ internal/frp-1.0.2
 web/src/views/FrpView-1.0.2.vue
 # 文档与本地杂项
  docs
+# 本地导出/打包产物与日志（预防性：不进入构建上下文）
+*.log
+*.rar
+*.zip
+*.tar.gz
+.breezell
