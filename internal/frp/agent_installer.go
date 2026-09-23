@@ -139,7 +139,8 @@ fi
 printf 'agent version: %s\n' "$AGENT_VERSION"
 if [ ! -f "$CONF_FILE" ]; then
   umask 077
-  printf 'FONU_AGENT_TOKEN=%s\n' "$(openssl rand -hex 32)" > "$CONF_FILE"
+  # 用 /dev/urandom 生成 64 位 hex token，不依赖 openssl（缺失时会静默写入空 token，导致 Fonu 无法认证 agent）
+  printf 'FONU_AGENT_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$CONF_FILE"
 fi
 cat > "$UNIT" <<'UNIT'
 [Unit]

@@ -30,7 +30,8 @@ import (
 // 找出真正被加载的文件所在目录，零猜测）；include 链递归与 FONU_AGENT_NGINX_CONF_DIR 保留为回退。
 // 0.9.0：Nginx 可用性显式探测（status 暴露 nginx_ok/nginx_missing）、部署前预检、一键安装 Nginx 端点。
 // 0.9.1：status 补充 nginx_running / nginx_version，供页面展示 Nginx 状态卡片。
-const AgentVersion = "0.9.1"
+// 0.9.2：Basic Auth 哈希改为纯 Go apr1（去掉对 VPS openssl 的依赖）；安装脚本 token 改用 /dev/urandom。
+const AgentVersion = "0.9.2"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -1373,11 +1374,11 @@ func sslDirectives(certDir string, tls13Only bool) string {
 
 // writeBasicAuthSecret 用规则表单提供的密码写入 htpasswd（自定义密码场景）。
 func writeBasicAuthSecret(domain, user, password string) error {
-	out, err := exec.Command("openssl", "passwd", "-apr1", password).CombinedOutput()
+	hash, err := apr1Crypt(password)
 	if err != nil {
-		return fmt.Errorf("生成 htpasswd 失败: %w: %s", err, strings.TrimSpace(string(out)))
+		return fmt.Errorf("生成 htpasswd 失败: %w", err)
 	}
-	return atomicWrite(basicAuthFilePath(domain), []byte(user+":"+strings.TrimSpace(string(out))+"\n"), 0o640)
+	return atomicWrite(basicAuthFilePath(domain), []byte(user+":"+hash+"\n"), 0o640)
 }
 
 // basicAuthFilePath 返回指定域名的 htpasswd 文件路径（与反代配置同目录管理）。
@@ -1396,12 +1397,11 @@ func ensureBasicAuthSecret(domain, user string) (string, error) {
 		}
 	}
 	password := randomToken()[:16]
-	// 用 openssl 生成 apr1 哈希（Nginx 原生支持）；系统无 openssl 时退化为 crypt 失败报错
-	out, err := exec.Command("openssl", "passwd", "-apr1", password).CombinedOutput()
+	// 纯 Go 生成 apr1 哈希（等价 openssl passwd -apr1，不依赖 VPS 上的外部命令）
+	hash, err := apr1Crypt(password)
 	if err != nil {
-		return "", fmt.Errorf("生成 htpasswd 失败: %w: %s", err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("生成 htpasswd 失败: %w", err)
 	}
-	hash := strings.TrimSpace(string(out))
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return "", err
 	}

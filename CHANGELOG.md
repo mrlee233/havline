@@ -31,6 +31,7 @@ All notable changes to this project will be documented in this file.
 - FRP 公网反代：部署预检——未安装 Nginx 时直接提示「VPS 未安装 Nginx，请先安装（apt install nginx / yum install nginx）」，替代 `nginx config rejected` 技术堆栈
 - FRP：agent 部署接口由 10 个位置参数改为 `RouteSpec` 结构体（`SyncRouteSpec`），`SyncRouteEx` 保留为兼容包装
 - FRP：agent 版本递增至 0.9.1，状态新增 `nginx_ok` / `nginx_missing` / `nginx_running` / `nginx_path` / `nginx_version` / `nginx_error`
+- FRP：agent 0.9.2——Basic Auth 哈希改为**纯 Go apr1**（与 `openssl passwd -apr1` 输出逐字节一致，已用参考向量做单元测试），安装脚本 token 改用 `/dev/urandom`：agent 与安装流程彻底去除对 VPS 上 openssl 的依赖（原先缺 openssl 时会静默写入空 token、导致 Fonu 无法认证 agent）
 
 ### 修复
 
