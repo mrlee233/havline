@@ -60,9 +60,9 @@
           :item-count="filteredFrpLogs.length"
         />
         <EmptyState
-          v-if="!loadingFrp && frpLogs.length === 0"
-          title="暂无 FRP 日志"
-          description="启动 frpc 后，登录、隧道注册与连接错误会记录在这里。"
+          v-if="!loadingFrp && filteredFrpLogs.length === 0"
+          :title="frpLogs.length === 0 ? '暂无 FRP 日志' : '没有匹配的日志'"
+          :description="frpLogs.length === 0 ? '启动 frpc 后，登录、隧道注册与连接错误会记录在这里。' : '换个关键词或级别再试。'"
         />
       </n-tab-pane>
 
@@ -374,18 +374,31 @@ const frpPage = ref(1)
 const loadingFrp = ref(false)
 const frpPageSize = 50
 const frpLevelText: Record<string, string> = { I: '信息', W: '警告', E: '错误', D: '调试' }
+// 工具条的级别选项值是 INFO / WARN / ERROR，而 frpc 的级别是单字母 I/W/E/D，需转换后再比较
+const frpLevelAlias: Record<string, string> = { INFO: 'I', WARN: 'W', ERROR: 'E' }
 
-// frpc 行形如：2026-09-23 15:20:31.123 [I] [service.go:295] login to server success
+// frpc 行有两种形态：
+//   2026-09-23 15:20:31.123 [I] [service.go:295] login to server success
+//   [web] 2026-09-20 19:38:51.771 [I] [client/control.go:174] [trace-id] [web-http] start proxy success
+// 行首可能带一个 [组件] 前缀，来源优先取 [文件:行号]，缺失时回落为该组件名
 function parseFrpLogLine(line: string): FrpLogEntry {
-  const matched = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*\[([A-Z])\]\s*(?:\[([^\]]+)\])?\s*(.*)$/)
+  const matched = line.match(
+    /^(?:\[([^\]]+)\]\s+)?(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*\[([A-Za-z])\]\s*(?:\[([^\]]+)\])?\s*(.*)$/,
+  )
   if (!matched) return { time: '', level: '', source: '', message: line }
-  return { time: matched[1], level: matched[2], source: matched[3] ?? '', message: matched[4] ?? '' }
+  const component = matched[1] ?? ''
+  return {
+    time: matched[2],
+    level: matched[3].toUpperCase(),
+    source: matched[4] || component,
+    message: matched[5] ?? '',
+  }
 }
 
 const filteredFrpLogs = computed(() => {
   const keyword = frpKeyword.value.trim().toLowerCase()
   return frpLogs.value.filter((log) => {
-    if (frpLevel.value && frpLevelText[log.level] !== frpLevel.value) return false
+    if (frpLevel.value && frpLevelAlias[frpLevel.value] !== log.level) return false
     if (keyword && !`${log.source} ${log.message}`.toLowerCase().includes(keyword)) return false
     return true
   })
@@ -396,11 +409,40 @@ const pagedFrpLogs = computed(() => {
   return filteredFrpLogs.value.slice(start, start + frpPageSize)
 })
 
+// 与「系统日志」页签同一套渲染：时间走 logTimeCell，级别/来源用小号标签，消息单行省略并带 tooltip
 const frpColumns: DataTableColumns<FrpLogEntry> = [
-  { title: '时间', key: 'time', width: 168, render: (row) => (row.time ? logTimeCell(row.time) : '—') },
-  { title: '级别', key: 'level', width: 80, render: (row) => frpLevelText[row.level] ?? (row.level || '—') },
-  { title: '来源', key: 'source', width: 170, render: (row) => row.source || '—' },
-  { title: '消息', key: 'message', render: (row) => row.message },
+  { title: '时间', key: 'time', width: 168, render: (row) => logTimeCell(row.time) },
+  {
+    title: '级别',
+    key: 'level',
+    width: 80,
+    render: (row) => {
+      const label = frpLevelText[row.level] ?? (row.level || '—')
+      return h(NTag, { size: 'small', bordered: false, type: systemLevelTagType(label) }, () => label)
+    },
+  },
+  {
+    title: '来源',
+    key: 'source',
+    width: 170,
+    render: (row) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          bordered: false,
+          type: systemModuleTagType(row.source),
+          class: 'log-module-tag',
+        },
+        () => row.source || '—',
+      ),
+  },
+  {
+    title: '消息',
+    key: 'message',
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'log-message' }, row.message),
+  },
 ]
 
 function frpRowClassName(row: FrpLogEntry) {
@@ -593,6 +635,10 @@ watch(errorKeyword, () => {
 
 watch([systemKeyword, systemLevel], () => {
   systemPage.value = 1
+})
+
+watch([frpKeyword, frpLevel], () => {
+  frpPage.value = 1
 })
 
 watch(autoRefresh, (on) => {
