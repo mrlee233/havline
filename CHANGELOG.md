@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.0] - 2026-09-23
+
+### 新增
+
+- FRP 公网反代：独立「公网反代」页（`/public-proxy`）——服务端选择、规则列表（名称 / 域名 / 内网目标 / 回源端口）、部署与移除、配置查看、15 秒自动刷新
+- FRP 公网反代：**部署后回源自检**——agent 写入配置后模拟 Nginx 回源（`Host: 域名` → `127.0.0.1:<vhost 端口>`）并分级提示：0=连接不上 vhost、404=隧道未注册、5xx=内网服务异常，不再出现「部署成功但打开 502」
+- FRP 公网反代：**状态徽章实时化**——基于 `nginx -T` 同时判定「文件存在 / 语法通过 / 实际被加载」，展示已生效 / 已写入未加载 / 语法错误 / 未部署
+- FRP 公网反代：**配置查看**——`GET /api/v1/routes/{domain}/conf` 直读 VPS 上生成的 nginx 配置，排障无需 SSH
+- FRP 公网反代：**五段健康检查**（逐规则）——DNS 指向、证书覆盖与剩余天数、隧道注册、内网服务探活、反代生效态；任一断点红标 + 悬停显示原因
+- FRP 公网反代：**流量列**——当前连接 / 当前上传 / 当前下载 / 总上传 / 总下载（取自 frps dashboard 聚合）
+- FRP 公网反代：「部署设置」弹窗（与本地反向代理弹窗同构，三 Tab）
+  - 基础：启用 HTTPS（显式开关）、HTTP 强制跳转、WebSocket、上传大小限制、代理读超时
+  - 安全：IP 白名单、IP 黑名单、Basic Auth（用户名 + 自定义密码，留空首次自动生成）、仅中国大陆 IP
+  - 高级：安全响应头（HSTS / X-Frame-Options / X-Content-Type-Options / Referrer-Policy）、仅 TLS 1.3、请求限流（速率 / 突发）、每 IP 连接数上限
+- FRP 公网反代：限流与连接数落地——agent 生成 `fonuagent-limits.conf`（http 上下文 zone 定义，由状态文件驱动增删），server 内输出 `limit_req_status 429` / `limit_conn_status 503`
+- FRP 公网反代：仅中国大陆 IP——Fonu 把本地维护的中国 IP 段下发到 agent（`PUT /api/v1/china-cidr`），agent 生成 `geo $fonu_china_client`；IP 段未更新时部署显式报错，不产出半成品配置
+- FRP 公网 Agent：新增独立「公网 Agent」页（`/frp-agent`）——agent 状态面板、frps 配置下发、frps 版本安装 / 升级、frps 启停与重启、frps 管理入口、日志、SSH 生命周期与诊断
+- FRP 公网 Agent：**Nginx 状态卡片**——状态徽标（正常 / 未安装 / 配置校验未通过 / 已安装未运行）、版本、可执行路径、vhost 配置目录、`nginx -t` 结果、80/443 监听、反代配置文件数
+- FRP 公网 Agent：**一键安装 Nginx**——agent 识别 apt-get / dnf / yum / apk 非交互安装并启动，回写探测结果（需 agent 以 root 运行）
+- FRP 公网反代：兼容 frps v0.68 与 v0.71+——新版走 `GET /api/v2/proxies`，旧版走 `GET /api/proxies/{user.name}` 逐条查询
+
+### 改进
+
+- FRP 公网反代：部署选项（WebSocket / 强制跳转 / IP 白名单 / Basic Auth 等）从穿透规则弹窗迁移到公网反代页「部署设置」，语义归位（这些是公网反代属性，与隧道无关）
+- FRP 公网反代：隧道匹配优先按域名（`spec.http.customDomains`），比按代理名猜测可靠；同时兼容 `user` 前缀（`admin.<规则名>`）与裸规则名
+- FRP 公网反代：frps 管理接口调用失败时把具体原因透出到前端悬停（请求 URL、状态码、响应体、密码读取 / 解密环节），不再笼统提示「接口不可用」
+- FRP 公网反代：部署预检——未安装 Nginx 时直接提示「VPS 未安装 Nginx，请先安装（apt install nginx / yum install nginx）」，替代 `nginx config rejected` 技术堆栈
+- FRP：agent 部署接口由 10 个位置参数改为 `RouteSpec` 结构体（`SyncRouteSpec`），`SyncRouteEx` 保留为兼容包装
+- FRP：agent 版本递增至 0.9.1，状态新增 `nginx_ok` / `nginx_missing` / `nginx_running` / `nginx_path` / `nginx_version` / `nginx_error`
+
+### 修复
+
+- FRP 公网反代：隧道状态误报 ✗——`RouteHealth` 静默忽略 dashboard 密码解密错误导致空密码 401，现逐环节记录并透出
+- FRP 公网反代：隧道检测端点错配——旧代码请求 `/api/proxies`（405）或按类型子端点（404），现按 frps 版本自适应并解析 V2 的 `data.items`
+- FRP 公网反代：流量恒为 0——V2 返回的键是 `admin.ssssss` 而代码只查裸规则名，现按「裸名 / user 前缀名 / 域名索引」三级匹配
+- FRP 公网反代：列表健康徽标样式丢失（此前无样式渲染）
+- 修复被外部进程清空的 `internal/frp/store.go`、`internal/api/ddns_handler.go`、`web/src/views/DdnsView.vue`
+
+### 变更
+
+- FRP 公网反代管理从「公网 Agent」页拆分为独立页面（`/public-proxy`），侧栏新增「公网反代」
+- 新增 agent 端点：`GET /api/v1/routes/{domain}/conf`、`PUT /api/v1/china-cidr`、`POST /api/v1/nginx/install`
+- 新增 Fonu 接口：`GET /api/frpmulti/servers/{id}/agent/routes/health`、`GET /api/frpmulti/servers/{id}/agent/routes/{proxyID}/conf`、`POST /api/frpmulti/servers/{id}/agent/nginx/install`
+- 明确不做（已写入 `docs/agent-proxy-settings-plan.md`）：公网反代不使用「目标 Host 头」（会破坏 frps vhost 路由导致 404）、不做「忽略后端 TLS 校验」（回源为明文 HTTP）、不做公网侧自定义 upstream 覆盖（会绕过隧道）
+
 ## [v1.1.0] - 2026-09-19
 
 ### 新增
