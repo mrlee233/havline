@@ -23,37 +23,31 @@
   <LoadError v-if="loadError" :message="loadError" @retry="load" />
 
   <template v-else>
-    <section class="status-grid">
-      <FonuCard class="status-card">
-        <div class="status-card__icon" :class="`status-card__icon--${status.status}`">
-          <n-icon :component="GitNetworkOutline" />
-        </div>
-        <div>
-          <div class="status-card__label">客户端状态</div>
-          <StatusBadge :value="statusKind" :text="statusLabel" />
-        </div>
-      </FonuCard>
-      <FonuCard class="status-card">
-        <div class="status-card__icon status-card__icon--blue"><n-icon :component="LayersOutline" /></div>
-        <div>
-          <div class="status-card__label">启用规则</div>
-          <strong class="status-card__value">{{ status.enabled_proxies }}</strong>
-        </div>
-      </FonuCard>
-      <FonuCard class="status-card">
-        <div class="status-card__icon status-card__icon--purple"><n-icon :component="TerminalOutline" /></div>
-        <div>
-          <div class="status-card__label">frpc 版本</div>
-          <strong class="status-card__version">{{ status.frpc_version || '未检测' }}</strong>
-        </div>
-      </FonuCard>
-      <FonuCard class="status-card">
-        <div class="status-card__icon status-card__icon--amber"><n-icon :component="TimeOutline" /></div>
-        <div>
-          <div class="status-card__label">最近应用</div>
-          <strong class="status-card__version">{{ formatDate(status.last_reloaded_at) || '尚未应用' }}</strong>
-        </div>
-      </FonuCard>
+    <section class="stats-row" aria-label="frpc 状态">
+      <div class="stat-card">
+        <n-icon :component="GitNetworkOutline" class="stat-card__icon" :class="`stat-card__icon--${status.status}`" aria-hidden="true" />
+        <div class="stat-card__value stat-card__value--sm"><StatusBadge :kind="statusKind" :text="statusLabel" /></div>
+        <div class="stat-card__label">客户端状态</div>
+        <div class="stat-card__sub">frpc 进程状态</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="LayersOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
+        <div class="stat-card__value">{{ status.enabled_proxies }}</div>
+        <div class="stat-card__label">启用规则</div>
+        <div class="stat-card__sub">已启用的穿透规则数</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="TerminalOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
+        <div class="stat-card__value stat-card__value--sm">{{ status.frpc_version || '未检测' }}</div>
+        <div class="stat-card__label">frpc 版本</div>
+        <div class="stat-card__sub">本机运行的 frpc</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="TimeOutline" class="stat-card__icon stat-card__icon--amber" aria-hidden="true" />
+        <div class="stat-card__value stat-card__value--sm">{{ formatDate(status.last_reloaded_at) || '尚未应用' }}</div>
+        <div class="stat-card__label">最近应用</div>
+        <div class="stat-card__sub">配置最近一次生效</div>
+      </div>
     </section>
 
     <FonuCard class="section-card" title="公网服务端" subtitle="可添加并管理多个 frps 服务端连接">
@@ -67,37 +61,17 @@
       <EmptyState v-if="servers.length === 0" title="尚未配置 FRP 服务端" description="先添加公网 VPS 的 frps 地址和认证 Token。">
         <template #action><n-button type="primary" @click="openServerModal()">添加服务端</n-button></template>
       </EmptyState>
-      <div v-else class="server-list">
-        <div class="server-row server-row--header" aria-hidden="true">
-          <div>名称</div><div>主机</div><div>端口</div><div>延迟</div><div>位置</div><div>配置</div><div>启动状态</div><div>操作</div>
-        </div>
-        <div v-for="server in servers" :key="server.id" class="server-row">
-          <div class="server-row__main">
-            <div class="server-row__name"><n-icon :component="CloudOutline" /> {{ server.name }}</div>
-          </div>
-          <div class="server-row__host mono">{{ server.server_addr }}</div>
-          <div><n-tag size="small" :bordered="false">{{ server.server_port }}</n-tag></div>
-          <div class="server-row__metric server-row__latency" :class="{ 'server-row__latency--ok': serverDiagnostics[server.id]?.available }" :title="latencyDetail(server)">
-            <n-icon :component="FlashOutline" /><span>{{ latencyText(server) }}</span>
-          </div>
-          <div class="server-row__metric server-row__location"><n-icon :component="LocationOutline" /><span>{{ locationText(server) }}</span></div>
-          <div class="server-row__config">
-            <n-tag size="small" :bordered="false" :type="server.tls_enabled ? 'success' : 'warning'">TLS {{ server.tls_enabled ? '已启用' : '未启用' }}</n-tag>
-            <n-tag size="small" :bordered="false" :type="server.has_token ? 'success' : 'error'">Token {{ server.has_token ? '已配置' : '缺失' }}</n-tag>
-          </div>
-          <div><n-tag size="small" :bordered="false" :type="serverStartupType(server)" :title="serverStateTooltip(server)">{{ serverStartupText(server) }} · {{ connectionStateText(server) }}</n-tag></div>
-          <div class="server-row__tags">
-            <n-button v-if="server.boot_status === 'running'" size="small" type="error" ghost :loading="serverStartingId === server.id" @click="stopServer(server)">停止</n-button>
-            <n-button v-else size="small" type="success" ghost :loading="serverStartingId === server.id" @click="startServer(server)">启动</n-button>
-            <n-button size="small" quaternary @click="openServerDetail(server)">查看</n-button>
-            <n-button size="small" quaternary @click="openServerLogs(server)">日志</n-button>
-            <n-button size="small" quaternary :loading="measuringId === server.id" @click="measureServer(server)">测速</n-button>
-            <n-button size="small" quaternary :loading="testingId === server.id" @click="testServer(server)">校验</n-button>
-            <router-link v-if="server.agent_configured" to="/frp-agent"><n-button size="small" quaternary>Agent 管理</n-button></router-link>
-            <n-button size="small" quaternary @click="openServerModal(server)">编辑</n-button>
-            <n-button size="small" quaternary type="error" @click="confirmDeleteServer(server)">删除</n-button>
-          </div>
-        </div>
+      <div v-else class="frp-server-table-wrap">
+        <n-data-table
+          class="frp-server-table"
+          :columns="serverColumns"
+          :data="servers"
+          :bordered="false"
+          :single-line="false"
+          size="small"
+          :scroll-x="1560"
+          :row-key="(row: FrpServer) => row.id"
+        />
       </div>
     </FonuCard>
 
@@ -115,7 +89,7 @@
       <EmptyState v-if="proxies.length === 0" title="尚未创建穿透规则" description="可发布 TCP 服务，或通过 HTTP/HTTPS 域名将请求转入内网。">
         <template #action><n-button type="primary" :disabled="servers.length === 0" @click="openProxyModal()">添加规则</n-button></template>
       </EmptyState>
-      <n-data-table v-else :columns="columns" :data="proxies" :bordered="false" :single-line="false" :scroll-x="2020" :row-key="(row: FrpProxy) => row.id" />
+      <n-data-table v-else class="frp-rules-table" :columns="columns" :data="proxies" :bordered="false" :single-line="false" :scroll-x="2020" :row-key="(row: FrpProxy) => row.id" />
     </FonuCard>
 
     <FonuCard v-if="status.last_error" class="error-card" title="最近错误">
@@ -218,7 +192,7 @@
           <div class="switch-row"><span>强制 TLS（frps 只接受 TLS 连接）</span><n-switch v-model:value="serverForm.options.tls_force" /></div>
         </div>
         <div class="switch-row"><span>frps 写文件日志（/var/log/frps.log）</span><n-switch v-model:value="serverForm.options.frps_log_to_file" /></div>
-        <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" style="max-width: 200px" /></n-form-item>
+        <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" class="narrow-input" /></n-form-item>
       </section>
 
       <section class="form-section">
@@ -367,7 +341,7 @@
         <div class="form-grid">
           <n-form-item label="Subdomain"><n-input v-model:value="proxyForm.options.subdomain" placeholder="例如：nas" /></n-form-item>
           <n-form-item label="公网反代选项" :show-feedback="true">
-            <span style="font-size: 12px; color: var(--fonu-text-secondary)">WebSocket / 强制跳转 / IP 白名单 / Basic Auth 已移至「公网反代」页逐条规则的「部署设置」中配置；此处填写的值会保留。已填的 IP 白名单：{{ (proxyForm.options.allow_ips || []).join(', ') || '无' }}</span>
+            <span class="form-hint">WebSocket / 强制跳转 / IP 白名单 / Basic Auth 已移至「公网反代」页逐条规则的「部署设置」中配置；此处填写的值会保留。已填的 IP 白名单：{{ (proxyForm.options.allow_ips || []).join(', ') || '无' }}</span>
           </n-form-item>
           <n-form-item label="上游 Host 重写"><n-input v-model:value="proxyForm.host_header_rewrite" placeholder="例如：nas.example.com" /></n-form-item>
           <n-form-item label="路径匹配（Locations）"><n-input v-model:value="proxyForm.locations_text" placeholder="多个路径用逗号或换行分隔" /></n-form-item>
@@ -535,15 +509,24 @@
     </div>
   </n-modal>
 
-  <n-modal v-model:show="showServerLogs" preset="card" :title="`公网服务端运行日志 - ${serverLogsTarget?.name ?? ''}`" class="logs-modal" :style="{ width: 'min(860px, calc(100vw - 32px))' }">
+  <n-modal v-model:show="showServerLogs">
+    <div class="frp-card-modal">
+      <div class="proxy-modal__header">
+        <h3 class="modal-title">公网服务端运行日志 - {{ serverLogsTarget?.name ?? '' }}</h3>
+        <n-button size="small" quaternary @click="showServerLogs = false">关闭</n-button>
+      </div>
+      <div class="proxy-modal__scroll">
     <div class="logs-toolbar">
       <span class="table-muted">{{ serverLogsTarget?.server_addr }}:{{ serverLogsTarget?.server_port }} · frpc-server-{{ serverLogsTarget?.id }}.log</span>
       <n-button size="small" :loading="serverLogsLoading" @click="loadServerLogs">刷新</n-button>
     </div>
-    <pre class="logs-box">{{ serverLogLines.length ? serverLogLines.join('\n') : '暂无该服务端的运行日志' }}</pre>
+      <pre class="logs-box">{{ serverLogLines.length ? serverLogLines.join('\n') : '暂无该服务端的运行日志' }}</pre>
+      </div>
+      <div class="modal-footer"><n-button @click="showServerLogs = false">关闭</n-button></div>
+    </div>
   </n-modal>
 
-  <n-modal v-model:show="showServerDetail" preset="card" :title="viewingServer?.name || '服务端详情'" :style="{ width: 'min(980px, 94vw)', maxHeight: 'calc(100vh - 40px)' }" :content-style="{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }">
+  <n-modal v-model:show="showServerDetail" preset="card" class="frp-detail-card" :title="viewingServer?.name || '服务端详情'" :style="{ width: 'min(980px, 94vw)', maxHeight: 'calc(100vh - 40px)' }" :content-style="{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }">
     <div v-if="viewingServer" class="server-detail">
       <div class="server-detail__top"><div><h2>{{ viewingServer.name }}</h2><p>服务端详情和运行监测</p></div><n-button v-if="viewingServer.boot_status === 'running'" size="small" type="error" ghost @click="stopServer(viewingServer)"><template #icon><n-icon :component="StopOutline" /></template>停止</n-button><n-button v-else size="small" type="success" ghost @click="startServer(viewingServer)"><template #icon><n-icon :component="PlayOutline" /></template>启动</n-button><n-button size="small" @click="openFRPSConfig(viewingServer)"><template #icon><n-icon :component="DocumentOutline" /></template>frps.toml</n-button></div>
       <div class="server-detail__grid">
@@ -572,22 +555,40 @@
           </div>
         </section>
       </div>
-      <section class="server-detail__panel server-status-panel"><div class="server-detail__section-title"><h3>服务器状态</h3></div><div class="server-status-summary"><div class="server-status-summary__item server-status-summary__item--state"><StatusBadge :value="detailStatusKind" :text="detailStatusText" /></div><div class="server-status-summary__item"><label>可达率</label><strong>{{ detailAvailability.toFixed(1) }}%</strong></div><div class="server-status-summary__item"><label>平均延迟</label><strong>{{ detailAverageLatency }}ms</strong></div><div class="server-status-summary__item"><label>峰值延迟</label><strong>{{ detailPeakLatency }}ms</strong></div></div><div v-if="detailStatusBars.length" class="status-bars"><div v-for="(sample, index) in detailStatusBars" :key="`${sample.checked_at}-${index}`" class="status-bar" :class="sample.available ? 'status-bar--ok' : 'status-bar--failed'" :data-tooltip="statusBarTooltip(sample)" :aria-label="statusBarTooltip(sample)" role="img" tabindex="0" /></div><div v-else class="status-bars-empty">暂无最近 30 分钟诊断采样</div><div class="status-bars-footer"><span>30 分钟前</span><span><i /> 现在</span></div><div class="detail-status-meta"><span>最近检测：{{ formatDate(detailStatus.last_checked_at) || '尚未检测' }}</span><span v-if="detailStatus.last_error" class="detail-status-error">{{ detailStatus.last_error }}</span></div></section>
+      <section class="server-detail__panel server-status-panel"><div class="server-detail__section-title"><h3>服务器状态</h3></div><div class="server-status-summary"><div class="server-status-summary__item server-status-summary__item--state"><StatusBadge :kind="detailStatusKind" :text="detailStatusText" /></div><div class="server-status-summary__item"><label>可达率</label><strong>{{ detailAvailability.toFixed(1) }}%</strong></div><div class="server-status-summary__item"><label>平均延迟</label><strong>{{ detailAverageLatency }}ms</strong></div><div class="server-status-summary__item"><label>峰值延迟</label><strong>{{ detailPeakLatency }}ms</strong></div></div><div v-if="detailStatusBars.length" class="status-bars"><div v-for="(sample, index) in detailStatusBars" :key="`${sample.checked_at}-${index}`" class="status-bar" :class="sample.available ? 'status-bar--ok' : 'status-bar--failed'" :data-tooltip="statusBarTooltip(sample)" :aria-label="statusBarTooltip(sample)" role="img" tabindex="0" /></div><div v-else class="status-bars-empty">暂无最近 30 分钟诊断采样</div><div class="status-bars-footer"><span>30 分钟前</span><span><i /> 现在</span></div><div class="detail-status-meta"><span>最近检测：{{ formatDate(detailStatus.last_checked_at) || '尚未检测' }}</span><span v-if="detailStatus.last_error" class="detail-status-error">{{ detailStatus.last_error }}</span></div></section>
       <section class="server-detail__panel latency-panel"><div class="server-detail__section-title"><h3>延迟曲线</h3><span class="latency-panel__hint">最近 30 分钟</span></div><VChart v-if="detailSamples.length" class="latency-chart" autoresize :option="detailChartOption" /><div v-else class="detail-empty">暂无最近 30 分钟诊断采样</div><div class="detail-chart-footer"><span>延迟（ms）</span><span><i /> 可连接 <b class="detail-legend-failed" /> 失败</span></div></section>
       <section class="server-detail__panel"><div class="server-detail__section-title"><h3>代理</h3><n-button size="small" quaternary @click="loadDetailData"><template #icon><n-icon :component="RefreshOutline" /></template>刷新</n-button></div><n-data-table :columns="detailProxyColumns" :data="detailProxies" :bordered="false" :single-line="false" size="small" /></section>
       <section class="server-detail__panel"><div class="server-detail__section-title"><h3>连接日志</h3><n-button size="small" quaternary @click="loadDetailData">刷新</n-button></div><pre class="detail-logs">{{ detailLogs.length ? detailLogs.join('\n') : '暂无该服务端连接日志' }}</pre></section>
     </div>
   </n-modal>
 
-  <n-modal v-model:show="showExport" preset="card" title="脱敏 frpc.toml" class="logs-modal" :style="{ width: 'min(860px, calc(100vw - 32px))' }">
-    <pre class="logs-box">{{ exportContent || '暂无可导出的启用配置' }}</pre>
+  <n-modal v-model:show="showExport">
+    <div class="frp-card-modal">
+      <div class="proxy-modal__header">
+        <h3 class="modal-title">脱敏 frpc.toml</h3>
+        <n-button size="small" quaternary @click="showExport = false">关闭</n-button>
+      </div>
+      <div class="proxy-modal__scroll">
+        <pre class="logs-box">{{ exportContent || '暂无可导出的启用配置' }}</pre>
+      </div>
+      <div class="modal-footer"><n-button @click="showExport = false">关闭</n-button></div>
+    </div>
   </n-modal>
 
   <!-- 公网 Agent 管理已独立为 /frp-agent 页面（AgentView.vue） -->
 
-  <n-modal v-model:show="showFRPSConfig" preset="card" :title="`frps.toml 同源配置 - ${frpsConfigTarget?.name || ''}`" class="logs-modal" :style="{ width: 'min(860px, calc(100vw - 32px))' }">
-    <p class="form-hint">与该服务端的 frpc 配置同源生成（bindPort / 认证 / 管理接口一致）；复制到 VPS 保存为 frps.toml 后执行 ./frps -c frps.toml。包含真实 Token，请勿外传。</p>
-    <pre class="logs-box">{{ frpsConfigContent || '生成中…' }}</pre>
+  <n-modal v-model:show="showFRPSConfig">
+    <div class="frp-card-modal">
+      <div class="proxy-modal__header">
+        <h3 class="modal-title">frps.toml 同源配置 - {{ frpsConfigTarget?.name || '' }}</h3>
+        <n-button size="small" quaternary @click="showFRPSConfig = false">关闭</n-button>
+      </div>
+      <div class="proxy-modal__scroll">
+        <p class="form-hint">与该服务端的 frpc 配置同源生成（bindPort / 认证 / 管理接口一致）；复制到 VPS 保存为 frps.toml 后执行 ./frps -c frps.toml。包含真实 Token，请勿外传。</p>
+        <pre class="logs-box">{{ frpsConfigContent || '生成中…' }}</pre>
+      </div>
+      <div class="modal-footer"><n-button @click="showFRPSConfig = false">关闭</n-button></div>
+    </div>
   </n-modal>
 
   <n-modal
@@ -797,13 +798,13 @@
     </div>
   </n-modal>
 
-  <n-modal
-    v-model:show="showRuntimeModal"
-    preset="card"
-    title="FRP 应用配置"
-    :style="{ width: 'min(880px, 92vw)', maxHeight: 'calc(100vh - 48px)' }"
-    :content-style="{ maxHeight: 'calc(100vh - 152px)', overflowY: 'auto' }"
-  >
+  <n-modal v-model:show="showRuntimeModal">
+    <div class="frp-card-modal frp-runtime-modal">
+      <div class="proxy-modal__header">
+        <h3 class="modal-title">FRP 应用配置</h3>
+        <n-button size="small" quaternary @click="showRuntimeModal = false">关闭</n-button>
+      </div>
+      <div class="proxy-modal__scroll">
     <div class="runtime-actions">
       <n-button size="small" :loading="runtimeLoading" @click="loadRuntimeConfig">
         <template #icon><n-icon :component="RefreshOutline" /></template>
@@ -870,6 +871,9 @@
         </n-button>
       </div>
     </section>
+      </div>
+      <div class="modal-footer"><n-button @click="showRuntimeModal = false">关闭</n-button></div>
+    </div>
   </n-modal>
 </template>
 
@@ -887,6 +891,7 @@ import {
   AddOutline, CloudOutline, CloseOutline, DocumentOutline, DocumentTextOutline, GitNetworkOutline, InformationCircleOutline,
   FlashOutline, LayersOutline, LocationOutline, LockClosedOutline, PeopleOutline, PlayOutline, RefreshOutline, ServerOutline, SettingsOutline, StopOutline, SwapHorizontalOutline, TerminalOutline, TimeOutline,
 } from '@vicons/ionicons5'
+import { RouterLink } from 'vue-router'
 import { api, asList } from '../api/client'
 import { formatBytes, formatDate, formatRate } from '../utils/format'
 
@@ -1076,7 +1081,9 @@ const transportOptions = [
 ]
 const proxyServerOptions = computed(() => servers.value.map((server) => ({ label: `${server.name} (${server.server_addr}:${server.server_port})`, value: server.id })))
 const statusLabel = computed(() => ({ running: '运行中', stopped: '已停止', unknown: '未配置' })[status.value.status] ?? '异常')
-const statusKind = computed(() => status.value.status === 'running' ? 'success' : status.value.status === 'stopped' ? 'default' : 'warning')
+// 返回的必须是 StatusKind 合法值（success/warning/error/disabled/unknown），
+// 之前用 'default' 且当 value 传给 StatusBadge，导致“运行中”被判为 unknown（灰色）
+const statusKind = computed(() => (status.value.status === 'running' ? 'success' : status.value.status === 'stopped' ? 'disabled' : 'warning') as 'success' | 'disabled' | 'warning')
 const downloadInProgress = computed(() => ['queued', 'downloading', 'verifying', 'extracting'].includes(downloadTask.value.status))
 const downloadPercent = computed(() => downloadTask.value.total > 0 ? Math.min(100, Math.round(downloadTask.value.downloaded / downloadTask.value.total * 100)) : 0)
 const downloadProgressStatus = computed(() => downloadTask.value.status === 'completed' ? 'success' : downloadTask.value.status === 'failed' ? 'error' : 'default')
@@ -1092,6 +1099,32 @@ const visibleReleases = computed(() => {
 const frpTypeTagType: Record<FrpProxy['type'], 'info' | 'success' | 'warning' | 'default'> = {
   tcp: 'info', udp: 'default', http: 'success', https: 'success', tcpmux: 'info', stcp: 'warning', sudp: 'warning', xtcp: 'warning',
 }
+
+// 公网服务端列表：与规则表一致用 n-data-table（列宽固定，表头与数据天然对齐）
+const serverColumns = computed<DataTableColumns<FrpServer>>(() => [
+  { title: '名称', key: 'name', width: 190, render: (row) => h('div', { class: 'cell-name' }, [h(NIcon, { component: CloudOutline }), h('span', row.name)]) },
+  { title: '主机', key: 'host', width: 170, render: (row) => h('span', { class: 'mono cell-wrap' }, row.server_addr) },
+  { title: '端口', key: 'port', width: 90, render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => String(row.server_port) }) },
+  { title: '延迟', key: 'latency', width: 130, render: (row) => h('div', { class: 'cell-inline', title: latencyDetail(row) }, [h(NIcon, { component: FlashOutline }), h('span', latencyText(row))]) },
+  { title: '位置', key: 'location', width: 150, render: (row) => h('div', { class: 'cell-inline' }, [h(NIcon, { component: LocationOutline }), h('span', locationText(row))]) },
+  { title: '配置', key: 'config', width: 230, render: (row) => h('div', { class: 'cell-inline' }, [
+    h(NTag, { size: 'small', bordered: false, type: row.tls_enabled ? 'success' : 'warning' }, { default: () => `TLS ${row.tls_enabled ? '已启用' : '未启用'}` }),
+    h(NTag, { size: 'small', bordered: false, type: row.has_token ? 'success' : 'error' }, { default: () => `Token ${row.has_token ? '已配置' : '缺失'}` }),
+  ]) },
+  { title: '启动状态', key: 'startup', width: 170, render: (row) => h(NTag, { size: 'small', bordered: false, type: serverStartupType(row), title: serverStateTooltip(row) }, { default: () => `${serverStartupText(row)} · ${connectionStateText(row)}` }) },
+  { title: '操作', key: 'actions', width: 560, align: 'right', render: (row) => h('div', { class: 'cell-actions' }, [
+    row.boot_status === 'running'
+      ? h(NButton, { size: 'small', type: 'error', ghost: true, loading: serverStartingId.value === row.id, onClick: () => stopServer(row) }, { default: () => '停止' })
+      : h(NButton, { size: 'small', type: 'success', ghost: true, loading: serverStartingId.value === row.id, onClick: () => startServer(row) }, { default: () => '启动' }),
+    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerDetail(row) }, { default: () => '查看' }),
+    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerLogs(row) }, { default: () => '日志' }),
+    h(NButton, { size: 'small', quaternary: true, loading: measuringId.value === row.id, onClick: () => measureServer(row) }, { default: () => '测速' }),
+    h(NButton, { size: 'small', quaternary: true, loading: testingId.value === row.id, onClick: () => testServer(row) }, { default: () => '校验' }),
+    row.agent_configured ? h(RouterLink, { to: '/frp-agent' }, { default: () => h(NButton, { size: 'small', quaternary: true }, { default: () => 'Agent 管理' }) }) : null,
+    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerModal(row) }, { default: () => '编辑' }),
+    h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => confirmDeleteServer(row) }, { default: () => '删除' }),
+  ]) },
+])
 
 const columns = computed<DataTableColumns<FrpProxy>>(() => [
   { title: '名称', key: 'name', minWidth: 150, render: (row) => h('div', [h('strong', row.name), row.remark ? h('div', { class: 'table-muted' }, row.remark) : null]) },
@@ -1789,33 +1822,31 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 </script>
 
 <style scoped>
-.status-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-5); }
-.status-card :deep(.fonu-card__body) { display: flex; align-items: center; gap: var(--fonu-space-4); min-height: 92px; }
-.status-card__icon { width: 40px; height: 40px; display: grid; place-items: center; font-size: 20px; border-radius: var(--fonu-radius-sm); background: var(--fonu-bg-muted); color: var(--fonu-text-secondary); }
-.status-card__icon--running { background: color-mix(in srgb, var(--fonu-success) 14%, transparent); color: var(--fonu-success); }
-.status-card__icon--stopped { background: var(--fonu-bg-muted); color: var(--fonu-text-muted); }
-.status-card__icon--unknown { background: color-mix(in srgb, var(--fonu-warning) 14%, transparent); color: var(--fonu-warning); }
-.status-card__icon--blue { color: var(--fonu-brand); background: var(--fonu-brand-soft); }
-.status-card__icon--purple { color: #7c3aed; background: #f3e8ff; }
-.status-card__icon--amber { color: #b45309; background: #fef3c7; }
-.status-card__label { color: var(--fonu-text-secondary); font-size: 13px; margin-bottom: 6px; }
-.status-card__value { font-size: 24px; line-height: 1; }
-.status-card__version { font-size: 13px; font-weight: 600; word-break: break-word; }
+/* 统计区：对齐标准页（CertificatesView）的 .stats-row / .stat-card 规格 */
+.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+.stat-card { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); padding: var(--fonu-space-4) var(--fonu-space-5); min-height: 118px; }
+.stat-card__icon { font-size: 18px; margin-bottom: 4px; }
+.stat-card__icon--blue { color: var(--fonu-info); }
+.stat-card__icon--amber { color: var(--fonu-warning); }
+.stat-card__icon--green, .stat-card__icon--running { color: var(--fonu-brand); }
+.stat-card__icon--red { color: var(--fonu-error); }
+.stat-card__icon--stopped { color: var(--fonu-disabled); }
+.stat-card__icon--unknown { color: var(--fonu-warning); }
+.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--fonu-text); letter-spacing: -0.03em; }
+.stat-card__value--sm { font-size: 18px; }
+.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--fonu-text); }
+.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--fonu-text-muted); }
 .section-card { margin-bottom: var(--fonu-space-5); }
-.section-actions, .server-row__tags, .switch-row, .modal-actions, .logs-toolbar { display: flex; align-items: center; gap: var(--fonu-space-2); flex-wrap: wrap; }
-.server-list { display: grid; gap: var(--fonu-space-2); overflow-x: auto; }
-.server-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(150px, 1.2fr) 80px 100px minmax(120px, 1fr) minmax(160px, 1fr) 110px minmax(260px, 2fr); align-items: center; gap: var(--fonu-space-3); min-width: 1240px; border: 1px solid var(--fonu-border); padding: var(--fonu-space-3); border-radius: var(--fonu-radius-sm); }
-.server-row--header { border-width: 0 0 1px; border-radius: 0; color: var(--fonu-text-secondary); font-size: 13px; font-weight: 600; }
-.server-row__main { min-width: 0; }
-.server-row__name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.server-row__meta { color: var(--fonu-text-secondary); margin-top: 6px; font-size: 13px; }
-.server-row__host, .server-row__location { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.server-row__metric { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.server-row__metric :deep(.n-icon) { flex: 0 0 auto; color: var(--fonu-text-muted); font-size: 15px; }
-.server-row__latency { color: var(--fonu-text-secondary); font-variant-numeric: tabular-nums; }
-.server-row__latency--ok { color: var(--fonu-success); font-weight: 600; }
-.server-row__latency--ok :deep(.n-icon) { color: var(--fonu-success); }
-.server-row__config { display: flex; align-items: center; gap: var(--fonu-space-2); flex-wrap: wrap; }
+.section-actions, .switch-row, .modal-actions, .logs-toolbar { display: flex; align-items: center; gap: var(--fonu-space-2); flex-wrap: wrap; }
+/* 公网服务端列表：n-data-table（与规则表一致）；单元格由 render 创建，样式必须 :deep() */
+.frp-server-table-wrap { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: hidden; }
+.frp-server-table :deep(.cell-name) { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.frp-server-table :deep(.cell-inline) { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.frp-server-table :deep(.cell-inline .n-icon) { flex: 0 0 auto; color: var(--fonu-text-muted); font-size: 15px; }
+.frp-server-table :deep(.cell-wrap) { overflow-wrap: anywhere; }
+.frp-server-table :deep(.mono) { font-family: var(--fonu-mono); font-size: 13px; }
+.frp-server-table :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: var(--fonu-space-2); flex-wrap: wrap; }
+.frp-server-table :deep(.n-data-table-td) { vertical-align: middle; }
 .logs-modal { width: min(860px, calc(100vw - 32px)); }
 .logs-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--fonu-space-3); }
 .logs-toolbar__filter { width: 200px; }
@@ -1855,17 +1886,17 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .overview-metric { display: flex; flex-direction: column; justify-content: center; padding: 12px 14px; border-radius: 10px; background: var(--fonu-bg); border: 1px solid var(--fonu-border); }
 .overview-metric__label { font-size: 12px; color: var(--fonu-text-muted); }
 .overview-metric__value { margin-top: 4px; font-size: 18px; font-weight: 600; line-height: 1.2; color: var(--fonu-text); }
-.live-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #10b981; font-weight: 500; }
-.live-badge__dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; animation: live-pulse 1.5s ease-in-out infinite; }
+.live-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fonu-brand); font-weight: 500; }
+.live-badge__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fonu-brand); animation: live-pulse 1.5s ease-in-out infinite; }
 @keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .traffic-live-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; font-size: 12px; color: var(--fonu-text-secondary); }
 .traffic-live-legend--compact { margin-bottom: 6px; }
 .traffic-live-legend__item { display: inline-flex; align-items: center; gap: 6px; }
 .traffic-live-legend__dot { width: 8px; height: 8px; border-radius: 50%; }
-.traffic-live-legend__item--up .traffic-live-legend__dot { background: var(--fonu-brand, #10b981); }
-.traffic-live-legend__item--down .traffic-live-legend__dot { background: #3b82f6; }
+.traffic-live-legend__item--up .traffic-live-legend__dot { background: var(--fonu-brand); }
+.traffic-live-legend__item--down .traffic-live-legend__dot { background: var(--fonu-info); }
 .proxy-detail-modal__conn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; color: var(--fonu-text-muted); background: var(--fonu-bg); border: 1px solid var(--fonu-border); }
-.proxy-detail-modal__conn.is-active { color: var(--fonu-brand-text); background: var(--fonu-brand-soft); border-color: rgba(16, 185, 129, 0.25); }
+.proxy-detail-modal__conn.is-active { color: var(--fonu-brand-text); background: var(--fonu-brand-soft); border-color: var(--fonu-brand-soft); }
 /* 穿透规则详情弹窗：反代详情的样式类定义在 ProxyView 的 scoped 样式中,对 FrpView 不生效,此处本地定义 */
 .frp-rule-detail-modal {
   width: min(920px, 96vw);
@@ -1948,12 +1979,12 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item + .n-collapse-item) { border-top: 1px solid var(--fonu-border) !important; }
 .frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item__header) { min-height: 44px; padding: 12px 14px !important; background: var(--fonu-bg); font-weight: 600; box-sizing: border-box; }
 .frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item__content-inner) { padding: 0 14px 14px; }
-.frp-proxy-modal .proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--fonu-space-5); background: #f8fafc; border-left: 1px solid var(--fonu-border); color: var(--fonu-text-secondary); font-size: 13px; line-height: 1.65; overflow: auto; }
+.frp-proxy-modal .proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--fonu-space-5); background: var(--fonu-bg-muted); border-left: 1px solid var(--fonu-border); color: var(--fonu-text-secondary); font-size: 13px; line-height: 1.65; overflow: auto; }
 .frp-proxy-modal .proxy-modal__help h4 { margin: 0 0 var(--fonu-space-3); color: var(--fonu-text); font-size: 14px; font-weight: 600; }
 .frp-proxy-modal .proxy-modal__help ol { margin: 0; padding-left: 18px; }
 .frp-proxy-modal .proxy-modal__help li + li { margin-top: 10px; }
 .frp-proxy-modal .proxy-modal__help strong { color: var(--fonu-text); font-weight: 600; }
-.frp-proxy-modal .proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--fonu-space-5); padding: 12px; border-radius: 8px; background: #eff6ff; color: #1d4ed8; font-size: 12px; line-height: 1.6; }
+.frp-proxy-modal .proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--fonu-space-5); padding: 12px; border-radius: 8px; background: var(--fonu-info-soft); color: var(--fonu-info); font-size: 12px; line-height: 1.6; }
 .frp-proxy-modal .proxy-modal__tip-icon { flex-shrink: 0; margin-top: 1px; font-size: 16px; }
 .frp-proxy-modal .proxy-modal__example { margin-top: var(--fonu-space-5); padding-top: var(--fonu-space-4); border-top: 1px solid var(--fonu-border); }
 .frp-proxy-modal .proxy-modal__example-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--fonu-space-3); }
@@ -1966,6 +1997,18 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .form-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--fonu-space-4); font-size: 16px; }
 .form-section h3 :deep(.n-icon) { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--fonu-radius-sm); background: var(--fonu-brand); color: #fff; font-size: 15px; }
 .form-hint { margin: 0 0 var(--fonu-space-4); color: var(--fonu-text-secondary); font-size: 13px; line-height: 1.55; }
+.narrow-input { max-width: 200px; }
+/* 统一卡片式弹窗外壳（运行日志 / 导出配置 / frps 同源配置）：与 .proxy-modal 体系一致的头部 + 滚动区 + 页脚 */
+.frp-card-modal { display: flex; flex-direction: column; width: min(860px, calc(100vw - 32px)); max-height: 90vh; background: var(--fonu-surface); border-radius: var(--fonu-radius); overflow: hidden; box-shadow: var(--fonu-shadow-md); }
+.frp-card-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); padding: var(--fonu-space-5) var(--fonu-space-5) 0; flex-shrink: 0; }
+.frp-card-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fonu-text); }
+.frp-card-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
+.frp-card-modal .modal-footer { display: flex; justify-content: flex-end; gap: var(--fonu-space-3); padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5); border-top: 1px solid var(--fonu-border); margin-top: var(--fonu-space-2); flex-shrink: 0; }
+.frp-runtime-modal { width: min(880px, 92vw); }
+/* 服务端详情弹窗（仍用 naive-ui preset=card）：排版对齐 .proxy-modal */
+.frp-detail-card :deep(.n-card-header) { padding: var(--fonu-space-5) var(--fonu-space-5) 0; }
+.frp-detail-card :deep(.n-card-header__main) { font-size: 18px; font-weight: 600; color: var(--fonu-text); }
+.frp-detail-card :deep(.n-card__content) { padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5); }
 
 .frp-guide-modal { display: flex; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--fonu-surface); border-radius: var(--fonu-radius); overflow: hidden; box-shadow: var(--fonu-shadow-md); }
 .frp-guide-modal .proxy-modal__form { flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 90vh; }
@@ -1982,12 +2025,12 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .guide-section { margin-bottom: 18px; }
 .guide-section h4 { margin: 0 0 8px; font-size: 14px; }
 .guide-section ol, .guide-section ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; line-height: 1.7; }
-.guide-section code { padding: 1px 5px; border-radius: 4px; background: rgba(128, 128, 128, 0.15); font-size: 12px; }
+.guide-section code { padding: 1px 5px; border-radius: 4px; background: var(--fonu-bg-muted); font-size: 12px; }
 .guide-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.guide-table th, .guide-table td { border: 1px solid rgba(128, 128, 128, 0.3); padding: 6px 10px; text-align: left; line-height: 1.6; }
+.guide-table th, .guide-table td { border: 1px solid var(--fonu-border); padding: 6px 10px; text-align: left; line-height: 1.6; }
 .guide-table th { font-weight: 600; }
 .guide-note { margin: 6px 0; font-size: 12.5px; color: var(--fonu-text-secondary); line-height: 1.6; }
-.guide-topo { margin: 8px 0; padding: 10px 12px; border-radius: 6px; background: rgba(128, 128, 128, 0.12); font-size: 12px; line-height: 1.6; overflow-x: auto; }
+.guide-topo { margin: 8px 0; padding: 10px 12px; border-radius: 6px; background: var(--fonu-bg-muted); font-size: 12px; line-height: 1.6; overflow-x: auto; }
 .guide-steps { margin: 8px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 5px; font-size: 13px; line-height: 1.7; }
 .guide-collapse :deep(.n-collapse-item__header) { font-size: 13px; font-weight: 500; }
 .guide-tabs { margin-top: -6px; }
@@ -2014,6 +2057,11 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .error-card__content { color: var(--fonu-error); white-space: pre-wrap; }
 .table-muted { margin-top: 4px; color: var(--fonu-text-muted); font-size: 12px; }
 .type-chip { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
+/* 规则表单元格由 render 函数的 h() 创建，不带 scoped 属性，必须 :deep() 才能命中 */
+.frp-rules-table :deep(.table-muted) { color: var(--fonu-text-muted); font-size: 12px; }
+.frp-rules-table :deep(.type-chip) { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
+.frp-rules-table :deep(.mono) { font-family: var(--fonu-mono); font-size: 13px; }
+.frp-rules-table :deep(.text-secondary) { color: var(--fonu-text-secondary); }
 .runtime-actions, .runtime-section__title, .binary-row, .binary-row__actions { display: flex; align-items: center; gap: var(--fonu-space-3); }
 .runtime-actions { justify-content: flex-end; margin-bottom: var(--fonu-space-4); }
 .runtime-section { padding: var(--fonu-space-4) 0; border-top: 1px solid var(--fonu-border); }
@@ -2066,9 +2114,9 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .status-bar { position: relative; min-width: 0; height: 36px; border-radius: 4px; background: var(--fonu-bg-muted); cursor: help; outline: none; transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease; }
 .status-bar--ok { background: linear-gradient(180deg, color-mix(in srgb, var(--fonu-success) 75%, white), color-mix(in srgb, var(--fonu-success) 48%, white)); }
 .status-bar--failed { background: color-mix(in srgb, var(--fonu-error) 68%, white); }
-.status-bar:hover, .status-bar:focus-visible { z-index: 2; transform: translateY(-2px); filter: brightness(1.1); box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18); }
-.status-bar::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 3; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: #1f2937; color: #fff; font-size: 12px; line-height: 1.2; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
-.status-bar::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 3; border: 5px solid transparent; border-top-color: #1f2937; pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
+.status-bar:hover, .status-bar:focus-visible { z-index: 2; transform: translateY(-2px); filter: brightness(1.1); box-shadow: var(--fonu-shadow-md); }
+.status-bar::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 3; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: var(--fonu-text); color: var(--fonu-surface); font-size: 12px; line-height: 1.2; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
+.status-bar::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 3; border: 5px solid transparent; border-top-color: var(--fonu-text); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
 .status-bar:hover::after, .status-bar:hover::before, .status-bar:focus-visible::after, .status-bar:focus-visible::before { opacity: 1; transform: translate(-50%, 0); }
 .status-bars-empty { display: grid; place-items: center; min-height: 36px; margin-top: var(--fonu-space-5); border: 1px dashed var(--fonu-border); color: var(--fonu-text-muted); font-size: 12px; }
 .status-bars-footer { display: flex; justify-content: space-between; margin-top: var(--fonu-space-3); color: var(--fonu-text-muted); font-size: 12px; }
@@ -2089,7 +2137,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .detail-status--on { color: var(--fonu-success); }
 .detail-status--off { color: var(--fonu-text-muted); }
 .detail-logs { margin: 0; max-height: 220px; overflow: auto; padding: var(--fonu-space-3); background: var(--fonu-bg-muted); color: var(--fonu-text-secondary); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 var(--fonu-mono); }
-@media (max-width: 1100px) { .status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 700px) { .status-grid, .form-grid, .download-proxy-form, .server-detail__grid, .detail-fields, .detail-stats, .server-status-summary { grid-template-columns: 1fr; } .server-status-summary__item--state { min-height: 0; padding-right: 0; padding-bottom: var(--fonu-space-3); border-right: 0; border-bottom: 1px solid var(--fonu-border); } .status-bars { gap: 3px; } .status-bar { height: 28px; } .binary-row { align-items: flex-start; flex-direction: column; } .release-row { grid-template-columns: 1fr; } .release-progress-placeholder { display: none; } .switch-row span:nth-of-type(2) { margin-left: 0; } }
+@media (max-width: 1100px) { .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .stats-row, .form-grid, .download-proxy-form, .server-detail__grid, .detail-fields, .detail-stats, .server-status-summary { grid-template-columns: 1fr; } .server-status-summary__item--state { min-height: 0; padding-right: 0; padding-bottom: var(--fonu-space-3); border-right: 0; border-bottom: 1px solid var(--fonu-border); } .status-bars { gap: 3px; } .status-bar { height: 28px; } .binary-row { align-items: flex-start; flex-direction: column; } .release-row { grid-template-columns: 1fr; } .release-progress-placeholder { display: none; } .switch-row span:nth-of-type(2) { margin-left: 0; } }
 @media (max-width: 760px) { .frp-proxy-modal { display: block; max-height: 92vh; overflow-y: auto; } .frp-proxy-modal .proxy-modal__form { max-height: none; } .frp-proxy-modal .proxy-modal__scroll { overflow: visible; } .frp-proxy-modal .proxy-modal__help { width: auto; border-top: 1px solid var(--fonu-border); border-left: 0; } }
 </style>
