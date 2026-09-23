@@ -878,13 +878,12 @@ async function clearCustomIP() {
   await saveCustomIP()
 }
 
+// 复用统一剪贴板工具（本页原有同名函数，故用别名导入避免冲突）
+import { copyText as copyToClipboard } from '../utils/clipboard'
+
 async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text)
-    message.success('已复制')
-  } catch {
-    message.error('复制失败')
-  }
+  if (await copyToClipboard(text)) message.success('已复制')
+  else message.error('复制失败')
 }
 
 async function refreshPublicIP() {

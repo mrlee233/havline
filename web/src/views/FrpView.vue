@@ -585,6 +585,10 @@
       </div>
       <div class="proxy-modal__scroll">
         <p class="form-hint">与该服务端的 frpc 配置同源生成（bindPort / 认证 / 管理接口一致）；复制到 VPS 保存为 frps.toml 后执行 ./frps -c frps.toml。包含真实 Token，请勿外传。</p>
+                <p v-if="tcpRemotePorts.length" class="form-hint">
+          已启用的 TCP/UDP 隧道远程端口：<span class="mono">{{ tcpRemotePorts.join('、') }}</span>
+          —— 请确认 VPS 防火墙 / 安全组已放行这些端口（frps 侧 allowPorts 已按此生成，未放行时隧道会连不上）。
+        </p>
         <pre class="logs-box">{{ frpsConfigContent || '生成中…' }}</pre>
       </div>
       <div class="modal-footer"><n-button @click="showFRPSConfig = false">关闭</n-button></div>
@@ -911,6 +915,10 @@ const dialog = useDialog()
 const status = ref<FrpStatus>({ status: 'unknown', configured: false, enabled_proxies: 0 })
 const servers = ref<FrpServer[]>([])
 const proxies = ref<FrpProxy[]>([])
+// 已启用的 TCP/UDP 隧道远程端口：用于提示在 VPS 防火墙放行（与 frps 的 allowPorts 同源）
+const tcpRemotePorts = computed(() => proxies.value
+  .filter((proxy) => proxy.enabled && (proxy.type === 'tcp' || proxy.type === 'udp') && proxy.remote_port)
+  .map((proxy) => proxy.remote_port as number))
 const proxyTraffic = ref<Record<number, FrpProxyTraffic>>({})
 const proxyTrafficErrors = ref<Record<number, string>>({})
 const serverDiagnostics = ref<Record<number, FrpServerDiagnostics>>({})

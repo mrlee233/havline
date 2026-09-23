@@ -1361,12 +1361,10 @@ function ruleName(rule: ProxyRule): string {
   return name || primaryHost(rule)
 }
 
+// 复制：保留原名称与域名，由用户在表单里确认修改（不再自动追加「-复制」后缀，避免误建同名规则）
 function duplicateName(rule: ProxyRule): string {
   const base = rule.name?.trim() || primaryHost(rule)
-  const suffix = '-复制'
-  const maxBase = 100 - suffix.length
-  const trimmedBase = base.length > maxBase ? base.slice(0, maxBase) : base
-  return `${trimmedBase}${suffix}`
+  return base.length > 100 ? base.slice(0, 100) : base
 }
 
 function hostsToText(rule: ProxyRule): string {
@@ -1405,13 +1403,11 @@ function ruleAccessUrls(rule: ProxyRule): string[] {
   return ruleHosts(rule).map((host) => hostAccessUrl(rule, host))
 }
 
+import { copyText } from '../utils/clipboard'
+
 async function copyAccessUrl(url: string) {
-  try {
-    await navigator.clipboard.writeText(url)
-    message.success('链接已复制')
-  } catch {
-    message.error('复制失败')
-  }
+  if (await copyText(url)) message.success('链接已复制')
+  else message.error('复制失败')
 }
 
 function renderLinkAction(icon: Component, title: string, onClick: () => void): VNode {
@@ -2040,7 +2036,7 @@ function openDuplicate(rule: ProxyRule) {
   syncSecurityExpanded()
   formTab.value = 'basic'
   showModal.value = true
-  message.info('已填入复制内容，请修改域名后保存')
+  message.info('已填入复制内容，请确认名称与域名后保存')
 }
 
 function openEdit(rule: ProxyRule, tab: 'basic' | 'security' | 'nginx' = 'basic') {

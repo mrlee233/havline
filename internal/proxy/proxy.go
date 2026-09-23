@@ -360,6 +360,17 @@ func (s *Store) Update(ctx context.Context, id int64, in UpdateInput) (Rule, err
 		if _, err := s.querier().ExecContext(ctx, `
 			UPDATE proxy_hosts SET listen_port = ? WHERE rule_id = ? AND listen_port = ?
 		`, listenPort, id, oldListenPort); err != nil {
+			if isUniqueViolation(err) {
+				// 保存前校验与写入之间存在窗口，被并发规则抢占时按域名复检并给出带规则名的原因
+				for _, host := range current.Hosts {
+					if hostEffectivePort(host, oldListenPort) != oldListenPort {
+						continue
+					}
+					if ownerErr := s.ensureHostAvailable(ctx, host.Hostname, listenPort, id); ownerErr != nil {
+						return Rule{}, ownerErr
+					}
+				}
+			}
 			return Rule{}, err
 		}
 	}
@@ -463,6 +474,11 @@ func (s *Store) cleanupOrphanRules(ctx context.Context) error {
 	return err
 }
 
+// isUniqueViolation 判断是否为 SQLite 唯一约束冲突（hostname + listen_port 撞车）
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(strings.ToUpper(err.Error()), "UNIQUE")
+}
+
 func hostEffectivePort(host Host, ruleListenPort int) int {
 	if host.ListenPort != nil && *host.ListenPort > 0 {
 		return *host.ListenPort
@@ -497,20 +513,50 @@ func parseHosts(raw []string, ruleListenPort int) ([]Host, error) {
 }
 
 func (s *Store) ensureHostAvailable(ctx context.Context, hostname string, port int, excludeRuleID int64) error {
-	var ownerID int64
-	err := s.querier().QueryRowContext(ctx, `
-		SELECT rule_id FROM proxy_hosts WHERE hostname = ? COLLATE NOCASE AND listen_port = ? LIMIT 1
-	`, hostname, port).Scan(&ownerID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
+	owner, err := s.endpointOwner(ctx, "proxy_hosts", hostname, port, excludeRuleID)
 	if err != nil {
 		return err
 	}
-	if ownerID != excludeRuleID {
-		return fmt.Errorf("前端域名 %s:%d 已被其他规则使用", hostname, port)
+	if owner != "" {
+		return fmt.Errorf("域名 %s:%d 已被%s使用，请编辑现有规则或更换域名/端口", hostname, port, owner)
+	}
+	// 手动（custom）Nginx 规则的占用单独存表，其域名/端口不在 proxy_hosts 里，需一并检查
+	owner, err = s.endpointOwner(ctx, "proxy_custom_endpoints", hostname, port, excludeRuleID)
+	if err != nil {
+		return err
+	}
+	if owner != "" {
+		return fmt.Errorf("域名 %s:%d 已被%s使用（该规则使用手动 Nginx 配置），请编辑现有规则或更换域名/端口", hostname, port, owner)
 	}
 	return nil
+}
+
+// endpointOwner 返回占用该 (域名, 端口) 的规则描述（如 规则「名称」）；空闲时返回空串。
+// table 只传入本包内两张固定表名（proxy_hosts / proxy_custom_endpoints），不接受外部输入。
+// 规则描述优先用备注名，其次用该规则的首个域名，最后回落为规则 ID。
+func (s *Store) endpointOwner(ctx context.Context, table, hostname string, port int, excludeRuleID int64) (string, error) {
+	var (
+		ownerID   int64
+		ownerDesc string
+	)
+	query := `SELECT h.rule_id,
+			COALESCE(NULLIF(TRIM(r.name), ''),
+				(SELECT hostname FROM proxy_hosts WHERE rule_id = h.rule_id ORDER BY id LIMIT 1), '')
+		FROM ` + table + ` h
+		LEFT JOIN proxy_rules r ON r.id = h.rule_id
+		WHERE h.hostname = ? COLLATE NOCASE AND h.listen_port = ? AND h.rule_id != ?
+		LIMIT 1`
+	err := s.querier().QueryRowContext(ctx, query, hostname, port, excludeRuleID).Scan(&ownerID, &ownerDesc)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if desc := strings.TrimSpace(ownerDesc); desc != "" {
+		return fmt.Sprintf("规则「%s」", desc), nil
+	}
+	return fmt.Sprintf("规则 #%d", ownerID), nil
 }
 
 func (s *Store) ensureHostsAvailable(ctx context.Context, hosts []Host, ruleListenPort int, excludeRuleID int64) error {
@@ -534,8 +580,12 @@ func (s *Store) replaceHosts(ctx context.Context, ruleID int64, ruleListenPort i
 			VALUES (?, ?, ?)
 		`, ruleID, host.Hostname, port)
 		if err != nil {
-			if strings.Contains(err.Error(), "UNIQUE") {
-				return fmt.Errorf("前端域名 %s:%d 已被其他规则使用", host.Hostname, port)
+			if isUniqueViolation(err) {
+				// 并发下可能绕过保存前校验：复检一次以给出带规则名的原因
+				if ownerErr := s.ensureHostAvailable(ctx, host.Hostname, port, ruleID); ownerErr != nil {
+					return ownerErr
+				}
+				return fmt.Errorf("域名 %s:%d 已被其它规则占用", host.Hostname, port)
 			}
 			return err
 		}

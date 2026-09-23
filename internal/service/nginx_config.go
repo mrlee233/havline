@@ -101,6 +101,10 @@ func (s *ProxyService) SaveRuleNginx(ctx context.Context, id int64, in SaveRuleN
 		if err := s.store.SetNginxMode(ctx, id, "auto"); err != nil {
 			return RuleNginxView{}, err
 		}
+		// 切回自动模式后，手动配置的占用记录不再适用
+		if err := s.store.ClearCustomEndpoints(ctx, id); err != nil {
+			return RuleNginxView{}, err
+		}
 		if err := s.applyNginx(ctx); err != nil {
 			return RuleNginxView{}, err
 		}
@@ -118,7 +122,16 @@ func (s *ProxyService) SaveRuleNginx(ctx context.Context, id int64, in SaveRuleN
 	if err := s.validateRuleNginxPending(ctx, rule, content); err != nil {
 		return RuleNginxView{}, err
 	}
+	// 手动配置里的 listen/server_name 不进 proxy_hosts，需单独解析记录并校验占用，
+	// 否则它与其它规则的同域名同端口冲突只会在 Nginx reload 时静默失效
+	endpoints := nginx.ParseServerEndpoints(content)
+	if err := s.store.EnsureEndpointsAvailable(ctx, endpoints, id); err != nil {
+		return RuleNginxView{}, err
+	}
 	if _, err := nginx.SaveRuleCustomWithBackup(s.cfg, id, content); err != nil {
+		return RuleNginxView{}, err
+	}
+	if err := s.store.ReplaceCustomEndpoints(ctx, id, endpoints); err != nil {
 		return RuleNginxView{}, err
 	}
 	if err := s.store.SetNginxMode(ctx, id, "custom"); err != nil {
@@ -156,6 +169,15 @@ func (s *ProxyService) RollbackRuleNginx(ctx context.Context, id int64, backupNa
 		return RuleNginxView{}, err
 	}
 	if err := s.validateRuleNginxPending(ctx, rule, custom); err != nil {
+		return RuleNginxView{}, err
+	}
+	endpoints := nginx.ParseServerEndpoints(custom)
+	if err := s.store.EnsureEndpointsAvailable(ctx, endpoints, id); err != nil {
+		// 备份文件已写回（与原有行为一致），占用记录需跟磁盘内容保持一致，避免留下过期占用
+		_ = s.store.ReplaceCustomEndpoints(ctx, id, endpoints)
+		return RuleNginxView{}, err
+	}
+	if err := s.store.ReplaceCustomEndpoints(ctx, id, endpoints); err != nil {
 		return RuleNginxView{}, err
 	}
 	if err := s.store.SetNginxMode(ctx, id, "custom"); err != nil {

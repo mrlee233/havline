@@ -41,9 +41,18 @@ func SendTelegram(ctx context.Context, client *http.Client, cfg RuntimeConfig, c
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
 	if proxyURL := strings.TrimSpace(cfg.Telegram.ProxyURL); proxyURL != "" {
+		// 常见误填：只写 host:port（无 scheme）。补全后再解析，并校验 scheme 是否受支持
+		if !strings.Contains(proxyURL, "://") {
+			proxyURL = "http://" + proxyURL
+		}
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
-			return fmt.Errorf("Telegram 代理地址无效")
+			return fmt.Errorf("Telegram 代理地址无效：%s", proxyURL)
+		}
+		switch parsed.Scheme {
+		case "http", "https", "socks5", "socks5h":
+		default:
+			return fmt.Errorf("Telegram 代理仅支持 http / https / socks5，当前为 %q", parsed.Scheme)
 		}
 		httpClient = &http.Client{
 			Timeout: 15 * time.Second,

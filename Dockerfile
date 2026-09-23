@@ -45,7 +45,7 @@ FROM ${RUNTIME_IMAGE}
 ARG TARGETARCH
 # frpc 不预装：需要内网穿透时在「应用配置」弹窗内按需下载（存入数据目录）
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx ca-certificates \
+    && apt-get install -y --no-install-recommends nginx ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -53,7 +53,9 @@ COPY --from=go-builder /fonu /app/fonu
 COPY --from=go-builder /src/web/assets/image /app/web/assets/image
 COPY migrations /app/migrations
 
-ENV FONU_DATA_DIR=/data \
+# 时区：Go 的 time.Local 取决于 TZ 环境变量，且需要镜像内存在 zoneinfo（故装上 tzdata）
+ENV TZ=Asia/Shanghai \
+    FONU_DATA_DIR=/data \
     FONU_LISTEN=:6893 \
     FONU_NGINX_MIME_TYPES=/etc/nginx/mime.types
 

@@ -37,6 +37,35 @@
         />
       </n-tab-pane>
 
+      <n-tab-pane name="frp" tab="FRP 日志">
+        <LogToolbar
+          v-model:keyword="frpKeyword"
+          v-model:level="frpLevel"
+          :show-level="true"
+          @refresh="loadFrpLogs"
+        />
+        <p class="tab-hint">frpc 运行日志：解析为 时间 / 级别 / 来源 / 消息，用于排查隧道登录、注册与连接错误。</p>
+        <n-data-table
+          v-if="filteredFrpLogs.length > 0"
+          class="log-table"
+          :columns="frpColumns"
+          :data="pagedFrpLogs"
+          :loading="loadingFrp"
+          :bordered="false"
+          :row-class-name="frpRowClassName"
+        />
+        <LogPagination
+          v-if="filteredFrpLogs.length > 0"
+          v-model:page="frpPage"
+          :item-count="filteredFrpLogs.length"
+        />
+        <EmptyState
+          v-if="!loadingFrp && frpLogs.length === 0"
+          title="暂无 FRP 日志"
+          description="启动 frpc 后，登录、隧道注册与连接错误会记录在这里。"
+        />
+      </n-tab-pane>
+
       <n-tab-pane name="access" tab="访问日志">
         <LogToolbar
           v-model:keyword="accessKeyword"
@@ -335,6 +364,63 @@ function systemRowClassName(row: SystemLogEntry) {
   return 'log-row'
 }
 
+// FRP 日志（frpc）：后端返回原始行，前端解析为 时间 / 级别 / 来源 / 消息 四列
+interface FrpLogEntry { time: string; level: string; source: string; message: string }
+
+const frpLogs = ref<FrpLogEntry[]>([])
+const frpKeyword = ref('')
+const frpLevel = ref('')
+const frpPage = ref(1)
+const loadingFrp = ref(false)
+const frpPageSize = 50
+const frpLevelText: Record<string, string> = { I: '信息', W: '警告', E: '错误', D: '调试' }
+
+// frpc 行形如：2026-09-23 15:20:31.123 [I] [service.go:295] login to server success
+function parseFrpLogLine(line: string): FrpLogEntry {
+  const matched = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d+)?)\s*\[([A-Z])\]\s*(?:\[([^\]]+)\])?\s*(.*)$/)
+  if (!matched) return { time: '', level: '', source: '', message: line }
+  return { time: matched[1], level: matched[2], source: matched[3] ?? '', message: matched[4] ?? '' }
+}
+
+const filteredFrpLogs = computed(() => {
+  const keyword = frpKeyword.value.trim().toLowerCase()
+  return frpLogs.value.filter((log) => {
+    if (frpLevel.value && frpLevelText[log.level] !== frpLevel.value) return false
+    if (keyword && !`${log.source} ${log.message}`.toLowerCase().includes(keyword)) return false
+    return true
+  })
+})
+
+const pagedFrpLogs = computed(() => {
+  const start = (frpPage.value - 1) * frpPageSize
+  return filteredFrpLogs.value.slice(start, start + frpPageSize)
+})
+
+const frpColumns: DataTableColumns<FrpLogEntry> = [
+  { title: '时间', key: 'time', width: 168, render: (row) => (row.time ? logTimeCell(row.time) : '—') },
+  { title: '级别', key: 'level', width: 80, render: (row) => frpLevelText[row.level] ?? (row.level || '—') },
+  { title: '来源', key: 'source', width: 170, render: (row) => row.source || '—' },
+  { title: '消息', key: 'message', render: (row) => row.message },
+]
+
+function frpRowClassName(row: FrpLogEntry) {
+  if (row.level === 'E') return 'log-row log-row--error'
+  if (row.level === 'W') return 'log-row log-row--warn'
+  return 'log-row'
+}
+
+async function loadFrpLogs() {
+  loadingFrp.value = true
+  try {
+    const raw = asList(await api.getFrpLogs(500))
+    frpLogs.value = raw.map((line) => parseFrpLogLine(String(line)))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载 FRP 日志失败')
+  } finally {
+    loadingFrp.value = false
+  }
+}
+
 const accessColumns = computed<DataTableColumns<AccessLogEntry>>(() => [
   { title: '时间', key: 'time', width: 168, render: (row) => logTimeCell(row.time) },
   {
@@ -491,7 +577,7 @@ async function loadSystemLogs() {
 async function loadAll() {
   pageError.value = ''
   try {
-    await Promise.all([loadAccess(), loadErrorLogs(), loadSystemLogs()])
+    await Promise.all([loadAccess(), loadErrorLogs(), loadSystemLogs(), loadFrpLogs()])
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
   }

@@ -253,6 +253,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type { FrpAgentStatus, FrpRelease, FrpServer } from '../api/types'
 import { formatRelativeTime } from '../utils/format'
+import { copyText } from '../utils/clipboard'
 
 // 操作动作：按动作粒度控制 loading，保证"只有被点的按钮转圈"
 type Action =
@@ -470,10 +471,8 @@ async function viewConfig(target: FrpServer) {
 }
 
 async function copyConfig() {
-  try {
-    await navigator.clipboard.writeText(configContent.value)
-    message.success('已复制 frps 配置')
-  } catch { message.error('复制失败，请手动选择文本复制') }
+  if (await copyText(configContent.value)) message.success('已复制 frps 配置')
+  else message.error('复制失败，请手动选择文本复制')
 }
 
 function installFrps(target: FrpServer) {

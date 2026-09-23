@@ -22,6 +22,8 @@ services:
       FONU_DATA_DIR: /data
       FONU_LISTEN: :6893
       FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-change-me-in-production}
+      # 时区：通知消息时间按此显示（默认东八区）
+      TZ: ${TZ:-Asia/Shanghai}
 
 volumes:
   fonu-data:

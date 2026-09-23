@@ -105,9 +105,12 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 		if decrypt && s.secret != nil {
 			plain, err := s.secret.Decrypt(smtpEnc)
 			if err != nil {
-				return Config{}, runtimeSecrets{}, secret.DecryptHint(err)
+				// 单个通道的密文损坏（例如更换过加密密钥）不应让整份配置加载失败：
+				// 仅标记该通道不可用并继续解析其它通道，避免 Telegram/Webhook 一起失效
+				cfg.Email.HasPassword = false
+			} else {
+				secrets.smtpPassword = plain
 			}
-			secrets.smtpPassword = plain
 		}
 	}
 
@@ -117,9 +120,11 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 		if decrypt && s.secret != nil {
 			plain, err := s.secret.Decrypt(webhookEnc)
 			if err != nil {
-				return Config{}, runtimeSecrets{}, secret.DecryptHint(err)
+				// 同上：只让该通道不可用，不影响其它通道
+				cfg.Webhook.HasSecret = false
+			} else {
+				secrets.webhookSecret = plain
 			}
-			secrets.webhookSecret = plain
 		}
 	}
 
@@ -129,9 +134,11 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 		if decrypt && s.secret != nil {
 			plain, err := s.secret.Decrypt(telegramEnc)
 			if err != nil {
-				return Config{}, runtimeSecrets{}, secret.DecryptHint(err)
+				// 同上：只让该通道不可用，不影响其它通道
+				cfg.Telegram.HasBotToken = false
+			} else {
+				secrets.telegramToken = plain
 			}
-			secrets.telegramToken = plain
 		}
 	}
 

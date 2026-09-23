@@ -300,7 +300,14 @@
             <h3 class="modal-title">反代配置 — {{ confDomain }}</h3>
             <n-button size="small" quaternary @click="confModal = false">关闭</n-button>
           </div>
-          <pre class="code-block conf-view">{{ confContent || '加载中…' }}</pre>
+          <div class="proxy-modal__scroll conf-scroll">
+            <p class="field-hint">
+              由 VPS 上的 fonu-agent 生成，位于 Nginx 的 vhost 配置目录（文件名
+              <span class="mono">fonu-{{ confDomain }}.conf</span>）。请勿在 VPS 上手工修改：
+              下次部署会被重新生成覆盖，改动请到「部署设置」或穿透规则里调整。
+            </p>
+            <pre class="code-block conf-view">{{ confContent || '加载中…' }}</pre>
+          </div>
           <div class="modal-footer">
             <n-button :disabled="!confContent" @click="copyConf">复制</n-button>
             <n-button type="primary" @click="confModal = false">关闭</n-button>
@@ -327,6 +334,7 @@ import type {
   FrpAgentRouteDetail, FrpAgentRouteHealth, FrpAgentStatus, FrpProxy, FrpProxyTraffic, FrpServer,
 } from '../api/types'
 import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../utils/format'
+import { copyText } from '../utils/clipboard'
 
 type Action =
   | `deploy:${number}` | `remove:${number}` | `conf:${number}` | `save-settings:${number}` | 'install-nginx'
@@ -513,10 +521,8 @@ function isHealthy(candidate: FrpProxy) {
 
 // 域名快捷操作：复制 / 新窗口打开（http 规则走 http，https 规则走 https）
 async function copyDomain(domain: string) {
-  try {
-    await navigator.clipboard.writeText(domain)
-    message.success(`已复制 ${domain}`)
-  } catch { message.error('复制失败，请手动选择文本复制') }
+  if (await copyText(domain)) message.success(`已复制 ${domain}`)
+  else message.error('复制失败，请手动选择文本复制')
 }
 
 function openDomain(candidate: FrpProxy, domain: string) {
@@ -733,10 +739,8 @@ async function viewConf(candidate: FrpProxy) {
 }
 
 async function copyConf() {
-  try {
-    await navigator.clipboard.writeText(confContent.value)
-    message.success('已复制反代配置')
-  } catch { message.error('复制失败，请手动选择文本复制') }
+  if (await copyText(confContent.value)) message.success('已复制反代配置')
+  else message.error('复制失败，请手动选择文本复制')
 }
 
 // 切换服务端必须重置，避免上一台的健康 / 流量 / agent 状态串台
@@ -862,7 +866,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
   font-family: var(--fonu-mono); font-size: 12.5px; line-height: 1.65; color: var(--fonu-text);
   overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
-.conf-view { max-height: 60vh; }
+/* 反代配置查看弹窗：内容区与头部同样的 24px 内边距，代码块自身滚动 */
+.conf-scroll { padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
+.conf-scroll .field-hint { margin-bottom: var(--fonu-space-3); line-height: 1.65; }
+.conf-view { max-height: 62vh; }
 .form-hint { color: var(--fonu-text-secondary); font-size: 12.5px; }
 .mono { font-family: var(--fonu-mono); font-size: 13px; }
 .mono-wrap { white-space: normal; word-break: break-all; }

@@ -2,6 +2,63 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.2] - 2026-09-23
+
+### 新增
+
+- 日志中心：新增「FRP 日志」Tab——把 frpc 运行日志解析为 时间 / 级别 / 来源 / 消息 四列，支持关键词与级别筛选、分页、错误/警告行着色，与系统日志、访问日志、Nginx 日志同一套交互（对齐上游 1.0.3）
+- 新增 `web/src/utils/clipboard.ts`：统一的剪贴板复制工具（异步剪贴板 API 优先，失败或非安全上下文时回退 `execCommand`）
+
+### 改进
+
+- 剪贴板复制在非 HTTPS 环境可用：Fonu 常以 `http://内网IP:6893` 访问，属非安全上下文，此时 `navigator.clipboard` 为 undefined，复制必然失败；公网反代（复制域名 / 复制配置）、公网 Agent（配置查看）、DDNS、本地反向代理（复制访问链接）共 5 处调用点统一改用上述工具（对齐上游 1.0.4）
+- 容器时区：`Dockerfile` 新增 `TZ=Asia/Shanghai` 并在运行时阶段安装 `tzdata`（只设 `TZ` 而镜像内无 zoneinfo 时 Go 仍会回落 UTC），三个 compose 文件均支持 `TZ` 覆盖——通知消息时间按系统时区显示（对齐上游 1.0.4）
+- 反代配置查看弹窗：补齐内容区内边距（与头部 24px 对齐），新增来源说明（由 VPS 上的 fonu-agent 生成、文件名 `fonu-<域名>.conf`、手工修改会被下次部署覆盖），并改为说明固定 + 代码块内部滚动
+- 反向代理：复制规则不再自动追加「-复制」后缀，保留原名称与域名、由用户在表单里确认修改（原先一点复制就得到一个改过名的副本，容易误建同名规则）（对齐上游 1.0.5）
+- FRP 穿透页：frps 同源配置弹窗新增「VPS 防火墙 / 安全组放行 TCP 远程端口」提示，端口列表由已启用的 TCP/UDP 规则实时推导（与 frps 的 `allowPorts` 同源；未放行时隧道连不上，但日志不会点明原因）（对齐上游 1.0.3）
+- 通知：Telegram 代理地址只填 `host:port` 时自动补全 `http://`，并校验 scheme 仅支持 http / https / socks5，错误信息带上原始地址便于自查（对齐上游 1.0.3）
+
+### 修复
+
+- 通知：单个通道密文解密失败不再让整份配置加载失败——原先 SMTP / Webhook / Telegram 任一密文损坏（例如更换过加密密钥）都会直接返回错误，导致其它已配置通道一并无法告警；现改为仅把该通道标记为「未配置」并继续解析其它通道（对齐上游 1.0.5）
+- 反向代理：监听占用冲突提示写明占用方——优先规则备注名，其次该规则首个域名，最后回落 `规则 #id`；原先只说「已被其他规则使用」，用户得自己翻列表找是哪一条
+- 反向代理：手动（custom）Nginx 配置的监听占用纳入校验。custom 配置的正本在文件系统（数据库只记 `nginx_mode` 开关），其 `listen` / `server_name` 原先完全不参与校验，与其它规则「同域名 + 同端口」的冲突只会在 Nginx reload 时静默失效（第一个 server 块生效、后面的被忽略）；现于保存 / 回滚时解析并写入新表 `proxy_custom_endpoints`，与表单规则共用同一条判定（对齐上游 1.0.5）
+- 反向代理：并发下修改监听端口可能绕过保存前校验（`UPDATE proxy_hosts` 的唯一约束冲突此前直接抛出原始 SQL 错误），现改为按域名复检并给出带规则名的提示
+
+### 变更
+
+- 新增 `docs/upstream-sync-plan.md`：上游 1.0.2 → 1.0.5 的逐版本对照方案，含 8 项待核对项的代码级核实结论、不照搬项及原因、以及「可增加项清单」（11 项，按价值排序）
+- 新增迁移 `024_proxy_custom_endpoints.sql`（手动 Nginx 配置的占用表，`UNIQUE(rule_id, hostname, listen_port)` + `ON DELETE CASCADE`），解析器 `internal/nginx/endpoints.go`（`ParseServerEndpoints`，保守解析：`include` 片段 / 正则 `server_name` / `listen unix:` 一律忽略，宁可漏报不误报）与 `internal/proxy/custom_endpoints.go`
+- 补测试：`internal/nginx/endpoints_test.go`（多 server 块、`[::]` 写法、通配与正则、无 `listen` 默认 80）、`internal/proxy/custom_endpoints_test.go`（走真实迁移建内存库：冲突含规则名、排除自身、同域名不同端口放行、custom 占用对表单规则可见、级联清理）
+- `docs/upstream-sync-plan.md` 补 §八「第 5 项详细整理」：Nginx 端口占用语义（一条规则占用哪些端口）、现有校验链逐跳、三处真实缺口与方案 A/B/C 对比、实施记录与未覆盖边界
+
+
+## [v1.2.1] - 2026-09-23
+
+### 改进
+
+- 公网 Agent 页：按「功能清单」重排为五段分区（运行状态 / 环境与依赖 / frps 控制 / Agent 生命周期 / 输出与日志）；4 张状态卡统一为标准 `.stats-row` + `.stat-card` 规格；补齐 5 项「数据已返回但页面未显示」的能力——Agent 凭据状态、8080 端口、已注册反代路由数、最后检查时间、Nginx 可用性
+- 公网 Agent 页：「环境与依赖」改为三列并排（Fonu Agent / Nginx / frps 运行时），卡内短字段双列、长路径整行；「frps 控制」与「Agent 生命周期」两列并排；新增「配置查看」按钮（只读弹窗展示即将下发的 frps 配置，含复制），卸载（含数据）增加二次确认
+- 公网反代页：规则台账改用 `n-data-table`（与本地反向代理页一致，表头与数据天然对齐），列为 规则/域名（含复制与打开按钮）、协议、上游/回源、健康（DNS·证书·隧道·服务）、连接、当前上传、当前下载、总上传、总下载、更新时间、操作
+- 公网反代页：新增统计区（可部署规则 / 已生效 / 健康通过 / 当前连接）与环境与 Nginx 卡（4 列）；「使用说明」整卡改为页面级提示与入口行；部署设置弹窗对齐本地反向代理页规格（900px、三段式、页脚分隔线、开关行底色）并新增右侧「配置说明」栏
+- 公网反代页：协议列改为按部署设置的「启用 HTTPS」自动识别（规则 type 恒为 http，不能代表入口协议），HTTPS 绿色 / HTTP 灰色并带悬停说明
+- FRP 穿透页：4 张状态卡统一为标准统计区；公网服务端列表由自建网格改为 `n-data-table`（8 列，含启动/停止/查看/日志/测速/校验/Agent 管理/编辑/删除）
+- FRP 穿透页：6 个弹窗统一到同一外壳（`.frp-card-modal` / `.frp-detail-card`），运行日志、导出配置、frps 同源配置、FRP 应用配置的头部/滚动区/页脚一致
+- 统一设计令牌：清理硬编码色值（公网反代页 6 处、FRP 穿透页 13 处）与内联样式，删除死样式；统计区、弹窗、表格单元格全部走 `--fonu-*` 令牌与共享组件（`StatusBadge` / `EmptyState` / `LoadError` / `FonuCard`）
+- 表格与列表交互：数字列右对齐、操作按钮右对齐并按行禁用、长文本换行、单元格内容垂直居中；窄屏按 1200 / 900 / 760 断点降列
+
+### 修复
+
+- FRP 穿透页「运行中」状态显示为灰色：`statusKind` 返回 `'success'` 却被当作 `value` 传给 `StatusBadge`（`utils/status.ts` 不识别该值，落到 `unknown`），且其中含非法的 `'default'`；现改为返回合法 `StatusKind` 并改用 `:kind`，服务端详情弹窗同类问题一并修复
+- 表格单元格样式整体失效：`n-data-table` 的 render 函数用 `h()` 创建的节点不带 scoped 属性，导致 `table-muted` / `type-chip` / `mono` 与各 `cell-*` 样式未生效（表现为「上游/回源」两行变一行、域名与按钮错位、徽标无间距）；统一改用 `:deep()` 选择器
+- 公网反代页刷新失败静默：`loadErrorMsg` 此前写入但从未渲染，现改为顶部可见提示，并让单个接口失败不再中断整轮数据加载
+- 公网反代页切换服务端残留上一台数据、轮询在页面隐藏时仍请求、loading 粒度粗（任一操作全页按钮转圈）等问题修复
+
+### 变更
+
+- 新增设计文档：`docs/agent-view-design-v2.md`（公网 Agent 页）、`docs/proxy-remote-design.md`（公网反代页），以及被取代留档的 `docs/agent-view-design.md`、`docs/agent-view-refactor-plan.md`
+- 新增页面 UI 标准 skill（工作区级 `.breezell/skills/fonu-page-ui`，不在仓库内）：页面骨架、共享组件契约、设计令牌、类名约定、弹窗标准结构、脚本约定与验收清单
+
 ## [v1.2.0] - 2026-09-23
 
 ### 新增
