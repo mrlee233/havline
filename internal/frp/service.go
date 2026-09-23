@@ -836,6 +836,64 @@ func (s *Service) InstallAgentNginx(ctx context.Context, serverID int64) (map[st
 	return client.InstallNginx(ctx)
 }
 
+// RouteHealthSummary 公网反代部署健康的汇总（仪表盘用）。
+// 健康判定与规则页一致：四段（DNS/证书/隧道/内网服务）全通过才算健康；
+// 一个域名可同时命中多段失败，因此各段计数之和可能大于 Routes-Healthy。
+type RouteHealthSummary struct {
+	Servers       int      `json:"servers"`
+	Routes        int      `json:"routes"`
+	Healthy       int      `json:"healthy"`
+	DNSFailed     int      `json:"dns_failed"`
+	CertMissing   int      `json:"cert_missing"`
+	TunnelDown    int      `json:"tunnel_down"`
+	ServiceDown   int      `json:"service_down"`
+	FailedServers []string `json:"failed_servers,omitempty"`
+}
+
+// SummarizeRouteHealth 逐台已启用服务端采集公网反代健康后汇总。
+// 单台服务端采集失败只记名并继续其它服务端，不阻断整轮汇总。
+func (s *Service) SummarizeRouteHealth(ctx context.Context) (RouteHealthSummary, error) {
+	servers, err := s.store.ListEnabledServers(ctx)
+	if err != nil {
+		return RouteHealthSummary{}, err
+	}
+	var (
+		items  []RouteHealthCandidate
+		failed []string
+	)
+	for _, server := range servers {
+		candidates, err := s.RouteHealth(ctx, server.ID)
+		if err != nil {
+			failed = append(failed, server.Name)
+			continue
+		}
+		items = append(items, candidates...)
+	}
+	return summarizeRouteHealth(len(servers), failed, items), nil
+}
+
+func summarizeRouteHealth(servers int, failedServers []string, items []RouteHealthCandidate) RouteHealthSummary {
+	summary := RouteHealthSummary{Servers: servers, Routes: len(items), FailedServers: failedServers}
+	for _, item := range items {
+		if !item.DNSOK {
+			summary.DNSFailed++
+		}
+		if !item.CertOK {
+			summary.CertMissing++
+		}
+		if !item.TunnelOK {
+			summary.TunnelDown++
+		}
+		if !item.ServiceOK {
+			summary.ServiceDown++
+		}
+		if item.DNSOK && item.CertOK && item.TunnelOK && item.ServiceOK {
+			summary.Healthy++
+		}
+	}
+	return summary
+}
+
 // RouteHealthCandidate 公网反代规则的四段健康状态（DNS/证书/隧道/内网服务）。
 type RouteHealthCandidate struct {
 	ProxyID      int64  `json:"proxy_id"`
@@ -1464,11 +1522,14 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 	s.manager.RefreshVersion(versionCtx)
 	servers, err := s.store.ListEnabledServers(ctx)
 	if err != nil {
-		return s.manager.Status()
+		return s.statusWithVersion(s.manager)
 	}
 	statuses := make([]RuntimeStatus, 0, len(servers))
 	for _, server := range servers {
-		current := s.managerForServer(server.ID).Status()
+		manager := s.managerForServer(server.ID)
+		// 每个服务端各自探测版本（共用同一个 2 秒超时上下文）
+		manager.RefreshVersion(versionCtx)
+		current := s.statusWithVersion(manager)
 		current.Configured = s.serverConfigured(server)
 		if proxies, proxyErr := s.store.ListEnabledProxies(ctx, server.ID); proxyErr == nil {
 			current.EnabledProxies = len(proxies)
@@ -1476,6 +1537,21 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 		statuses = append(statuses, current)
 	}
 	return latestRuntimeStatus(statuses)
+}
+
+// statusWithVersion 取服务端运行状态，并在版本探测失败时按二进制目录名推导版本：
+// frpc 进程未运行或 --version 探测失败时，RuntimeStatus.Version 因带 omitempty 会被省略，
+// 前端（FRP 穿透页状态卡、仪表盘）就只能显示「未检测 / 未知」。
+// 这里回落到 <FrpDir>/bin/<版本>/ 的目录约定，与「FRP 应用配置」弹窗的 active_version 同源。
+func (s *Service) statusWithVersion(manager *Manager) RuntimeStatus {
+	status := manager.Status()
+	if status.Version != "" {
+		return status
+	}
+	if bin, err := manager.BinaryPath(); err == nil {
+		status.Version = versionFromBinaryPath(s.cfg.FrpDir(), bin)
+	}
+	return status
 }
 
 func (s *Service) ReadLogs(limit int, serverID int64) ([]string, error) {

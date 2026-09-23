@@ -299,6 +299,8 @@ export const api = {
     request<{ ok: boolean; manager?: string; output?: string; path?: string; error?: string }>(`/api/frpmulti/servers/${serverId}/agent/nginx/install`, { method: 'POST' }),
   getFrpAgentRouteHealth: (serverId: number) =>
     request<import('./types').FrpAgentRouteHealth[]>(`/api/frpmulti/servers/${serverId}/agent/routes/health`),
+  getFrpRouteHealthSummary: () =>
+    request<import('./types').FrpRouteHealthSummary>('/api/frpmulti/routes/summary'),
   removeFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'DELETE' }),
   pushFrpConfigToAgent: (id: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-config`, { method: 'POST' }),
   frpsServerAction: (id: number, action: 'start' | 'stop' | 'restart') =>

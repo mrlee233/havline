@@ -115,6 +115,7 @@ func NewRouter(deps Deps) http.Handler {
 		protect("GET /api/frpmulti/servers/{id}/agent/status", frpHandler.AgentStatus)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes", frpHandler.AgentRoutes)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/health", frpHandler.AgentRouteHealth)
+		protect("GET /api/frpmulti/routes/summary", frpHandler.AgentRouteHealthSummary)
 		protect("POST /api/frpmulti/servers/{id}/agent/nginx/install", frpHandler.AgentInstallNginx)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/{proxyID}/conf", frpHandler.AgentRouteConf)
 		protect("GET /api/frpmulti/servers/{id}/agent/route-candidates", frpHandler.AgentRouteCandidates)

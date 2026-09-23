@@ -458,6 +458,16 @@ func (h *FRPMultiHandler) AgentRouteHealth(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, health)
 }
 
+// AgentRouteHealthSummary 汇总所有已启用服务端的公网反代健康状态（仪表盘用，避免前端逐台请求）
+func (h *FRPMultiHandler) AgentRouteHealthSummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.svc.SummarizeRouteHealth(r.Context())
+	if err != nil {
+		writeError(r, w, http.StatusInternalServerError, "汇总公网反代健康失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func (h *FRPMultiHandler) AgentFRPSAction(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {

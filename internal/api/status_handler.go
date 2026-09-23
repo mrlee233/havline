@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fonu/fonu/internal/acme"
@@ -17,6 +18,7 @@ import (
 	"github.com/fonu/fonu/internal/logstore"
 	"github.com/fonu/fonu/internal/publicip"
 	"github.com/fonu/fonu/internal/service"
+	"github.com/fonu/fonu/internal/sysinfo"
 )
 
 type StatusHandler struct {
@@ -26,9 +28,13 @@ type StatusHandler struct {
 	acmeSvc      *acme.Service
 	startedAt    string
 	nginxPIDFile string
+	cpuMu        sync.Mutex
+	cpuSample    sysinfo.CPUSample
 }
 
 func NewStatusHandler(cfg config.Config, proxySvc *service.ProxyService, ddnsSvc *ddns.Service, acmeSvc *acme.Service, startedAt, nginxPIDFile string) *StatusHandler {
+	// 先采一次 CPU 计数器，使首次请求就能算出占用率（否则只能返回 0）
+	_, sample := sysinfo.Read(sysinfo.CPUSample{})
 	return &StatusHandler{
 		cfg:          cfg,
 		proxySvc:     proxySvc,
@@ -36,31 +42,37 @@ func NewStatusHandler(cfg config.Config, proxySvc *service.ProxyService, ddnsSvc
 		acmeSvc:      acmeSvc,
 		startedAt:    startedAt,
 		nginxPIDFile: nginxPIDFile,
+		cpuSample:    sample,
 	}
 }
 
 type statusResponse struct {
-	PublicIPv4        string  `json:"public_ipv4"`
-	PublicIPv6        string  `json:"public_ipv6"`
-	PublicIPSource    string  `json:"public_ip_source"`
-	DDNSStatus        string  `json:"ddns_status"`
-	DDNSCount         int     `json:"ddns_count"`
-	DDNSLastUpdated   string  `json:"ddns_last_updated,omitempty"`
-	CertificateStatus  string `json:"certificate_status"`
-	CertificateDays    int    `json:"certificate_days"`
-	CertificateCount   int    `json:"certificate_count"`
-	CertificateSummary string `json:"certificate_summary,omitempty"`
-	ProxyCount        int     `json:"proxy_count"`
-	NginxStatus       string  `json:"nginx_status"`
+	PublicIPv4           string   `json:"public_ipv4"`
+	PublicIPv6           string   `json:"public_ipv6"`
+	PublicIPSource       string   `json:"public_ip_source"`
+	DDNSStatus           string   `json:"ddns_status"`
+	DDNSCount            int      `json:"ddns_count"`
+	DDNSLastUpdated      string   `json:"ddns_last_updated,omitempty"`
+	CertificateStatus    string   `json:"certificate_status"`
+	CertificateDays      int      `json:"certificate_days"`
+	CertificateCount     int      `json:"certificate_count"`
+	CertificateSummary   string   `json:"certificate_summary,omitempty"`
+	ProxyCount           int      `json:"proxy_count"`
+	NginxStatus          string   `json:"nginx_status"`
 	RequestToday         int      `json:"request_today"`
 	RequestYesterday     int      `json:"request_yesterday"`
 	RequestTrend         *int     `json:"request_trend,omitempty"`
 	RequestsHourly       []int    `json:"requests_hourly"`
 	RequestsHourlyLabels []string `json:"requests_hourly_labels"`
 	ErrorToday           int      `json:"error_today"`
-	AvgResponseMs     float64 `json:"avg_response_ms"`
-	StartedAt         string  `json:"started_at"`
-	UptimeSeconds     int64   `json:"uptime_seconds"`
+	AvgResponseMs        float64  `json:"avg_response_ms"`
+	CPUPercent           float64  `json:"cpu_percent"`
+	MemUsedBytes         uint64   `json:"mem_used_bytes"`
+	MemTotalBytes        uint64   `json:"mem_total_bytes"`
+	DiskUsedBytes        uint64   `json:"disk_used_bytes"`
+	DiskTotalBytes       uint64   `json:"disk_total_bytes"`
+	StartedAt            string   `json:"started_at"`
+	UptimeSeconds        int64    `json:"uptime_seconds"`
 }
 
 func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +95,9 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	records, _ := h.acmeSvc.List(r.Context())
 	certStatus, certDays, certCount, certSummary := summarizeCertificates(records)
 
+	resources, cpuSample := sysinfo.Read(h.currentCPUSample())
+	h.setCPUSample(cpuSample)
+
 	accessLog := filepath.Join(h.cfg.LogsDir(), "access.log")
 	total, errors, avgMs := logstore.CountTodayAccess(accessLog)
 	yesterday, _, _ := logstore.CountAccessForDay(accessLog, time.Now().AddDate(0, 0, -1))
@@ -92,28 +107,46 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 	uptime := time.Since(started).Seconds()
 
 	writeJSON(w, http.StatusOK, statusResponse{
-		PublicIPv4:        ipv4,
-		PublicIPv6:        ipv6,
-		PublicIPSource:    ipSource,
-		DDNSStatus:        ddnsStatus,
-		DDNSCount:         ddnsCount,
-		DDNSLastUpdated:   ddnsLastUpdated,
-		CertificateStatus:  certStatus,
-		CertificateDays:    certDays,
-		CertificateCount:   certCount,
-		CertificateSummary: certSummary,
-		ProxyCount:        len(rules),
-		NginxStatus:       nginxStatus,
+		PublicIPv4:           ipv4,
+		PublicIPv6:           ipv6,
+		PublicIPSource:       ipSource,
+		DDNSStatus:           ddnsStatus,
+		DDNSCount:            ddnsCount,
+		DDNSLastUpdated:      ddnsLastUpdated,
+		CertificateStatus:    certStatus,
+		CertificateDays:      certDays,
+		CertificateCount:     certCount,
+		CertificateSummary:   certSummary,
+		ProxyCount:           len(rules),
+		NginxStatus:          nginxStatus,
 		RequestToday:         total,
 		RequestYesterday:     yesterday,
 		RequestTrend:         requestTrendPercent(total, yesterday),
 		RequestsHourly:       hourly,
 		RequestsHourlyLabels: hourlyLabels,
 		ErrorToday:           errors,
-		AvgResponseMs:     avgMs,
-		StartedAt:         h.startedAt,
-		UptimeSeconds: int64(uptime),
+		AvgResponseMs:        avgMs,
+		CPUPercent:           resources.CPUPercent,
+		MemUsedBytes:         resources.MemUsedBytes,
+		MemTotalBytes:        resources.MemTotalBytes,
+		DiskUsedBytes:        resources.DiskUsedBytes,
+		DiskTotalBytes:       resources.DiskTotalBytes,
+		StartedAt:            h.startedAt,
+		UptimeSeconds:        int64(uptime),
 	})
+}
+
+// currentCPUSample 与 setCPUSample 用锁保护上次采样，/api/status 可能被并发调用
+func (h *StatusHandler) currentCPUSample() sysinfo.CPUSample {
+	h.cpuMu.Lock()
+	defer h.cpuMu.Unlock()
+	return h.cpuSample
+}
+
+func (h *StatusHandler) setCPUSample(sample sysinfo.CPUSample) {
+	h.cpuMu.Lock()
+	defer h.cpuMu.Unlock()
+	h.cpuSample = sample
 }
 
 func (h *StatusHandler) resolvePublicIPs(ctx context.Context) (ipv4, ipv6, source string) {

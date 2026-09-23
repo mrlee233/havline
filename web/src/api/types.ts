@@ -147,6 +147,11 @@ export interface DashboardStatus {
   avg_response_ms: number
   started_at: string
   uptime_seconds: number
+  cpu_percent: number
+  mem_used_bytes: number
+  mem_total_bytes: number
+  disk_used_bytes: number
+  disk_total_bytes: number
 }
 
 export interface DDNSDomainRecord {
@@ -718,6 +723,17 @@ export interface FrpAgentRouteHealth {
   tunnel_name?: string
   tunnel_detail?: string
   service_ok: boolean
+}
+
+export interface FrpRouteHealthSummary {
+  servers: number
+  routes: number
+  healthy: number
+  dns_failed: number
+  cert_missing: number
+  tunnel_down: number
+  service_down: number
+  failed_servers?: string[]
 }
 
 export interface FrpAgentRouteDetail {
