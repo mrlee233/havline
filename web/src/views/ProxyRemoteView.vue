@@ -135,7 +135,7 @@
               :data="candidates"
               :bordered="false"
               size="small"
-              :scroll-x="1780"
+              :scroll-x="1790"
               :row-key="(row: FrpProxy) => row.id"
             />
           </div>
@@ -523,6 +523,19 @@ function openDomain(candidate: FrpProxy, domain: string) {
   window.open(`${candidate.type === 'https' ? 'https' : 'http'}://${domain}`, '_blank', 'noopener')
 }
 
+// 协议：公网反代的规则 type 恒为 http，入口协议由部署设置的「启用 HTTPS」决定，故按 options 自动识别
+function protocolOf(candidate: FrpProxy) {
+  const httpsEnabled = !(candidate.options?.https_disabled ?? false)
+  const redirect = candidate.options?.redirect_https ?? false
+  return {
+    label: httpsEnabled ? 'HTTPS' : 'HTTP',
+    kind: (httpsEnabled ? 'success' : 'disabled') as BadgeKind,
+    detail: httpsEnabled
+      ? `443 由 Nginx 终结 TLS${redirect ? '，且 80 端口强制 301 跳转' : '，80 端口同时可用'}`
+      : '仅 80 端口明文提供服务（部署设置里未启用 HTTPS）',
+  }
+}
+
 // 采集失败时把原因挂到四个流量单元格的 title 上，不再单占一列
 function trafficErrorOf(candidate: FrpProxy) {
   return trafficErrors.value[String(candidate.id)] || undefined
@@ -548,8 +561,11 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
   {
-    title: '协议', key: 'protocol', width: 80,
-    render: (row) => h('span', { class: 'mono' }, row.type.toUpperCase()),
+    title: '协议', key: 'protocol', width: 90,
+    render: (row) => {
+      const protocol = protocolOf(row)
+      return h('span', { title: protocol.detail }, [h(StatusBadge, { kind: protocol.kind, text: protocol.label })])
+    },
   },
   {
     title: '上游 / 回源', key: 'upstream', width: 200,
