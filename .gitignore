@@ -1,0 +1,10 @@
+bin/
+.data/
+web/node_modules/
+web/dist/
+cmd/fonu/web/dist/
+*.db
+/data/
+.DS_Store
+.cursor/
+scripts/

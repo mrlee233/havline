@@ -1,0 +1,27 @@
+# 本地构建并打标签（原为从 Docker Hub 拉取 muxui/fonu，本地项目无需拉取）
+# 构建后镜像名为 fonu:local，可直接 docker save 导出或自行推送
+services:
+  fonu:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: fonu:local
+    container_name: fonu
+    restart: unless-stopped
+    ports:
+      - "6893:6893"
+      - "18080:80"
+      - "9443:443"
+    volumes:
+      - fonu-data:/data
+    environment:
+      FONU_DATA_DIR: /data
+      FONU_LISTEN: :6893
+      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-change-me-in-production}
+
+volumes:
+  fonu-data:
