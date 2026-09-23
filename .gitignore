@@ -10,3 +10,9 @@ cmd/fonu/web/dist/
 # scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪
 scripts/*
 !scripts/agent-install.sh
+# 本地压缩包与导出产物不入库（如 web/src.rar）
+*.rar
+*.zip
+*.7z
+*.tar.gz
+*.log
