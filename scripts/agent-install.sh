@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "请使用 root 或 sudo 运行" >&2
+  exit 1
+fi
+
+AGENT_BINARY=${1:-fonu-agent}
+PREFIX=/usr/local/bin/fonu-agent
+CONF_DIR=/etc/fonu-agent
+CONF_FILE="$CONF_DIR/agent.env"
+UNIT=/etc/systemd/system/fonu-agent.service
+mkdir -p "$CONF_DIR" /var/lib/fonu-agent/certs
+systemctl stop fonu-agent 2>/dev/null || true
+TMP_PREFIX="${PREFIX}.new"
+install -m 0755 "$AGENT_BINARY" "$TMP_PREFIX"
+if [ ! -x "$TMP_PREFIX" ]; then
+  echo "agent 二进制安装失败：$TMP_PREFIX 不存在或不可执行" >&2
+  exit 1
+fi
+AGENT_VERSION=$($TMP_PREFIX -version 2>/dev/null) || {
+  echo "agent 二进制无法执行：$TMP_PREFIX" >&2
+  rm -f "$TMP_PREFIX"
+  exit 1
+}
+mv -f "$TMP_PREFIX" "$PREFIX"
+if [ ! -x "$PREFIX" ]; then
+  echo "agent 原子替换失败：$PREFIX 不存在或不可执行" >&2
+  exit 1
+fi
+printf 'agent version: %s\n' "$AGENT_VERSION"
+
+if [ ! -f "$CONF_FILE" ]; then
+  umask 077
+  printf 'FONU_AGENT_TOKEN=%s\n' "$(openssl rand -hex 32)" > "$CONF_FILE"
+fi
+
+cat > "$UNIT" <<'UNIT'
+[Unit]
+Description=Fonu FRPS management agent
+After=network-online.target nginx.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/fonu-agent/agent.env
+ExecStart=/usr/local/bin/fonu-agent
+Restart=on-failure
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl daemon-reload
+systemctl restart fonu-agent
+systemctl enable fonu-agent
+TOKEN=$(sed -n 's/^FONU_AGENT_TOKEN=//p' "$CONF_FILE")
+echo "fonu-agent 已安装并启动"
+echo "API: http://$(hostname -I 2>/dev/null | awk '{print $1}'):7700"
+echo "Token: $TOKEN"
