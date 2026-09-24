@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -54,7 +57,7 @@ func (c *AgentClient) request(ctx context.Context, method, path string, payload 
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("agent 返回 HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return &statusError{code: resp.StatusCode, body: strings.TrimSpace(string(data))}
 	}
 	if result != nil && len(data) > 0 {
 		if err := json.Unmarshal(data, result); err != nil {
@@ -72,6 +75,61 @@ func (c *AgentClient) Status(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	err := c.request(ctx, http.MethodGet, "/api/v1/status", nil, &result)
 	return result, err
+}
+
+// agentMinVersionInsights 是 P1 三个只读端点（metrics / logs / frps-config）要求的最低 agent 版本
+const agentMinVersionInsights = "0.10.0"
+
+// ErrAgentEndpointMissing 表示 VPS 上的 agent 版本过旧、没有该端点（HTTP 404/405）
+var ErrAgentEndpointMissing = errors.New("VPS 上的 agent 版本过低，不支持该接口")
+
+// statusError 保留 HTTP 状态码，便于上层区分「端点不存在」与真实错误
+type statusError struct {
+	code int
+	body string
+}
+
+func (e *statusError) Error() string {
+	return fmt.Sprintf("agent 返回 HTTP %d: %s", e.code, e.body)
+}
+
+// wrapEndpointMissing 把「端点不存在」统一成带升级提示的错误，其它错误原样返回
+func wrapEndpointMissing(err error) error {
+	var statusErr *statusError
+	if errors.As(err, &statusErr) && (statusErr.code == http.StatusNotFound || statusErr.code == http.StatusMethodNotAllowed) {
+		return fmt.Errorf("%w（需 ≥ %s），请在服务端详情里升级 Agent", ErrAgentEndpointMissing, agentMinVersionInsights)
+	}
+	return err
+}
+
+// Metrics 采集 VPS 主机资源（CPU / 内存 / 磁盘 / 负载 / 运行时长）
+func (c *AgentClient) Metrics(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodGet, "/api/v1/metrics", nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err)
+	}
+	return result, nil
+}
+
+// NginxLogs 读取 VPS 上 Nginx 的 access / error 日志尾部
+func (c *AgentClient) NginxLogs(ctx context.Context, kind string, lines int) (map[string]any, error) {
+	query := url.Values{}
+	query.Set("type", kind)
+	query.Set("lines", strconv.Itoa(lines))
+	var result map[string]any
+	if err := c.request(ctx, http.MethodGet, "/api/v1/logs/nginx?"+query.Encode(), nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err)
+	}
+	return result, nil
+}
+
+// FRPSConfig 回读 VPS 上的 frps.toml（用于与下发内容比对）
+func (c *AgentClient) FRPSConfig(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodGet, "/api/v1/frps/config", nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err)
+	}
+	return result, nil
 }
 
 func (c *AgentClient) SyncRoute(ctx context.Context, domain, upstream string, tls bool, certDir string) error {

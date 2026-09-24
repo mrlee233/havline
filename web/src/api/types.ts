@@ -736,6 +736,35 @@ export interface FrpRouteHealthSummary {
   failed_servers?: string[]
 }
 
+export interface FrpAgentMetrics {
+  cpu_percent: number
+  mem_used_bytes: number
+  mem_total_bytes: number
+  disk_used_bytes: number
+  disk_total_bytes: number
+  disk_path?: string
+  load_avg?: number[]
+  uptime_seconds?: number
+  checked_at: string
+}
+
+export interface FrpAgentNginxLogs {
+  type: 'access' | 'error'
+  path: string
+  lines: string[]
+  truncated: boolean
+  checked_at: string
+}
+
+export interface FrpAgentFRPSConfig {
+  path: string
+  exists: boolean
+  content: string
+  truncated?: boolean
+  mod_time?: string
+  checked_at: string
+}
+
 export interface FrpRouteDriftItem {
   domain: string
   kind: 'missing' | 'orphan' | 'not_loaded' | 'content_mismatch'

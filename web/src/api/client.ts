@@ -290,7 +290,15 @@ export const api = {
   uninstallFrpAgent: (id: number, keepData: boolean) => request<{ ok: boolean; output: string }>(`/api/frpmulti/servers/${id}/agent/uninstall?keep_data=${keepData}`, { method: 'POST' }),
   sshDiagnoseFrpAgent: (id: number) => request<{ output: string }>(`/api/frpmulti/servers/${id}/agent/ssh-diagnose`, { method: 'POST' }),
   getFrpAgentStatus: (id: number) => request<import('./types').FrpAgentStatus>(`/api/frpmulti/servers/${id}/agent/status`),
-    getFrpAgentRouteDrift: (id: number) =>
+    getFrpAgentMetrics: (id: number) =>
+    request<import('./types').FrpAgentMetrics>(`/api/frpmulti/servers/${id}/agent/metrics`),
+  getFrpAgentNginxLogs: (id: number, type: 'access' | 'error', lines = 200) =>
+    request<import('./types').FrpAgentNginxLogs>(
+      `/api/frpmulti/servers/${id}/agent/logs/nginx?type=${type}&lines=${lines}`,
+    ),
+  getFrpAgentFRPSConfig: (id: number) =>
+    request<import('./types').FrpAgentFRPSConfig>(`/api/frpmulti/servers/${id}/agent/frps-config`),
+  getFrpAgentRouteDrift: (id: number) =>
     request<import('./types').FrpRouteDriftReport>(`/api/frpmulti/servers/${id}/agent/routes/drift`),
   redeployFrpAgentRoutes: (id: number) =>
     request<import('./types').FrpRedeployAllResult>(`/api/frpmulti/servers/${id}/agent/routes/redeploy`, {

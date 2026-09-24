@@ -13,6 +13,7 @@ var (
 	procGetSystemTimes       = kernel32.NewProc("GetSystemTimes")
 	procGlobalMemoryStatusEx = kernel32.NewProc("GlobalMemoryStatusEx")
 	procGetDiskFreeSpaceExW  = kernel32.NewProc("GetDiskFreeSpaceExW")
+	procGetTickCount64       = kernel32.NewProc("GetTickCount64")
 )
 
 type memoryStatusEx struct {
@@ -85,6 +86,17 @@ func diskUsage(root string) (total, used uint64) {
 		return totalBytes, 0
 	}
 	return totalBytes, totalBytes - totalFree
+}
+
+// LoadAvg Windows 没有平均负载概念，固定返回 nil
+func LoadAvg() []float64 {
+	return nil
+}
+
+// UptimeSeconds 用 GetTickCount64 取系统运行秒数
+func UptimeSeconds() uint64 {
+	ret, _, _ := procGetTickCount64.Call()
+	return uint64(ret) / 1000
 }
 
 // filetimeTicks 把 FILETIME（100ns 单位）折算为 10ms 刻度，避免累加时溢出

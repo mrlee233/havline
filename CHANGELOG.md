@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.4] - 2026-09-24
+
+### 新增
+
+- 公网 Agent 能力扩展（agent 0.10.0）：新增三个只读端点——`GET /api/v1/metrics`（VPS 主机资源：CPU / 内存 / 磁盘 / 负载 / 运行时长，CPU 用两次采样差值，1 秒内的重复请求直接复用上次结果）、`GET /api/v1/logs/nginx`（access / error 日志尾部，路径只从 `nginx -T` 实际生效配置、`FONU_AGENT_NGINX_LOG_DIR` 或默认目录取；按 32KB 块倒读，单行 4KB 截断，上限 2000 行）、`GET /api/v1/frps/config`（frps.toml 回读，256KB 上限，文件不存在返回 `exists: false`）
+- 公网 Agent 页：新增「VPS 资源」横排带（CPU / 内存 / 磁盘三项并排 + 进度条 + 右侧平均负载与运行时长），占满「环境与依赖」整行，不做单独占格
+- 日志中心：新增「公网 Nginx」页签（服务端 / 访问或错误日志 / 行数 200·500·2000 + 关键词搜索 + 分页），并显示 agent 解析出的实际日志路径与「仅显示尾部」标记
+- 公网服务端「frps.toml 同源配置」弹窗：新增「比对 VPS 实际文件」——去注释与空行后逐行比对，一致给出绿色说明，不一致指出第一个差异行（下发值 / VPS 值）
+
+### 改进
+
+- `internal/sysinfo` 补 `LoadAvg()` 与 `UptimeSeconds()`：Linux 读 `/proc/loadavg`、`/proc/uptime`，Windows 用 `GetTickCount64`，其它平台返回空值
+- 老版本 agent 的降级：三个新端点遇到 HTTP 404/405 时统一转成「VPS 上的 agent 版本过低，不支持该接口（需 ≥ 0.10.0），请在服务端详情里升级 Agent」的可操作提示，而不是原始 HTTP 错误
+
+### 变更
+
+- `AgentVersion` 0.9.2 → **0.10.0**；内嵌 `fonu-agent-linux-amd64`（9.9 MB）与 `-arm64`（9.2 MB）已用新代码重编，VPS 上需点「升级 Agent」才会生效
+- 版本号提升到 1.2.4（版本单一来源仍是根目录 `VERSION`）
+
 ## [v1.2.3] - 2026-09-24
 
 ### 新增

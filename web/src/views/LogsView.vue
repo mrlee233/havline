@@ -66,6 +66,42 @@
         />
       </n-tab-pane>
 
+      <n-tab-pane name="remote-nginx" tab="公网 Nginx">
+        <LogToolbar v-model:keyword="nginxKeyword" @refresh="loadRemoteNginxLogs" />
+        <div class="remote-nginx-bar">
+          <n-select
+            v-model:value="nginxTargetId"
+            :options="nginxTargetOptions"
+            placeholder="选择服务端"
+            size="small"
+            class="remote-nginx-bar__server"
+          />
+          <n-select v-model:value="nginxKind" :options="nginxKindOptions" size="small" style="width: 120px" />
+          <n-select v-model:value="nginxLines" :options="nginxLineOptions" size="small" style="width: 110px" />
+          <span v-if="nginxPath" class="tab-hint mono remote-nginx-bar__path">
+            {{ nginxPath }}{{ nginxTruncated ? '（仅显示尾部）' : '' }}
+          </span>
+        </div>
+        <n-data-table
+          v-if="filteredNginxLines.length > 0"
+          class="log-table"
+          :columns="nginxColumns"
+          :data="pagedNginxLines"
+          :loading="nginxLoading"
+          :bordered="false"
+        />
+        <LogPagination
+          v-if="filteredNginxLines.length > 0"
+          v-model:page="nginxPage"
+          :item-count="filteredNginxLines.length"
+        />
+        <EmptyState
+          v-if="!nginxLoading && filteredNginxLines.length === 0"
+          title="暂无公网 Nginx 日志"
+          :description="nginxError || 'VPS 上产生访问后，这里会显示 Nginx 的访问 / 错误日志（需 agent ≥ 0.10.0）。'"
+        />
+      </n-tab-pane>
+
       <n-tab-pane name="access" tab="访问日志">
         <LogToolbar
           v-model:keyword="accessKeyword"
@@ -245,7 +281,7 @@ const LogToolbar = defineComponent({
 
 const message = useMessage()
 const route = useRoute()
-const LOG_TABS = ['system', 'access', 'nginx'] as const
+const LOG_TABS = ['system', 'frp', 'remote-nginx', 'access', 'nginx'] as const
 type LogTab = (typeof LOG_TABS)[number]
 
 function resolveTab(queryTab: unknown): LogTab {
@@ -450,6 +486,105 @@ function frpRowClassName(row: FrpLogEntry) {
   if (row.level === 'W') return 'log-row log-row--warn'
   return 'log-row'
 }
+
+// 公网 Nginx 日志（VPS 侧，需 agent ≥ 0.10.0）：路径由 agent 从 nginx -T 解析，前端只展示原始行
+const nginxTargets = ref<import('../api/types').FrpServer[]>([])
+const nginxTargetId = ref<number | null>(null)
+const nginxKind = ref<'access' | 'error'>('access')
+const nginxLines = ref(200)
+const nginxRaw = ref<string[]>([])
+const nginxPath = ref('')
+const nginxTruncated = ref(false)
+const nginxLoading = ref(false)
+const nginxError = ref('')
+const nginxKeyword = ref('')
+const nginxPage = ref(1)
+const nginxPageSize = 50
+
+const nginxTargetOptions = computed(() =>
+  nginxTargets.value.map((item) => ({ label: item.name || item.agent_url || `服务端 #${item.id}`, value: item.id })),
+)
+
+const nginxKindOptions = [
+  { label: '访问日志', value: 'access' },
+  { label: '错误日志', value: 'error' },
+]
+
+const nginxLineOptions = [
+  { label: '200 行', value: 200 },
+  { label: '500 行', value: 500 },
+  { label: '2000 行', value: 2000 },
+]
+
+const filteredNginxLines = computed(() => {
+  const rows = nginxRaw.value.map((line) => ({ line }))
+  const keyword = nginxKeyword.value.trim().toLowerCase()
+  if (!keyword) return rows
+  return rows.filter((row) => row.line.toLowerCase().includes(keyword))
+})
+
+const pagedNginxLines = computed(() => {
+  const start = (nginxPage.value - 1) * nginxPageSize
+  return filteredNginxLines.value.slice(start, start + nginxPageSize)
+})
+
+const nginxColumns: DataTableColumns<{ line: string }> = [
+  {
+    title: '日志',
+    key: 'line',
+    ellipsis: { tooltip: true },
+    render: (row) => h('span', { class: 'log-message' }, row.line),
+  },
+]
+
+async function loadNginxTargets() {
+  try {
+    nginxTargets.value = asList(await api.listFrpServers()).filter((item) => item.agent_configured)
+  } catch {
+    nginxTargets.value = []
+  }
+  if (nginxTargetId.value === null || !nginxTargets.value.some((item) => item.id === nginxTargetId.value)) {
+    nginxTargetId.value = nginxTargets.value[0]?.id ?? null
+  }
+}
+
+async function loadRemoteNginxLogs() {
+  if (nginxTargetId.value === null) {
+    nginxRaw.value = []
+    nginxError.value = '没有已配置 Agent 的服务端'
+    return
+  }
+  nginxLoading.value = true
+  nginxError.value = ''
+  try {
+    const result = await api.getFrpAgentNginxLogs(nginxTargetId.value, nginxKind.value, nginxLines.value)
+    nginxRaw.value = result.lines ?? []
+    nginxPath.value = result.path ?? ''
+    nginxTruncated.value = result.truncated ?? false
+    nginxPage.value = 1
+  } catch (error) {
+    nginxRaw.value = []
+    nginxError.value = error instanceof Error ? error.message : '读取公网 Nginx 日志失败'
+  } finally {
+    nginxLoading.value = false
+  }
+}
+
+watch([nginxTargetId, nginxKind, nginxLines], () => {
+  nginxPage.value = 1
+  if (nginxTargetId.value !== null) void loadRemoteNginxLogs()
+})
+
+watch(nginxKeyword, () => {
+  nginxPage.value = 1
+})
+
+// 切到本页签时才拉服务端列表与日志，避免影响其它页签的首屏
+watch(tab, (value) => {
+  if (value === 'remote-nginx' && nginxTargets.value.length === 0) {
+    void loadNginxTargets().then(() => loadRemoteNginxLogs())
+  }
+})
 
 async function loadFrpLogs() {
   loadingFrp.value = true
@@ -765,5 +900,23 @@ onUnmounted(() => {
 
 .logs-card :deep(.log-module-tag) {
   white-space: nowrap;
+}
+.remote-nginx-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--fonu-space-3);
+  margin-bottom: var(--fonu-space-2);
+}
+
+.remote-nginx-bar__server {
+  width: 200px;
+}
+
+.remote-nginx-bar__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 420px;
 }
 </style>

@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fonu/fonu/internal/sysinfo"
 )
 
 // AgentVersion 随每次 agent 行为变更手动递增；status/ping 与安装脚本都会回报，用于确认 VPS 上跑的是哪个版本。
@@ -31,7 +33,8 @@ import (
 // 0.9.0：Nginx 可用性显式探测（status 暴露 nginx_ok/nginx_missing）、部署前预检、一键安装 Nginx 端点。
 // 0.9.1：status 补充 nginx_running / nginx_version，供页面展示 Nginx 状态卡片。
 // 0.9.2：Basic Auth 哈希改为纯 Go apr1（去掉对 VPS openssl 的依赖）；安装脚本 token 改用 /dev/urandom。
-const AgentVersion = "0.9.2"
+// 0.10.0：新增 /api/v1/metrics 主机资源采集、/api/v1/logs/nginx 日志读取、/api/v1/frps/config 配置回读。
+const AgentVersion = "0.10.0"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -49,6 +52,11 @@ type Config struct {
 type Server struct {
 	cfg Config
 	mu  sync.Mutex
+	// metrics 采样缓存：CPU 占用率需要两次采样，间隔内的重复请求直接复用上次结果
+	metricsMu     sync.Mutex
+	metricsAt     time.Time
+	metricsSample sysinfo.CPUSample
+	metricsCached map[string]any
 	// nginx 可用性探测缓存：status 轮询频繁，避免每次都起 nginx -t 进程
 	nginxStatusMu sync.Mutex
 	nginxStatusAt time.Time
@@ -160,6 +168,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/frps/install", s.auth(s.installFRPS))
 	mux.HandleFunc("POST /api/v1/frps/action", s.auth(s.frpsAction))
 	mux.HandleFunc("POST /api/v1/certs", s.auth(s.putCertificate))
+	mux.HandleFunc("GET /api/v1/metrics", s.auth(s.metrics))
+	mux.HandleFunc("GET /api/v1/logs/nginx", s.auth(s.nginxLogs))
+	mux.HandleFunc("GET /api/v1/frps/config", s.auth(s.frpsConfig))
 	return mux
 }
 

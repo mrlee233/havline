@@ -83,6 +83,26 @@
           <div class="stat-card__label">端口监听</div>
           <div class="stat-card__sub">frps 运行所需端口</div>
         </div>
+        <FonuCard class="section-card vps-resource-card" title="VPS 资源">
+          <div class="section-body">
+            <p v-if="metricsError" class="form-hint">{{ metricsError }}</p>
+            <div v-else-if="agentMetrics" class="res-strip">
+              <div v-for="row in metricsRows" :key="row.label" class="res-row">
+                <span class="res-row__label">{{ row.label }}</span>
+                <span class="res-row__value">{{ row.value }}</span>
+                <span class="res-row__detail">{{ row.detail }}</span>
+                <span class="res-bar" :class="`res-bar--${row.tone}`">
+                  <span class="res-bar__fill" :style="{ width: `${row.percent.toFixed(1)}%` }" />
+                </span>
+              </div>
+              <div class="res-meta">
+                <span>平均负载 {{ metricsLoadText }}</span>
+                <span>运行时长 {{ metricsUptimeText }}</span>
+              </div>
+            </div>
+            <p v-else class="form-hint">{{ metricsLoading ? '正在采集 VPS 资源…' : '暂无 VPS 资源数据' }}</p>
+          </div>
+        </FonuCard>
       </section>
 
       <!-- ② 环境与依赖 -->
@@ -260,7 +280,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type { FrpAgentStatus, FrpRelease, FrpServer } from '../api/types'
-import { formatRelativeTime } from '../utils/format'
+import { formatBytes, formatRelativeTime, formatUptime } from '../utils/format'
 import { copyText } from '../utils/clipboard'
 
 // 操作动作：按动作粒度控制 loading，保证"只有被点的按钮转圈"
@@ -435,6 +455,60 @@ async function load() {
   } catch (error) { loadError.value = error instanceof Error ? error.message : '读取服务端失败' }
 }
 
+// VPS 资源（需 agent ≥ 0.10.0）：老版本 agent 没有该端点，错误信息里已带升级提示
+const agentMetrics = ref<import('../api/types').FrpAgentMetrics | null>(null)
+const metricsError = ref('')
+const metricsLoading = ref(false)
+
+async function loadMetrics(serverID: number) {
+  metricsLoading.value = true
+  try {
+    agentMetrics.value = await api.getFrpAgentMetrics(serverID)
+    metricsError.value = ''
+  } catch (error) {
+    agentMetrics.value = null
+    metricsError.value = error instanceof Error ? error.message : 'VPS 资源获取失败'
+  } finally {
+    metricsLoading.value = false
+  }
+}
+
+function usagePercentOf(used?: number, total?: number) {
+  if (!used || !total || total <= 0) return 0
+  return Math.min(100, (used / total) * 100)
+}
+
+const metricsRows = computed(() => {
+  const data = agentMetrics.value
+  if (!data) return []
+  const rows = [
+    { label: 'CPU', percent: Math.min(100, Math.max(0, data.cpu_percent ?? 0)), detail: '整机占用率' },
+    {
+      label: '内存',
+      percent: usagePercentOf(data.mem_used_bytes, data.mem_total_bytes),
+      detail: `${formatBytes(data.mem_used_bytes)} / ${formatBytes(data.mem_total_bytes)}`,
+    },
+    {
+      label: '磁盘',
+      percent: usagePercentOf(data.disk_used_bytes, data.disk_total_bytes),
+      detail: `${formatBytes(data.disk_used_bytes)} / ${formatBytes(data.disk_total_bytes)}`,
+    },
+  ]
+  return rows.map((row) => ({
+    ...row,
+    value: `${Math.round(row.percent)}%`,
+    tone: row.percent >= 90 ? 'danger' : row.percent >= 75 ? 'warn' : 'ok',
+  }))
+})
+
+const metricsLoadText = computed(() =>
+  agentMetrics.value?.load_avg?.length ? agentMetrics.value.load_avg.map((value) => value.toFixed(2)).join(' / ') : '—',
+)
+
+const metricsUptimeText = computed(() =>
+  agentMetrics.value?.uptime_seconds ? formatUptime(agentMetrics.value.uptime_seconds) : '—',
+)
+
 // 轮询走静默（不触碰 busy）；首次加载显示 statusLoading
 async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   const current = server.value
@@ -444,6 +518,8 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
     agentStatus.value = await api.getFrpAgentStatus(current.id)
     agentStatusOk.value = true
     statusLoaded.value = true
+    // 资源采集单独走，不阻断状态加载
+    void loadMetrics(current.id)
   } catch (error) {
     agentStatusOk.value = false
     statusLoaded.value = true
@@ -658,5 +734,89 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
   .agent-actions { width: 100%; }
   .agent-actions .n-button { min-height: 44px; flex: 1 1 auto; }
   .entrance-row { flex-direction: column; align-items: flex-start; }
+}
+/* VPS 资源：占满「环境与依赖」整行，避免单独占一格显得突兀 */
+.vps-resource-card {
+  grid-column: 1 / -1;
+}
+
+.res-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: var(--fonu-space-5);
+}
+
+.res-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas:
+    'label value'
+    'detail detail'
+    'bar bar';
+  align-items: center;
+  gap: var(--fonu-space-2);
+  font-size: 13px;
+}
+
+.res-row__label {
+  grid-area: label;
+  color: var(--fonu-text-secondary);
+}
+
+.res-row__detail {
+  grid-area: detail;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--fonu-text-muted);
+}
+
+.res-row__value {
+  grid-area: value;
+  font-weight: 600;
+  color: var(--fonu-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.res-bar {
+  grid-area: bar;
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fonu-border);
+  overflow: hidden;
+}
+
+.res-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--fonu-brand);
+  transition: width 0.3s ease;
+}
+
+.res-bar--warn .res-bar__fill {
+  background: var(--fonu-warning);
+}
+
+.res-bar--danger .res-bar__fill {
+  background: var(--fonu-error);
+}
+
+.res-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: var(--fonu-space-4);
+  border-left: 1px solid var(--fonu-border);
+  font-size: 12px;
+  color: var(--fonu-text-muted);
+}
+
+@media (max-width: 900px) {
+  .res-strip { grid-template-columns: 1fr; }
+  .res-meta { padding-left: 0; border-left: none; }
 }
 </style>

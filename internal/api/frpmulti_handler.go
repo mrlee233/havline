@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/fonu/fonu/internal/frp"
 )
@@ -496,6 +498,52 @@ func (h *FRPMultiHandler) AgentRedeployRoutes(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// AgentMetrics 返回 VPS 主机资源（需 agent ≥ 0.10.0）
+func (h *FRPMultiHandler) AgentMetrics(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	metrics, err := h.svc.AgentMetrics(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+// AgentNginxLogs 读取 VPS 上 Nginx 的 access / error 日志尾部（需 agent ≥ 0.10.0）
+func (h *FRPMultiHandler) AgentNginxLogs(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	lines, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("lines")))
+	logs, err := h.svc.AgentNginxLogs(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("type")), lines)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, logs)
+}
+
+// AgentFRPSConfig 回读 VPS 上的 frps.toml（需 agent ≥ 0.10.0）
+func (h *FRPMultiHandler) AgentFRPSConfig(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	config, err := h.svc.AgentFRPSConfig(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, config)
 }
 
 func (h *FRPMultiHandler) AgentFRPSAction(w http.ResponseWriter, r *http.Request) {

@@ -589,9 +589,17 @@
           已启用的 TCP/UDP 隧道远程端口：<span class="mono">{{ tcpRemotePorts.join('、') }}</span>
           —— 请确认 VPS 防火墙 / 安全组已放行这些端口（frps 侧 allowPorts 已按此生成，未放行时隧道会连不上）。
         </p>
+        <p v-if="frpsCompare" class="form-hint" :class="{ 'frps-compare--warn': !frpsCompare.ok }">
+          {{ frpsCompare.text }}
+        </p>
         <pre class="logs-box">{{ frpsConfigContent || '生成中…' }}</pre>
       </div>
-      <div class="modal-footer"><n-button @click="showFRPSConfig = false">关闭</n-button></div>
+      <div class="modal-footer">
+        <n-button size="small" :loading="comparingFrps" :disabled="!frpsConfigTarget" @click="compareFrpsConfig">
+          比对 VPS 实际文件
+        </n-button>
+        <n-button @click="showFRPSConfig = false">关闭</n-button>
+      </div>
     </div>
   </n-modal>
 
@@ -940,6 +948,47 @@ const showServerDetail = ref(false)
 // frps.toml 同源配置弹窗：按服务端生成，与 frpc 侧端口/认证一致
 const showFRPSConfig = ref(false)
 const frpsConfigContent = ref('')
+// frps.toml 与 VPS 实际文件的比对结果（P1-3，需 agent ≥ 0.10.0）
+const frpsCompare = ref<{ ok: boolean; text: string } | null>(null)
+const comparingFrps = ref(false)
+
+// 比对前统一去注释、空行与首尾空白：注释和排版差异不算「被手工修改」
+function normalizedConfigLines(text: string) {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+}
+
+async function compareFrpsConfig() {
+  const target = frpsConfigTarget.value
+  if (!target) return
+  comparingFrps.value = true
+  frpsCompare.value = null
+  try {
+    const remote = await api.getFrpAgentFRPSConfig(target.id)
+    if (!remote.exists) {
+      frpsCompare.value = { ok: false, text: `VPS 上还没有 ${remote.path || 'frps.toml'}，可直接下发写入` }
+      return
+    }
+    const expected = normalizedConfigLines(frpsConfigContent.value)
+    const actual = normalizedConfigLines(remote.content)
+    const index = expected.findIndex((line, i) => actual[i] !== line)
+    if (index === -1 && expected.length === actual.length) {
+      frpsCompare.value = { ok: true, text: `与 VPS 上的 ${remote.path} 一致（已忽略注释与空行）` }
+      return
+    }
+    const at = index === -1 ? Math.min(expected.length, actual.length) : index
+    frpsCompare.value = {
+      ok: false,
+      text: `不一致：第 ${at + 1} 行 下发「${expected[at] ?? '（无）'}」/ VPS「${actual[at] ?? '（无）'}」——VPS 上的 frps.toml 可能被手工改过，重新下发会覆盖`,
+    }
+  } catch (error) {
+    frpsCompare.value = { ok: false, text: error instanceof Error ? error.message : '比对失败' }
+  } finally {
+    comparingFrps.value = false
+  }
+}
 const frpsConfigTarget = ref<FrpServer | null>(null)
 const frpsConfigLoading = ref(false)
 const showRuntimeModal = ref(false)
@@ -1747,6 +1796,7 @@ async function loadExport() {
 async function openFRPSConfig(server: FrpServer) {
   frpsConfigTarget.value = server
   showFRPSConfig.value = true
+  frpsCompare.value = null
   frpsConfigLoading.value = true
   try { frpsConfigContent.value = (await api.getFrpFRPSConfig(server.id)).content }
   catch (error) {
@@ -2148,4 +2198,7 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 @media (max-width: 1100px) { .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 700px) { .stats-row, .form-grid, .download-proxy-form, .server-detail__grid, .detail-fields, .detail-stats, .server-status-summary { grid-template-columns: 1fr; } .server-status-summary__item--state { min-height: 0; padding-right: 0; padding-bottom: var(--fonu-space-3); border-right: 0; border-bottom: 1px solid var(--fonu-border); } .status-bars { gap: 3px; } .status-bar { height: 28px; } .binary-row { align-items: flex-start; flex-direction: column; } .release-row { grid-template-columns: 1fr; } .release-progress-placeholder { display: none; } .switch-row span:nth-of-type(2) { margin-left: 0; } }
 @media (max-width: 760px) { .frp-proxy-modal { display: block; max-height: 92vh; overflow-y: auto; } .frp-proxy-modal .proxy-modal__form { max-height: none; } .frp-proxy-modal .proxy-modal__scroll { overflow: visible; } .frp-proxy-modal .proxy-modal__help { width: auto; border-top: 1px solid var(--fonu-border); border-left: 0; } }
+.frps-compare--warn {
+  color: var(--fonu-warning);
+}
 </style>
