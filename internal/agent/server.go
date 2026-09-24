@@ -34,7 +34,8 @@ import (
 // 0.9.1：status 补充 nginx_running / nginx_version，供页面展示 Nginx 状态卡片。
 // 0.9.2：Basic Auth 哈希改为纯 Go apr1（去掉对 VPS openssl 的依赖）；安装脚本 token 改用 /dev/urandom。
 // 0.10.0：新增 /api/v1/metrics 主机资源采集、/api/v1/logs/nginx 日志读取、/api/v1/frps/config 配置回读。
-const AgentVersion = "0.10.0"
+// 0.11.0：新增 /api/v1/certs 证书清单与 /api/v1/nginx/reload 显式重载（回传校验/重载失败原因）。
+const AgentVersion = "0.11.0"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -171,6 +172,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/metrics", s.auth(s.metrics))
 	mux.HandleFunc("GET /api/v1/logs/nginx", s.auth(s.nginxLogs))
 	mux.HandleFunc("GET /api/v1/frps/config", s.auth(s.frpsConfig))
+	mux.HandleFunc("GET /api/v1/certs", s.auth(s.certs))
+	mux.HandleFunc("POST /api/v1/nginx/reload", s.auth(s.nginxReload))
 	return mux
 }
 

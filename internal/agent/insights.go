@@ -2,6 +2,8 @@ package agent
 
 import (
 	"bytes"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"math"
@@ -10,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -195,6 +198,115 @@ func tailFile(path string, lines int, maxLine int) ([]string, bool, error) {
 		out = append(out, row)
 	}
 	return out, truncated, nil
+}
+
+// vpsCertificate VPS 证书目录里的一张证书
+// 注意：证书按 <CertsDir>/<域名>/fullchain.pem + privkey.pem 存放（与 putCertificate 一致）。
+type vpsCertificate struct {
+	Domain   string `json:"domain"`
+	CertPath string `json:"cert_path"`
+	KeyPath  string `json:"key_path"`
+	NotAfter string `json:"not_after,omitempty"`
+	DaysLeft int    `json:"days_left"`
+}
+
+// certs 列出 VPS 证书目录下的域名与到期时间：用于与 Fonu 证书库交叉核对，也能看到宝塔自行申请的证书
+func (s *Server) certs(w http.ResponseWriter, _ *http.Request) {
+	dir := strings.TrimSpace(s.cfg.CertsDir)
+	payload := map[string]any{
+		"certs": []vpsCertificate{}, "warnings": []string{}, "dir": dir,
+		"checked_at": time.Now().UTC().Format(time.RFC3339),
+	}
+	if dir == "" {
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			writeJSON(w, http.StatusOK, payload)
+			return
+		}
+		status := http.StatusInternalServerError
+		if os.IsPermission(err) {
+			status = http.StatusForbidden
+		}
+		writeJSON(w, status, map[string]string{"error": fmt.Sprintf("读取证书目录失败：%v", err)})
+		return
+	}
+
+	now := time.Now()
+	certs := make([]vpsCertificate, 0, len(entries))
+	warnings := make([]string, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		domain := entry.Name()
+		item := vpsCertificate{
+			Domain:   domain,
+			CertPath: filepath.Join(dir, domain, "fullchain.pem"),
+			KeyPath:  filepath.Join(dir, domain, "privkey.pem"),
+		}
+		notAfter, err := readCertificateNotAfter(item.CertPath)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s：%v", domain, err))
+		} else {
+			item.NotAfter = notAfter.UTC().Format(time.RFC3339)
+			item.DaysLeft = int(notAfter.Sub(now).Hours() / 24)
+		}
+		certs = append(certs, item)
+	}
+	// 到期最快的排在前面，便于直接看出哪张该续了
+	sort.Slice(certs, func(i, j int) bool { return certs[i].DaysLeft < certs[j].DaysLeft })
+
+	payload["certs"] = certs
+	payload["warnings"] = warnings
+	writeJSON(w, http.StatusOK, payload)
+}
+
+// readCertificateNotAfter 解析 PEM 证书的到期时间
+func readCertificateNotAfter(path string) (time.Time, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return time.Time{}, fmt.Errorf("不是有效的 PEM 证书")
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return cert.NotAfter, nil
+}
+
+// nginxReload 显式校验并重载 Nginx，把校验/重载失败的原因回传。
+// 这里不加 s.mu：validateNginx / reloadNginx 的调用方约定（见 writeRoute 注释）是外部持锁，
+// 而本端点是用户显式触发的排查动作，不加锁可避免与路由写入相互阻塞。
+func (s *Server) nginxReload(w http.ResponseWriter, _ *http.Request) {
+	payload := map[string]any{"checked_at": time.Now().UTC().Format(time.RFC3339)}
+	if err := s.validateNginx(); err != nil {
+		payload["ok"] = false
+		payload["test_ok"] = false
+		payload["test_error"] = err.Error()
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	payload["test_ok"] = true
+	if err := s.reloadNginx(); err != nil {
+		payload["ok"] = false
+		payload["reload_ok"] = false
+		payload["reload_error"] = err.Error()
+		writeJSON(w, http.StatusOK, payload)
+		return
+	}
+	// 重载成功后让 Nginx 可用性探测的缓存失效，避免页面继续显示旧结论
+	s.invalidateNginxProbe()
+	payload["ok"] = true
+	payload["reload_ok"] = true
+	writeJSON(w, http.StatusOK, payload)
 }
 
 // frpsConfig 回读 VPS 上的 frps.toml，供应用侧与「即将下发的内容」比对，检出被手工修改的情况

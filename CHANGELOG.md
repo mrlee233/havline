@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.5] - 2026-09-24
+
+### 新增
+
+- 公网 Agent 能力扩展（agent 0.11.0）：新增 `GET /api/v1/certs`（VPS 证书清单——遍历证书目录、用标准库 `crypto/x509` 解析 `fullchain.pem` 的到期时间、按剩余天数排序、解析失败的单条记入 `warnings` 不中断整轮）与 `POST /api/v1/nginx/reload`（显式校验并重载 Nginx，分别回传 `nginx -t` 与 reload 的失败原因；成功后让可用性探测缓存失效，避免页面继续显示旧结论）
+- 公网 Agent 页：新增「VPS 证书」卡（域名 / 剩余天数 / **Fonu 证书库** / 到期时间），与 Fonu 证书库交叉核对（含通配符匹配），宝塔自行申请的证书也能看到；剩余不足 30 天转橙、已过期转红加粗
+- 公网 Agent 页：Nginx 卡片新增「重载 Nginx」按钮，校验 / 重载失败原因（`nginx -t` 输出或 reload 的 stderr）直接显示在卡内
+
+### 改进
+
+- 公网 Agent 页布局：「VPS 资源」与「VPS 证书」改为并排各占半行——`dep-grid` 由 3 列改为 6 列并按 span 分配（原有三张卡仍每行三张），半宽下资源三项指标等分、平均负载与运行时长落到卡底一行，证书表列宽收紧；≤1199px 复位跨度避免 `span` 在列数变少后撑破网格
+- 应用侧对 agent 端点的版本要求提升到 **≥ 0.11.0**（旧 agent 仍按 404/405 统一降级为「请升级 Agent」提示）
+
+### 变更
+
+- `AgentVersion` 0.10.0 → **0.11.0**；内嵌 `fonu-agent-linux-amd64`（10.0 MB）与 `-arm64`（9.3 MB）已重编，VPS 上需点「升级 Agent」才会生效
+- 版本号提升到 1.2.5（版本单一来源仍是根目录 `VERSION`）
+
 ## [v1.2.4] - 2026-09-24
 
 ### 新增

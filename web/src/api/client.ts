@@ -290,7 +290,13 @@ export const api = {
   uninstallFrpAgent: (id: number, keepData: boolean) => request<{ ok: boolean; output: string }>(`/api/frpmulti/servers/${id}/agent/uninstall?keep_data=${keepData}`, { method: 'POST' }),
   sshDiagnoseFrpAgent: (id: number) => request<{ output: string }>(`/api/frpmulti/servers/${id}/agent/ssh-diagnose`, { method: 'POST' }),
   getFrpAgentStatus: (id: number) => request<import('./types').FrpAgentStatus>(`/api/frpmulti/servers/${id}/agent/status`),
-    getFrpAgentMetrics: (id: number) =>
+    getFrpAgentCerts: (id: number) =>
+    request<import('./types').FrpAgentCerts>(`/api/frpmulti/servers/${id}/agent/certs`),
+  reloadFrpAgentNginx: (id: number) =>
+    request<import('./types').FrpAgentNginxReload>(`/api/frpmulti/servers/${id}/agent/nginx/reload`, {
+      method: 'POST',
+    }),
+  getFrpAgentMetrics: (id: number) =>
     request<import('./types').FrpAgentMetrics>(`/api/frpmulti/servers/${id}/agent/metrics`),
   getFrpAgentNginxLogs: (id: number, type: 'access' | 'error', lines = 200) =>
     request<import('./types').FrpAgentNginxLogs>(

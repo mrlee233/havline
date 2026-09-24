@@ -32,6 +32,24 @@ func (s *Service) AgentNginxLogs(ctx context.Context, serverID int64, kind strin
 	return client.NginxLogs(ctx, kind, lines)
 }
 
+// AgentCerts 列出 VPS 证书目录下的域名与到期时间，供与 Fonu 证书库交叉核对
+func (s *Service) AgentCerts(ctx context.Context, serverID int64) (map[string]any, error) {
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
+	}
+	return client.Certs(ctx)
+}
+
+// AgentNginxReload 显式校验并重载 VPS 上的 Nginx，返回失败原因
+func (s *Service) AgentNginxReload(ctx context.Context, serverID int64) (map[string]any, error) {
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
+	}
+	return client.NginxReload(ctx)
+}
+
 // AgentFRPSConfig 回读 VPS 上的 frps.toml，供与「即将下发的内容」比对
 func (s *Service) AgentFRPSConfig(ctx context.Context, serverID int64) (map[string]any, error) {
 	client, ok := s.agentClient(ctx, serverID)

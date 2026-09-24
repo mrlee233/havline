@@ -736,6 +736,30 @@ export interface FrpRouteHealthSummary {
   failed_servers?: string[]
 }
 
+export interface FrpAgentCertificate {
+  domain: string
+  cert_path: string
+  key_path: string
+  not_after?: string
+  days_left: number
+}
+
+export interface FrpAgentCerts {
+  certs: FrpAgentCertificate[]
+  warnings?: string[]
+  dir?: string
+  checked_at: string
+}
+
+export interface FrpAgentNginxReload {
+  ok: boolean
+  test_ok?: boolean
+  test_error?: string
+  reload_ok?: boolean
+  reload_error?: string
+  checked_at: string
+}
+
 export interface FrpAgentMetrics {
   cpu_percent: number
   mem_used_bytes: number

@@ -78,7 +78,7 @@ func (c *AgentClient) Status(ctx context.Context) (map[string]any, error) {
 }
 
 // agentMinVersionInsights 是 P1 三个只读端点（metrics / logs / frps-config）要求的最低 agent 版本
-const agentMinVersionInsights = "0.10.0"
+const agentMinVersionInsights = "0.11.0"
 
 // ErrAgentEndpointMissing 表示 VPS 上的 agent 版本过旧、没有该端点（HTTP 404/405）
 var ErrAgentEndpointMissing = errors.New("VPS 上的 agent 版本过低，不支持该接口")
@@ -118,6 +118,24 @@ func (c *AgentClient) NginxLogs(ctx context.Context, kind string, lines int) (ma
 	query.Set("lines", strconv.Itoa(lines))
 	var result map[string]any
 	if err := c.request(ctx, http.MethodGet, "/api/v1/logs/nginx?"+query.Encode(), nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err)
+	}
+	return result, nil
+}
+
+// Certs 列出 VPS 证书目录下的域名与到期时间
+func (c *AgentClient) Certs(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodGet, "/api/v1/certs", nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err)
+	}
+	return result, nil
+}
+
+// NginxReload 显式校验并重载 Nginx，返回校验 / 重载结果与失败原因
+func (c *AgentClient) NginxReload(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodPost, "/api/v1/nginx/reload", nil, &result); err != nil {
 		return nil, wrapEndpointMissing(err)
 	}
 	return result, nil

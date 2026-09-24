@@ -103,6 +103,30 @@
             <p v-else class="form-hint">{{ metricsLoading ? '正在采集 VPS 资源…' : '暂无 VPS 资源数据' }}</p>
           </div>
         </FonuCard>
+
+        <FonuCard class="section-card vps-resource-card" title="VPS 证书">
+          <div class="section-body">
+            <p v-if="certsError" class="form-hint">{{ certsError }}</p>
+            <div v-else-if="agentCerts.length > 0" class="cert-list">
+              <div class="cert-row cert-row--head">
+                <span>域名</span>
+                <span>剩余天数</span>
+                <span>Fonu 证书库</span>
+                <span>到期时间</span>
+              </div>
+              <div v-for="item in agentCerts" :key="item.domain" class="cert-row">
+                <span class="mono cert-domain">{{ item.domain }}</span>
+                <span :class="{ 'cert-days--warn': item.days_left < 30, 'cert-days--error': item.days_left < 0 }">
+                  {{ item.days_left < 0 ? '已过期' : `${item.days_left} 天` }}
+                </span>
+                <span>{{ fonuCertDomains.has(item.domain) ? '有' : '无' }}</span>
+                <span class="cert-muted">{{ item.not_after ? formatDate(item.not_after) : '未解析' }}</span>
+              </div>
+            </div>
+            <p v-else class="form-hint">{{ certsLoading ? '正在读取 VPS 证书…' : 'VPS 证书目录为空' }}</p>
+            <p v-if="certWarnings.length > 0" class="form-hint">{{ certWarnings.join('；') }}</p>
+          </div>
+        </FonuCard>
       </section>
 
       <!-- ② 环境与依赖 -->
@@ -135,7 +159,9 @@
               <div class="field-grid__wide"><label>vhost 配置目录</label><span class="mono mono-wrap">{{ agentStatus?.nginx_conf_dir || '—' }}</span></div>
             </div>
             <p v-if="agentStatus?.nginx_error" class="form-hint nginx-error mono">{{ agentStatus.nginx_error }}</p>
+            <p v-if="reloadHint" class="form-hint">{{ reloadHint }}</p>
             <div class="agent-actions">
+              <n-button size="small" :loading="reloadingNginx" :disabled="busy !== null" @click="reloadNginx">重载 Nginx</n-button>
               <router-link to="/public-proxy"><n-button size="small" quaternary>去「公网反代」处理</n-button></router-link>
             </div>
           </div>
@@ -280,7 +306,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type { FrpAgentStatus, FrpRelease, FrpServer } from '../api/types'
-import { formatBytes, formatRelativeTime, formatUptime } from '../utils/format'
+import { formatBytes, formatDate, formatRelativeTime, formatUptime } from '../utils/format'
 import { copyText } from '../utils/clipboard'
 
 // 操作动作：按动作粒度控制 loading，保证"只有被点的按钮转圈"
@@ -452,6 +478,7 @@ async function load() {
       selectedId.value = servers.value[0]?.id ?? null
     }
     if (server.value) await refreshAll({ silent: false })
+    void loadFonuCerts()
   } catch (error) { loadError.value = error instanceof Error ? error.message : '读取服务端失败' }
 }
 
@@ -509,6 +536,69 @@ const metricsUptimeText = computed(() =>
   agentMetrics.value?.uptime_seconds ? formatUptime(agentMetrics.value.uptime_seconds) : '—',
 )
 
+// VPS 证书清单（需 agent ≥ 0.11.0）：与 Fonu 证书库交叉核对，宝塔自签的证书也能看到
+const agentCerts = ref<import('../api/types').FrpAgentCertificate[]>([])
+const certWarnings = ref<string[]>([])
+const certsError = ref('')
+const certsLoading = ref(false)
+const fonuCertDomains = ref<Set<string>>(new Set())
+
+async function loadAgentCerts(serverID: number) {
+  certsLoading.value = true
+  try {
+    const result = await api.getFrpAgentCerts(serverID)
+    agentCerts.value = result.certs ?? []
+    certWarnings.value = result.warnings ?? []
+    certsError.value = ''
+  } catch (error) {
+    agentCerts.value = []
+    certWarnings.value = []
+    certsError.value = error instanceof Error ? error.message : 'VPS 证书读取失败'
+  } finally {
+    certsLoading.value = false
+  }
+}
+
+// Fonu 证书库里的域名（含通配符），用于判断「VPS 上有但 Fonu 没有」
+async function loadFonuCerts() {
+  try {
+    const records = await api.listCertificates()
+    const domains = new Set<string>()
+    for (const record of records ?? []) {
+      domains.add(record.domain)
+      for (const item of record.domains ?? []) domains.add(item)
+    }
+    fonuCertDomains.value = domains
+  } catch {
+    fonuCertDomains.value = new Set()
+  }
+}
+
+// Nginx 显式重载（需 agent ≥ 0.11.0）：把校验 / 重载失败原因直接显示出来
+const reloadingNginx = ref(false)
+const reloadHint = ref('')
+
+async function reloadNginx() {
+  const target = server.value
+  if (!target) return
+  reloadingNginx.value = true
+  reloadHint.value = ''
+  try {
+    const result = await api.reloadFrpAgentNginx(target.id)
+    if (result.ok) {
+      reloadHint.value = 'Nginx 校验通过并已重载'
+    } else if (!result.test_ok) {
+      reloadHint.value = `Nginx 配置校验失败：${result.test_error || '未返回原因'}`
+    } else {
+      reloadHint.value = `Nginx 重载失败：${result.reload_error || '未返回原因'}`
+    }
+  } catch (error) {
+    reloadHint.value = error instanceof Error ? error.message : '重载失败'
+  } finally {
+    reloadingNginx.value = false
+  }
+}
+
 // 轮询走静默（不触碰 busy）；首次加载显示 statusLoading
 async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   const current = server.value
@@ -520,6 +610,7 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
     statusLoaded.value = true
     // 资源采集单独走，不阻断状态加载
     void loadMetrics(current.id)
+    void loadAgentCerts(current.id)
   } catch (error) {
     agentStatusOk.value = false
     statusLoaded.value = true
@@ -656,7 +747,9 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 .port-item { font-family: var(--fonu-mono); font-size: 12.5px; padding: 1px 6px; border-radius: 999px; background: var(--fonu-bg-muted); color: var(--fonu-text-muted); }
 .port-item--on { background: var(--fonu-brand-soft); color: var(--fonu-brand-text); }
 
-.dep-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+.dep-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+/* 前四张卡每行三张（各占 2/6），VPS 资源与 VPS 证书各占 3/6 并排 */
+.dep-grid > .section-card { grid-column: span 2; }
 /* 三列下卡片较窄：短字段（版本/徽标）双列并排，长路径与命令用 .field-grid__wide 整行，控制卡片高度 */
 .dep-grid .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-2) var(--fonu-space-3); }
 /* frps 控制与 Agent 生命周期两列并排，卡片等高 */
@@ -723,6 +816,8 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 @media (max-width: 1199px) {
   .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dep-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 窄屏恢复每卡一格：span 在列数变少后会撑破网格 */
+  .dep-grid > .section-card, .dep-grid > .vps-resource-card { grid-column: auto; }
 }
 @media (max-width: 900px) {
   .dep-grid { grid-template-columns: 1fr; }
@@ -736,15 +831,16 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
   .entrance-row { flex-direction: column; align-items: flex-start; }
 }
 /* VPS 资源：占满「环境与依赖」整行，避免单独占一格显得突兀 */
-.vps-resource-card {
-  grid-column: 1 / -1;
+/* 选择器带 .dep-grid 前缀，避免被上面的 .dep-grid > .section-card（同权重、更早）压过 */
+.dep-grid > .vps-resource-card {
+  grid-column: span 3;
 }
 
 .res-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: var(--fonu-space-5);
+  gap: var(--fonu-space-4);
 }
 
 .res-row {
@@ -806,17 +902,61 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 }
 
 .res-meta {
+  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-left: var(--fonu-space-4);
-  border-left: 1px solid var(--fonu-border);
+  gap: var(--fonu-space-4);
+  padding-top: var(--fonu-space-2);
+  border-top: 1px solid var(--fonu-border);
   font-size: 12px;
   color: var(--fonu-text-muted);
 }
 
 @media (max-width: 900px) {
   .res-strip { grid-template-columns: 1fr; }
-  .res-meta { padding-left: 0; border-left: none; }
+  .res-meta { flex-direction: column; gap: 4px; }
+}
+.cert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cert-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) 76px 76px 92px;
+  align-items: center;
+  gap: var(--fonu-space-2);
+  font-size: 13px;
+}
+
+.cert-row--head {
+  font-size: 12px;
+  color: var(--fonu-text-muted);
+}
+
+.cert-domain {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cert-muted {
+  font-size: 12px;
+  color: var(--fonu-text-muted);
+}
+
+.cert-days--warn {
+  color: var(--fonu-warning);
+}
+
+.cert-days--error {
+  color: var(--fonu-error);
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .cert-row { grid-template-columns: minmax(0, 1fr) 80px; }
+  .cert-row span:nth-child(3),
+  .cert-row span:nth-child(4) { display: none; }
 }
 </style>

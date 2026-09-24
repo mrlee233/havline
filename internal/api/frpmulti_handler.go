@@ -546,6 +546,36 @@ func (h *FRPMultiHandler) AgentFRPSConfig(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, config)
 }
 
+// AgentCerts 列出 VPS 证书目录下的域名与到期时间（需 agent ≥ 0.11.0）
+func (h *FRPMultiHandler) AgentCerts(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	certs, err := h.svc.AgentCerts(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, certs)
+}
+
+// AgentNginxReload 显式校验并重载 VPS 上的 Nginx（需 agent ≥ 0.11.0）
+func (h *FRPMultiHandler) AgentNginxReload(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	result, err := h.svc.AgentNginxReload(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *FRPMultiHandler) AgentFRPSAction(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
