@@ -35,6 +35,25 @@
       <!-- 数据读取失败：必须可见（原先 loadErrorMsg 写了但从未渲染） -->
       <n-alert v-if="loadErrorMsg" type="error" :bordered="false" class="page-alert">{{ loadErrorMsg }}</n-alert>
 
+      <!-- 部署漂移：库里的期望与 VPS 上的实际不一致时才出现（P0-2） -->
+      <n-alert v-if="driftItems.length > 0" type="warning" :bordered="false" class="page-alert">
+        <div class="alert-body">
+          <div class="alert-body__text">
+            <strong>检测到 {{ driftItems.length }} 项部署漂移（{{ driftSummary }}）</strong>
+            <span>VPS 上的实际配置与 Fonu 记录不一致：可能被手工修改过，或 agent 重装后没有重新部署。</span>
+            <span class="mono alert-body__detail">{{ driftPreview }}</span>
+          </div>
+          <n-popconfirm @positive-click="redeployAll">
+            <template #trigger>
+              <n-button size="small" type="primary" :loading="redeploying" :disabled="busy !== null">
+                重新部署全部
+              </n-button>
+            </template>
+            将按 Fonu 里的记录重新下发该服务端的全部启用规则，会覆盖 VPS 上的手工修改。确定继续？
+          </n-popconfirm>
+        </div>
+      </n-alert>
+
       <!-- Nginx 前置条件：缺失 / 校验未通过 -->
       <n-alert v-if="nginxBlocking" :type="nginxBlocking.type" :bordered="false" class="page-alert">
         <div class="alert-body">
@@ -331,7 +350,8 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type {
-  FrpAgentRouteDetail, FrpAgentRouteHealth, FrpAgentStatus, FrpProxy, FrpProxyTraffic, FrpServer,
+  CertificateRecord, FrpAgentRouteDetail, FrpAgentRouteHealth, FrpAgentStatus, FrpProxy, FrpProxyTraffic,
+  FrpRouteDriftReport, FrpServer,
 } from '../api/types'
 import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../utils/format'
 import { copyText } from '../utils/clipboard'
@@ -355,6 +375,9 @@ const proxyTraffic = ref<Record<string, FrpProxyTraffic>>({})
 const trafficErrors = ref<Record<string, string>>({})
 const agentStatus = ref<FrpAgentStatus | null>(null)
 const statusLoaded = ref(false)
+const routeDrift = ref<FrpRouteDriftReport | null>(null)
+const certificates = ref<CertificateRecord[]>([])
+const redeploying = ref(false)
 const settingsModal = ref(false)
 const settingsTarget = ref<FrpProxy | null>(null)
 const settingsTab = ref<'basic' | 'security' | 'advanced'>('basic')
@@ -452,6 +475,8 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   await track('规则列表', () => api.getFrpAgentRouteCandidates(current.id), (value) => { candidates.value = value })
   await track('路由文件', () => api.getFrpAgentRoutes(current.id), (value) => { routeDetails.value = value })
   await track('健康检查', () => api.getFrpAgentRouteHealth(current.id), (value) => { routeHealth.value = value })
+  await track('配置漂移', () => api.getFrpAgentRouteDrift(current.id), (value) => { routeDrift.value = value })
+  await track('证书列表', () => api.listCertificates(), (value) => { certificates.value = value })
   await track('流量采集', () => api.listFrpProxiesTraffic(), (value) => {
     proxyTraffic.value = value.items ?? {}
     trafficErrors.value = value.errors ?? {}
@@ -502,15 +527,70 @@ function stateOf(candidate: FrpProxy): { state: RouteState; label: string; kind:
   return { state: 'none', label: '未部署', kind: 'disabled' }
 }
 
+// 证书来源（P0-4）：Fonu 证书库里是否有该域名的证书（决定重新部署时能否推送证书、公网 HTTPS 能否终结）
+function certSummary(domain: string) {
+  const record = certificates.value.find((item) => item.domain === domain)
+  if (!record) return 'Fonu 证书库：无（需先在「证书管理」申请）'
+  return `Fonu 证书库：有（剩余 ${record.days_left} 天）`
+}
+
 // 健康四段（按域名）：DNS / 证书 / 隧道 / 服务
 function healthOf(domain: string) {
   const health = routeHealth.value.find((item) => item.domain === domain)
   return [
     { label: 'DNS', ok: health?.dns_ok ?? false, detail: health?.dns_detail || (health?.dns_ok ? '已指向服务端' : '未指向服务端或未检测') },
-    { label: '证书', ok: health?.cert_ok ?? false, detail: health?.cert_detail || (health?.cert_ok ? '证书已覆盖该域名' : '未发现该域名的证书') },
+    {
+      label: '证书',
+      ok: health?.cert_ok ?? false,
+      detail: `${health?.cert_detail || (health?.cert_ok ? '证书已覆盖该域名' : '未发现该域名的证书')}｜${certSummary(domain)}`,
+    },
     { label: '隧道', ok: health?.tunnel_ok ?? false, detail: health?.tunnel_detail || (health?.tunnel_ok ? '已注册到 frps' : 'frps 未发现该规则的隧道') },
     { label: '服务', ok: health?.service_ok ?? false, detail: health?.service_ok ? '内网服务可达' : '内网服务不可达' },
   ]
+}
+
+// 部署漂移：库里的期望与 VPS 上的实际之间的差异（未部署 / 孤儿配置 / 未生效 / 内容不一致）
+const driftKindText: Record<string, string> = {
+  missing: '未部署',
+  orphan: '孤儿配置',
+  not_loaded: '未生效',
+  content_mismatch: '内容不一致',
+}
+
+const driftItems = computed(() => routeDrift.value?.items ?? [])
+
+const driftSummary = computed(() => {
+  const counts = new Map<string, number>()
+  for (const item of driftItems.value) {
+    counts.set(item.kind, (counts.get(item.kind) ?? 0) + 1)
+  }
+  return [...counts.entries()].map(([kind, count]) => `${driftKindText[kind] ?? kind} ${count}`).join(' · ')
+})
+
+const driftPreview = computed(() => {
+  const preview = driftItems.value.slice(0, 3).map((item) => `${item.domain}（${driftKindText[item.kind] ?? item.kind}）`)
+  return driftItems.value.length > 3 ? `${preview.join('；')} …` : preview.join('；')
+})
+
+// 全量重部署：逐条下发，失败不中断（后端已逐条汇总）
+async function redeployAll() {
+  const current = server.value
+  if (!current) return
+  redeploying.value = true
+  try {
+    const result = await api.redeployFrpAgentRoutes(current.id)
+    await refreshAll()
+    if (result.failed > 0) {
+      const firstError = result.results.find((item) => !item.ok)?.error ?? ''
+      message.warning(`重新部署：成功 ${result.succeeded} 条，失败 ${result.failed} 条${firstError ? `；首个失败：${firstError}` : ''}`)
+    } else {
+      message.success(`重新部署完成：${result.succeeded} 条规则全部成功`)
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '重新部署失败')
+  } finally {
+    redeploying.value = false
+  }
 }
 
 function isHealthy(candidate: FrpProxy) {

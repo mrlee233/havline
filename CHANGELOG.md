@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.3] - 2026-09-24
+
+### 新增
+
+- 仪表盘：新增「公网穿透」统计卡，并在「运行状态」面板增加「公网反代」行——数据来自新增的 `GET /api/frpmulti/routes/summary`（逐台服务端采集四段健康后聚合，单台失败只记名不中断）
+- 仪表盘：新增「性能」面板（今日异常 / 平均响应，`/api/status` 早已返回但页面从未展示），「实时流量」面板新增「流量 Top 5」（直接复用已有的逐规则流量轮询）
+- 仪表盘：新增一行三卡「系统资源 / 中国 IP 段 / 通知通道」；系统资源来自新增的跨平台采集包 `internal/sysinfo`（Linux `/proc`、Windows kernel32，无新增依赖；容器内为宿主机视角）
+- 公网反代：新增部署漂移清单（未部署 / 孤儿配置 / 未生效 / 内容不一致）与「重新部署全部」——逐条下发、单条失败不中断；新增 `GET /api/frpmulti/servers/{id}/agent/routes/drift` 与 `POST .../agent/routes/redeploy`
+- 公网 Agent：端口矩阵补端口含义提示；「frps 运行时」新增「启动一致性」核对（systemd 实际启动命令 vs 配置的二进制与配置文件，检出「Fonu 写入的 frps.toml 不是 frps 实际加载的那份」）
+- 新增 `docs/agent-capability-plan.md`：fonu-agent 能力扩展方案（12 个端点现状盘点、P0–P2 分批设计、agent 侧与应用侧改动流程、验收与风险回滚）
+
+### 改进
+
+- 仪表盘「服务」卡：原先写死「正常 / 4 个」，现按 Fonu / Nginx / DDNS / 证书四项实际状态聚合，异常时点名并把徽标降级为 warning/error（此前 Nginx 停止、DDNS 异常时该卡仍显示「正常」，与右侧「运行状态」面板自相矛盾）
+- 仪表盘轮询：`/api/status` 每 15 秒刷新一次（CPU 占用率需要两次采样才有意义），并在页面隐藏时暂停「实时流量」与「状态」两个轮询
+- 公网反代健康列：证书徽标补「证书来源」——`Fonu 证书库：有（剩余 N 天）` 或 `无（需先在证书管理申请）`，用于区分「没有证书可推送」与「VPS 上证书过期或未覆盖」
+
+### 修复
+
+- FRP：frpc 版本读不出来——`RuntimeStatus.Version` 带 `omitempty`，`frpc --version` 探测失败时字段被整体省略，前端只能显示「未检测 / 未知」；现回落为按 `<FrpDir>/bin/<版本>/` 目录名推导（与「FRP 应用配置」弹窗的 `active_version` 同源），并改为逐台服务端探测版本（原先只探测默认那台）
+- 仪表盘：删除死样式（`.dashboard` / `.stat-highlight` / `.proxy-metric*`）
+
+### 变更
+
+- 版本号提升到 1.2.3（版本单一来源仍是根目录 `VERSION`）
+
 ## [v1.2.2] - 2026-09-23
 
 ### 新增

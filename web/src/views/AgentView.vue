@@ -70,7 +70,13 @@
         <div class="stat-card">
           <n-icon :component="SwapHorizontalOutline" class="stat-card__icon" :class="portIconClass" aria-hidden="true" />
           <div class="port-list">
-            <span v-for="port in watchedPorts" :key="port" class="port-item" :class="{ 'port-item--on': portOn(port) }">
+            <span
+              v-for="port in watchedPorts"
+              :key="port"
+              class="port-item"
+              :class="{ 'port-item--on': portOn(port) }"
+              :title="portMeaning(port)"
+            >
               {{ port }} {{ portOn(port) ? '✓' : '✗' }}
             </span>
           </div>
@@ -123,7 +129,9 @@
               <div><label>二进制路径</label><span class="mono mono-wrap">{{ agentStatus?.frps_binary || '—' }}</span></div>
               <div><label>配置文件</label><span class="mono mono-wrap">{{ agentStatus?.frps_config_path || '—' }}</span></div>
               <div class="field-grid__wide"><label>启动命令</label><span class="mono mono-wrap">{{ agentStatus?.frps_unit_exec || '—' }}</span></div>
+              <div><label>启动一致性</label><span class="field-tags"><StatusBadge :kind="frpsConsistency.kind" :text="frpsConsistency.text" /></span></div>
             </div>
+            <p v-if="!frpsConsistency.ok && frpsConsistency.detail" class="form-hint">{{ frpsConsistency.detail }}</p>
           </div>
         </FonuCard>
       </section>
@@ -281,6 +289,34 @@ const configLoading = ref(false)
 let timer: number | undefined
 
 const watchedPorts = ['80', '443', '7000', '8080'] as const
+
+// 端口含义（P0-1）：让端口矩阵直接可读，不用再去查哪个端口是谁的
+const portMeanings: Record<string, string> = {
+  '80': '公网 HTTP 入口（Nginx）',
+  '443': '公网 HTTPS 入口（Nginx）',
+  '7000': 'frps 控制端口（frpc 连接用）',
+  '8080': 'frps vhost HTTP 端口（Nginx 回源到 frps）',
+}
+
+function portMeaning(port: string) {
+  return `${portMeanings[port] ?? '端口'}：${portOn(port) ? '正在监听' : '未监听'}`
+}
+
+// frps 运行一致性（P0-3）：systemd 实际执行的启动命令，是否用的是 Fonu 下发的二进制与配置文件。
+// 不一致意味着：手工改过 unit，或者 Fonu 写入的 frps.toml 并不是 frps 实际加载的那一份。
+const frpsConsistency = computed(() => {
+  const exec = agentStatus.value?.frps_unit_exec ?? ''
+  if (!exec) return { ok: false, kind: 'warning' as const, text: '未获取', detail: '' }
+  const binary = agentStatus.value?.frps_binary ?? ''
+  const config = agentStatus.value?.frps_config_path ?? ''
+  const problems: string[] = []
+  if (binary && !exec.includes(binary)) problems.push(`启动命令未使用配置的二进制（${binary}）`)
+  if (config && !exec.includes(config)) problems.push(`启动命令未使用 Fonu 下发的配置文件（${config}）`)
+  if (problems.length > 0) {
+    return { ok: false, kind: 'warning' as const, text: '不一致', detail: problems.join('；') }
+  }
+  return { ok: true, kind: 'success' as const, text: '一致', detail: '启动命令与配置的二进制、配置文件一致' }
+})
 
 const server = computed(() => servers.value.find((item) => item.id === selectedId.value) ?? null)
 const serverOptions = computed(() => servers.value

@@ -468,6 +468,36 @@ func (h *FRPMultiHandler) AgentRouteHealthSummary(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, summary)
 }
 
+// AgentRouteDrift 比对库里的期望与 VPS 上的实际配置，返回部署漂移清单
+func (h *FRPMultiHandler) AgentRouteDrift(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	report, err := h.svc.RouteDrift(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, report)
+}
+
+// AgentRedeployRoutes 把该服务端上所有启用中的公网反代规则重新下发一遍
+func (h *FRPMultiHandler) AgentRedeployRoutes(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	result, err := h.svc.RedeployAllRoutes(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *FRPMultiHandler) AgentFRPSAction(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {

@@ -736,6 +736,39 @@ export interface FrpRouteHealthSummary {
   failed_servers?: string[]
 }
 
+export interface FrpRouteDriftItem {
+  domain: string
+  kind: 'missing' | 'orphan' | 'not_loaded' | 'content_mismatch'
+  detail: string
+  expected?: string
+  actual?: string
+}
+
+export interface FrpRouteDriftReport {
+  server_id: number
+  expected: number
+  deployed: number
+  loaded: number
+  items: FrpRouteDriftItem[]
+  checked_at: string
+}
+
+export interface FrpRedeployRouteResult {
+  proxy_id: number
+  name: string
+  domains: string
+  ok: boolean
+  error?: string
+}
+
+export interface FrpRedeployAllResult {
+  server_id: number
+  total: number
+  succeeded: number
+  failed: number
+  results: FrpRedeployRouteResult[]
+}
+
 export interface FrpAgentRouteDetail {
   domain: string
   file_exists: boolean
