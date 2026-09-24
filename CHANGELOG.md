@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.7] - 2026-09-24
+
+### 修复
+
+- 安全（P0）：备份恢复的上传文件名不再拼进临时路径，改用 `os.CreateTemp`——此前 multipart 文件名完全可控，`../../root/.ssh/authorized_keys` 之类可逃出临时目录（`internal/api/backup_handler.go`）
+- 安全（P0）：备份还原的条目路径校验从「字符串前缀比较」改为 `filepath.Rel` 判定并拒绝 `..`——此前 `DataDir=/data` 时条目 `../data-other/x` 能通过前缀匹配写到 DataDir 之外；同时不再照搬归档里的权限位（固定文件 `0o640` / 目录 `0o750`），避免构造的归档造出 0777 或带执行位的文件
+- 安全（P0）：agent 安装 frps 时 `proxy` 参数改走白名单（与「FRP 下载加速代理」同一组前缀），且改为先取官方 `frp_<version>_sha256sums.txt`、下载后比对 SHA-256 通过才解压安装——此前该参数未校验就拼进下载地址，等于可让 VPS 拉取任意地址的二进制并装成 frps
+- 安全（P0）：SSH 不再 `InsecureIgnoreHostKey()`，改为 known_hosts + TOFU——首次连接把主机指纹记到 `<DataDir>/ssh_known_hosts`（新增 `config.SSHKnownHostsPath()`），之后指纹不一致直接拒绝连接，错误里带上「期望 / 实际」指纹与处理提示
+- 安全（P0）：`GET /api/settings` 不再回传 ZeroSSL API Key 明文，改为只回 `********` 掩码（前端以「非空」判断是否已配置，保存时仅在重新输入才会提交该字段）
+- 安全（P0）：agent 环境探测不再回传 Agent Token 明文，改为 `agent_token_configured` + `agent_token_hint`（末 4 位）
+- 安全（P0）：反代自动生成的 Basic Auth 密码不再写进 nginx 配置注释（此前会被「查看配置」永久读到），改为在部署响应里一次性返回、页面上提示「仅显示这一次」；部署失败会丢弃刚生成的凭据
+- 公网服务端页：服务端详情弹窗的状态点恒为灰色——`serverStartupType()` 返回的是 n-tag 的 type 值，被当成状态值传给 `StatusBadge :value` 后落到 unknown；新增返回 `StatusKind` 的 `serverStartupKind()` 并改用 `:kind`
+- 仪表盘：域名卡与证书卡的徽标固定显示「正常」，后端返回异常状态时会出现「红/灰点 + 正常」的矛盾，改为按状态值推导文案并在无值时隐藏
+
+### 变更
+
+- `AgentVersion` 0.11.0 → **0.12.0**（frps 安装校验 + Basic Auth 密码处理），内嵌 `fonu-agent-linux-amd64`（10.4 MB）与 `-arm64`（9.7 MB）已重编，VPS 上需点「升级 Agent」才会生效
+- 新增 `.github/workflows/ci.yml`：push / PR 触发，按「前端构建 → 同步 dist 到 `cmd/fonu/web/dist` → `go vet` → `go test ./... -count=1` → `go build ./...`」执行（顺序不可颠倒：`cmd/fonu` 用 `//go:embed all:web/dist`，干净检出缺该目录时编译直接失败）；gofmt 卡口待全仓格式化后再开
+- `web/package.json` 版本由 1.0.2 对齐到 `VERSION`，并声明 `packageManager: npm@10.9.4`（与 Dockerfile 的 `node:22-alpine` 一致）；删除 `web/pnpm-workspace.yaml`（占位残留，仓库并无 pnpm 锁文件）
+- 版本号提升到 1.2.7（版本单一来源仍是根目录 `VERSION`）
+
 ## [v1.2.6] - 2026-09-24
 
 ### 改进

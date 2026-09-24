@@ -682,7 +682,7 @@ func (s *Service) sshInstaller(ctx context.Context, serverID int64) (Server, SSH
 			return Server{}, SSHInstaller{}, err
 		}
 	}
-	installer := SSHInstaller{Host: server.SSHHost, Port: server.SSHPort, User: server.SSHUser}
+	installer := SSHInstaller{Host: server.SSHHost, Port: server.SSHPort, User: server.SSHUser, KnownHostsPath: s.cfg.SSHKnownHostsPath()}
 	if server.SSHAuth == "password" {
 		installer.Password = secret
 	} else {

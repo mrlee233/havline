@@ -173,7 +173,7 @@ const menuDefs = [
   { label: '证书管理', key: 'certificates', icon: LockClosedOutline },
   { label: '反向代理', key: 'proxies', icon: SwapHorizontalOutline },
   { label: '内网穿透', key: 'frp', icon: GitNetworkOutline },
-  { label: '公网 Agent', key: 'frp-agent', icon: HardwareChipOutline },
+  { label: '公网服务端', key: 'frp-agent', icon: HardwareChipOutline },
   { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
   { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
   { label: '系统设置', key: 'settings', icon: CogOutline },

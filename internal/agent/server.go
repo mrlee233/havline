@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -35,7 +36,9 @@ import (
 // 0.9.2：Basic Auth 哈希改为纯 Go apr1（去掉对 VPS openssl 的依赖）；安装脚本 token 改用 /dev/urandom。
 // 0.10.0：新增 /api/v1/metrics 主机资源采集、/api/v1/logs/nginx 日志读取、/api/v1/frps/config 配置回读。
 // 0.11.0：新增 /api/v1/certs 证书清单与 /api/v1/nginx/reload 显式重载（回传校验/重载失败原因）。
-const AgentVersion = "0.11.0"
+// 0.12.0：frps 安装包的 proxy 参数改白名单 + 下载后校验 SHA-256；Basic Auth 自动生成的密码不再写进
+// nginx 配置注释（改为只在 PUT 响应里回一次）。
+const AgentVersion = "0.12.0"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -237,6 +240,17 @@ type frpsInstallRequest struct {
 	Proxy   string `json:"proxy,omitempty"`
 }
 
+// frps 安装包只允许从官方 release 下载，或经这几个加速前缀。白名单与 internal/frp/runtime.go 的
+// downloadProxyOptions 同源（agent 不依赖应用侧包，这里保留一份副本，改一处需同步另一处）。
+var frpsDownloadProxies = map[string]struct{}{
+	"":                          {},
+	"https://gh-proxy.org/":     {},
+	"https://v4.gh-proxy.org/":  {},
+	"https://cdn.gh-proxy.org/": {},
+}
+
+const frpsReleaseBaseURL = "https://github.com/fatedier/frp/releases/download/"
+
 // installFRPS 下载指定版本的 frp release、安装 frps 二进制并注册 systemd 服务（幂等，重复调用=升级）。
 func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 	var req frpsInstallRequest
@@ -254,10 +268,14 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported agent arch: " + runtime.GOARCH})
 		return
 	}
-	downloadURL := fmt.Sprintf("https://github.com/fatedier/frp/releases/download/v%s/frp_%s_linux_%s.tar.gz", version, version, arch)
-	if proxy := strings.TrimSpace(req.Proxy); proxy != "" {
-		downloadURL = strings.TrimRight(proxy, "/") + "/" + downloadURL
+	proxy := strings.TrimSpace(req.Proxy)
+	if _, ok := frpsDownloadProxies[proxy]; !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "不支持的下载加速代理"})
+		return
 	}
+	asset := fmt.Sprintf("frp_%s_linux_%s.tar.gz", version, arch)
+	releaseURL := proxy + frpsReleaseBaseURL + "v" + version + "/"
+	downloadURL := releaseURL + asset
 	workDir := filepath.Join(s.cfg.DataDir, "tmp-frps-"+version)
 	_ = os.RemoveAll(workDir)
 	defer os.RemoveAll(workDir)
@@ -265,9 +283,24 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	// 先取官方校验文件，再下载安装包并按 SHA-256 校验：避免装上来路不明的 frps 可执行文件
+	wantSum, err := fetchChecksumFor(releaseURL+"frp_"+version+"_sha256sums.txt", asset)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "获取 frps 官方校验信息失败: " + err.Error()})
+		return
+	}
 	tarball := filepath.Join(workDir, "frp.tar.gz")
 	if err := downloadToFile(downloadURL, tarball); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "下载 frps 失败: " + err.Error()})
+		return
+	}
+	gotSum, err := fileSHA256(tarball)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "校验 frps 安装包失败: " + err.Error()})
+		return
+	}
+	if !strings.EqualFold(gotSum, wantSum) {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "frps 安装包 SHA-256 校验失败"})
 		return
 	}
 	installPath := s.cfg.FrpsBinary
@@ -278,7 +311,7 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "解压 frps 失败: " + err.Error()})
 		return
 	}
-	notes := []string{"frps 二进制已安装: " + installPath}
+	notes := []string{"frps 二进制已安装: " + installPath, "安装包 SHA-256 校验通过"}
 	unitPath := "/etc/systemd/system/frps.service"
 	writeUnit := false
 	if _, err := os.Stat(unitPath); errors.Is(err, os.ErrNotExist) {
@@ -379,6 +412,43 @@ func downloadToFile(url, path string) error {
 	defer out.Close()
 	_, err = io.Copy(out, io.LimitReader(resp.Body, 256<<20))
 	return err
+}
+
+// fetchChecksumFor 取官方 sha256sums.txt 中 asset 对应的校验值（格式：<sha256>  <文件名>）。
+func fetchChecksumFor(url, asset string) (string, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.TrimPrefix(fields[1], "*") == asset {
+			return fields[0], nil
+		}
+	}
+	return "", fmt.Errorf("校验文件中未找到 %s", asset)
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // extractFile 从 tar.gz 中取出 name 对应的单个文件写入 dest。
@@ -692,11 +762,27 @@ func (s *Server) putRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Basic Auth 密码留空时首次自动生成：生成的明文只在本次响应里回一次，
+	// 不再写进配置文件注释（否则「查看配置」会永久暴露密码）。已有凭据时返回空串。
+	generatedPassword := ""
+	if user := strings.TrimSpace(req.BasicAuthUser); user != "" && strings.TrimSpace(req.BasicAuthPassword) == "" {
+		if generated, err := ensureBasicAuthSecret(req.Domain, user); err == nil {
+			generatedPassword = generated
+		}
+	}
 	if err := s.writeRoute(req); err != nil {
+		if generatedPassword != "" {
+			// 部署失败就丢弃刚生成的凭据，否则重试时文件已存在、密码再也拿不到
+			_ = os.Remove(basicAuthFilePath(req.Domain))
+		}
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	result := map[string]any{"ok": true, "domain": req.Domain, "websocket": req.WebSocket}
+	if generatedPassword != "" {
+		result["basic_auth_user"] = strings.TrimSpace(req.BasicAuthUser)
+		result["basic_auth_password"] = generatedPassword
+	}
 	// 部署后回源自检：模拟 Nginx 的回源请求，区分三种状态：
 	// 2xx/3xx = 隧道通且服务响应；404 = 反代/frps 正常但无此域名的隧道注册；0/5xx = 回源失败或内网服务异常
 	if vhost := req.VhostPort; vhost > 0 {
@@ -1229,22 +1315,18 @@ func nginxRoute(req routeRequest, certDir string) string {
 	if len(req.AllowIPs) > 0 {
 		acl.WriteString("        deny all;\n")
 	}
-	// Basic Auth：密码优先用规则表单值（自定义），留空则首次自动生成并复用（htpasswd 格式）
+	// Basic Auth：密码优先用规则表单值（自定义），留空则首次自动生成并复用（htpasswd 格式）；
+	// 自动生成的明文由 putRoute 在响应里回一次，这里只写 auth_basic 指令，不写密码注释
 	authLine := ""
-	var authNote string
 	if user := strings.TrimSpace(req.BasicAuthUser); user != "" {
 		if password := strings.TrimSpace(req.BasicAuthPassword); password != "" {
 			if err := writeBasicAuthSecret(req.Domain, user, password); err == nil {
 				authLine = fmt.Sprintf("        auth_basic \"Fonu Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
 			}
-		} else if generated, err := ensureBasicAuthSecret(req.Domain, user); err == nil {
+		} else if _, err := ensureBasicAuthSecret(req.Domain, user); err == nil {
 			authLine = fmt.Sprintf("        auth_basic \"Fonu Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
-			if generated != "" {
-				authNote = fmt.Sprintf("# Basic Auth: user=%s password=%s\n", user, generated)
-			}
 		}
 	}
-	b.WriteString(authNote)
 	// 限流 / 连接数 / 仅中国大陆 IP 的 location 级指令（zone 与 geo 变量在 http 上下文定义）
 	var limitText strings.Builder
 	if req.RateLimitRate > 0 {

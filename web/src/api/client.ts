@@ -312,7 +312,7 @@ export const api = {
     }),
   getFrpAgentRoutes: (id: number) => request<import('./types').FrpAgentRouteDetail[]>(`/api/frpmulti/servers/${id}/agent/routes`),
   getFrpAgentRouteCandidates: (id: number) => request<import('./types').FrpProxy[]>(`/api/frpmulti/servers/${id}/agent/route-candidates`),
-  deployFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'POST' }),
+  deployFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean; basic_auth_user?: string; basic_auth_password?: string }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'POST' }),
   getFrpAgentRouteConf: (serverId: number, proxyId: number) =>
     request<{ proxy_id: number; domain: string; content: string }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}/conf`),
   installFrpAgentNginx: (serverId: number) =>

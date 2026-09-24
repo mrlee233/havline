@@ -94,6 +94,11 @@ func (c Config) CertsDir() string {
 	return c.DataDir + "/certs"
 }
 
+// SSHKnownHostsPath 是 SSH 主机密钥的 TOFU 记录文件（首次连接记录指纹，之后必须一致）。
+func (c Config) SSHKnownHostsPath() string {
+	return filepath.Join(c.DataDir, "ssh_known_hosts")
+}
+
 func (c Config) ErrorsDir() string {
 	return c.NginxDir() + "/errors"
 }

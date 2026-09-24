@@ -4,13 +4,6 @@
     description="把穿透规则的域名发布到 VPS 的 Nginx：部署 / 移除、部署设置（HTTPS、跳转、白名单、Basic Auth、限流）、健康检查与配置查看"
   >
     <template #actions>
-      <n-select
-        v-model:value="selectedId"
-        :options="serverOptions"
-        placeholder="选择公网服务端"
-        class="proxy-remote-select"
-        :disabled="servers.length === 0"
-      />
       <n-button :loading="manualRefreshing" :disabled="!server" @click="refreshAll({ silent: false })">
         <template #icon><n-icon :component="RefreshOutline" /></template>
         刷新
@@ -24,14 +17,47 @@
     <EmptyState
       v-if="servers.length === 0"
       title="尚未配置 FRP 服务端"
-      description="先在「内网穿透」页添加公网服务端并保存 Agent/SSH 信息，再回到本页管理公网反代。"
+      description="服务端的添加与 Agent / SSH 配置在「公网服务端」页；本页只把启用中的 http 规则发布到 VPS 的 Nginx。"
     >
       <template #action>
-        <router-link to="/frp"><n-button type="primary">去内网穿透页</n-button></router-link>
+        <router-link to="/frp-agent"><n-button type="primary">去公网服务端页</n-button></router-link>
       </template>
     </EmptyState>
 
-    <template v-else-if="server">
+    <div v-else-if="server" class="proxy-layout">
+      <!-- 左：服务端列表；右：该服务端的漂移提示 / 统计 / Nginx 与反代台账 -->
+      <aside class="server-sidebar">
+        <div class="server-sidebar__head">
+          <div class="server-sidebar__head-row">
+            <h3 class="server-sidebar__title">服务端列表</h3>
+          </div>
+        </div>
+        <div class="server-sidebar__list">
+          <button
+            v-for="item in servers"
+            :key="item.id"
+            type="button"
+            class="server-item"
+            :class="{ 'server-item--active': item.id === selectedId }"
+            @click="selectedId = item.id"
+          >
+            <div class="server-item__top">
+              <span class="server-item__name">{{ item.name }}</span>
+              <n-tag size="tiny" :bordered="false" :type="item.agent_configured ? 'success' : 'warning'">{{ item.agent_configured ? 'Agent 就绪' : 'Agent 未配' }}</n-tag>
+            </div>
+            <div class="server-item__endpoint mono">{{ item.server_addr }}:{{ item.server_port }}</div>
+            <div class="server-item__meta">
+              <span>{{ item.ssh_configured ? 'SSH 已配置' : 'SSH 未配置' }}</span>
+            </div>
+            <div class="server-item__tags">
+              <n-tag size="tiny" :bordered="false" :type="item.tls_enabled ? 'success' : 'warning'">TLS</n-tag>
+              <n-tag size="tiny" :bordered="false" :type="item.has_token ? 'success' : 'error'">Token</n-tag>
+            </div>
+          </button>
+        </div>
+      </aside>
+
+      <div class="proxy-detail">
       <!-- 数据读取失败：必须可见（原先 loadErrorMsg 写了但从未渲染） -->
       <n-alert v-if="loadErrorMsg" type="error" :bordered="false" class="page-alert">{{ loadErrorMsg }}</n-alert>
 
@@ -76,7 +102,7 @@
       <!-- 入口行：agent / frps 生命周期在另一页 -->
       <div class="entrance-row">
         <span class="entrance-row__text">
-          Agent 与 frps 的安装、升级、启停、配置下发在「公网 Agent」页；本页只负责把规则发布到 Nginx
+          Agent 与 frps 的安装、升级、启停、配置下发在「公网服务端」页；本页只负责把规则发布到 Nginx
         </span>
         <router-link to="/frp-agent"><n-button size="small" quaternary>前往公网 Agent</n-button></router-link>
       </div>
@@ -179,6 +205,8 @@
           </details>
         </div>
       </FonuCard>
+      </div>
+    </div>
 
       <!-- 部署设置 -->
       <n-modal v-model:show="settingsModal" :mask-closable="false">
@@ -333,7 +361,6 @@
           </div>
         </div>
       </n-modal>
-    </template>
   </template>
 </template>
 
@@ -405,9 +432,6 @@ const confContent = ref('')
 let timer: number | undefined
 
 const server = computed(() => servers.value.find((item) => item.id === selectedId.value) ?? null)
-const serverOptions = computed(() => servers.value
-  .filter((item) => item.agent_configured || item.ssh_configured)
-  .map((item) => ({ label: item.name, value: item.id })))
 const agentStatusOk = computed(() => statusLoaded.value && agentStatus.value !== null)
 
 // 统计：已生效 / 待处理 / 健康通过 / 当前连接
@@ -725,7 +749,12 @@ async function deployRoute(candidate: FrpProxy) {
   const current = server.value
   if (!current) return
   const result = await run(`deploy:${candidate.id}`, '部署反代', () => api.deployFrpAgentRoute(current.id, candidate.id))
-  if (result !== undefined) await refreshAll()
+  if (result === undefined) return
+  // 自动生成的 Basic Auth 密码只在这一次响应里返回：不再写进 nginx 配置，错过就得在「部署设置」里重设
+  if (result.basic_auth_password) {
+    message.warning(`Basic Auth 已生成（仅显示这一次，请立即保存）：${result.basic_auth_user} / ${result.basic_auth_password}`, { duration: 15000 })
+  }
+  await refreshAll()
 }
 
 async function removeRoute(candidate: FrpProxy) {
@@ -953,7 +982,25 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 .form-hint { color: var(--fonu-text-secondary); font-size: 12.5px; }
 .mono { font-family: var(--fonu-mono); font-size: 13px; }
 .mono-wrap { white-space: normal; word-break: break-all; }
-.proxy-remote-select { width: 220px; }
+
+/* 左：服务端列表 / 右：该服务端的反代台账（与「内网穿透」「公网服务端」页同构） */
+.proxy-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: var(--fonu-space-4); align-items: start; }
+.proxy-layout .section-card { min-width: 0; }
+.proxy-detail { min-width: 0; }
+.server-sidebar { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); overflow: hidden; }
+.server-sidebar__head { padding: var(--fonu-space-4); border-bottom: 1px solid var(--fonu-border); }
+.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
+.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); flex-shrink: 0; }
+.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--fonu-space-3); max-height: 720px; overflow: auto; }
+.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); background: var(--fonu-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.server-item:hover { border-color: var(--fonu-brand-hover); }
+.server-item--active { border-color: var(--fonu-brand); box-shadow: 0 0 0 1px var(--fonu-brand-soft); }
+.server-item__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.server-item__name { font-size: 14px; font-weight: 600; color: var(--fonu-text); overflow-wrap: anywhere; }
+.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--fonu-text-secondary); overflow-wrap: anywhere; }
+.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-3); margin-top: 6px; font-size: 12px; color: var(--fonu-text-muted); }
+.server-item__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+@media (max-width: 1100px) { .proxy-layout { grid-template-columns: 1fr; } .server-sidebar__list { max-height: none; } }
 
 /* 首屏一次性入场；用户偏好减少动效时关闭 */
 @keyframes fonu-fade-up {

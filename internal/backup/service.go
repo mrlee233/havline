@@ -16,6 +16,12 @@ type Service struct {
 	dataDir string
 }
 
+// 还原时的固定权限：备份内容只有数据库、证书与 nginx 配置，不接受归档自带的权限位
+const (
+	restoreFileMode = 0o640
+	restoreDirMode  = 0o750
+)
+
 func New(dataDir string) *Service {
 	return &Service{dataDir: dataDir}
 }
@@ -85,19 +91,22 @@ func (s *Service) Restore(ctx context.Context, archivePath string) error {
 			continue
 		}
 		target := filepath.Join(s.dataDir, header.Name)
-		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(s.dataDir)) {
-			return fmt.Errorf("备份条目非法")
+		// 归档条目必须落在 DataDir 内：前缀比较会被 ../data-other 这类同前缀路径绕过，用 Rel 判定
+		rel, err := filepath.Rel(s.dataDir, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("备份条目非法: %s", header.Name)
 		}
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := os.MkdirAll(target, restoreDirMode); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(target), restoreDirMode); err != nil {
 				return err
 			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			// 归档里的权限位不照搬（构造的归档可带 0777 / 执行位）：备份内容只有数据库、证书与 nginx 配置
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, restoreFileMode)
 			if err != nil {
 				return err
 			}

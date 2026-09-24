@@ -579,7 +579,7 @@
     <div v-if="viewingServer" class="server-detail">
       <div class="server-detail__top"><div><h2>{{ viewingServer.name }}</h2><p>服务端详情和运行监测</p></div><n-button v-if="viewingServer.boot_status === 'running'" size="small" type="error" ghost @click="stopServer(viewingServer)"><template #icon><n-icon :component="StopOutline" /></template>停止</n-button><n-button v-else size="small" type="success" ghost @click="startServer(viewingServer)"><template #icon><n-icon :component="PlayOutline" /></template>启动</n-button><n-button size="small" @click="openFRPSConfig(viewingServer)"><template #icon><n-icon :component="DocumentOutline" /></template>frps.toml</n-button></div>
       <div class="server-detail__grid">
-        <section class="server-detail__panel"><h3>基本信息</h3><div class="detail-fields"><div><label>主机地址</label><strong class="mono">{{ viewingServer.server_addr }}</strong></div><div><label>端口</label><strong>{{ viewingServer.server_port }}</strong></div><div><label>用户</label><strong>{{ viewingServer.options.user || '未设置' }}</strong></div><div><label>位置</label><strong class="server-detail__location"><n-icon :component="LocationOutline" /> {{ locationText(viewingServer) }}</strong></div><div><label>状态</label><StatusBadge :value="serverStartupType(viewingServer)" :text="serverStartupText(viewingServer)" /></div><div><label>协议</label><strong>{{ viewingServer.options.protocol.toUpperCase() }}</strong></div><div><label>创建时间</label><span>{{ formatDate(viewingServer.created_at) }}</span></div><div><label>最后更新</label><span>{{ formatDate(viewingServer.updated_at) }}</span></div></div></section>
+        <section class="server-detail__panel"><h3>基本信息</h3><div class="detail-fields"><div><label>主机地址</label><strong class="mono">{{ viewingServer.server_addr }}</strong></div><div><label>端口</label><strong>{{ viewingServer.server_port }}</strong></div><div><label>用户</label><strong>{{ viewingServer.options.user || '未设置' }}</strong></div><div><label>位置</label><strong class="server-detail__location"><n-icon :component="LocationOutline" /> {{ locationText(viewingServer) }}</strong></div><div><label>状态</label><StatusBadge :kind="serverStartupKind(viewingServer)" :text="serverStartupText(viewingServer)" /></div><div><label>协议</label><strong>{{ viewingServer.options.protocol.toUpperCase() }}</strong></div><div><label>创建时间</label><span>{{ formatDate(viewingServer.created_at) }}</span></div><div><label>最后更新</label><span>{{ formatDate(viewingServer.updated_at) }}</span></div></div></section>
         <section class="server-detail__panel">
           <h3>配置</h3>
           <div class="detail-fields detail-fields--single">
@@ -665,6 +665,7 @@ import type {
   FrpServerOptions, FrpServerPayload, FrpServerStatusDetail,
 } from '../api/types'
 import { formatBytes, formatDate, formatRelativeTime, formatUptime } from '../utils/format'
+import type { StatusKind } from '../utils/status'
 import { copyText } from '../utils/clipboard'
 
 use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
@@ -1384,6 +1385,14 @@ function serverStartupType(server: FrpServer) {
   if (server.boot_status === 'starting') return 'warning'
   if (server.boot_status === 'error') return 'error'
   return 'default'
+}
+
+// StatusBadge 的 kind 只认 success/warning/error/disabled/unknown，n-tag 的 'default' 要映射成 unknown
+function serverStartupKind(server: FrpServer): StatusKind {
+  if (server.boot_status === 'running') return 'success'
+  if (server.boot_status === 'starting') return 'warning'
+  if (server.boot_status === 'error') return 'error'
+  return 'unknown'
 }
 
 function processStateText(server: FrpServer) {

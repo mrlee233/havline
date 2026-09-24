@@ -32,7 +32,7 @@
 
         <StatCard label="域名" tone="green">
           <template #icon><n-icon :component="WifiOutline" /></template>
-          <template #extra><StatusBadge :value="status?.ddns_status" text="正常" /></template>
+          <template #extra><StatusBadge v-if="status?.ddns_status" :value="status.ddns_status" :text="statusLabel(status.ddns_status)" /></template>
           <template #value>{{ domainCountLabel }}</template>
           <p class="stat-desc">{{ domainSubLabel }}</p>
           <div class="stat-foot">
@@ -43,7 +43,7 @@
 
         <StatCard label="HTTPS 证书" tone="blue">
           <template #icon><n-icon :component="ShieldCheckmarkOutline" /></template>
-          <template #extra><StatusBadge :value="status?.certificate_status" text="正常" /></template>
+          <template #extra><StatusBadge v-if="status?.certificate_status" :value="status.certificate_status" :text="statusLabel(status.certificate_status)" /></template>
           <template #value>{{ certCountLabel }}</template>
           <p class="stat-desc">{{ certSubLabel }}</p>
           <div v-if="primaryCert" class="stat-foot">
@@ -395,7 +395,7 @@ import {
   formatUptime,
 } from '../utils/format'
 import { displaySystemLog } from '../utils/logDisplay'
-import { httpStatusKind } from '../utils/status'
+import { httpStatusKind, statusLabel } from '../utils/status'
 
 const message = useMessage()
 const status = ref<DashboardStatus | null>(null)

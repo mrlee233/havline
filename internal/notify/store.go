@@ -34,9 +34,9 @@ func (s *Store) LoadRuntime(ctx context.Context) (RuntimeConfig, error) {
 }
 
 type runtimeSecrets struct {
-	smtpPassword   string
-	webhookSecret  string
-	telegramToken  string
+	smtpPassword  string
+	webhookSecret string
+	telegramToken string
 }
 
 func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets, error) {
@@ -401,6 +401,11 @@ func SanitizeSettings(values map[string]string) {
 	delete(values, settings.KeyNotifySMTPPassword)
 	delete(values, settings.KeyNotifyWebhookSecret)
 	delete(values, settings.KeyNotifyTelegramToken)
+	// ZeroSSL API Key 属证书申请凭据：API 永不回明文，只回掩码。前端以「非空」判断是否已配置，
+	// 且只在用户重新输入时才提交该字段，因此掩码不会被当成新密钥写回。
+	if values[settings.KeyZeroSSLAPIKey] != "" {
+		values[settings.KeyZeroSSLAPIKey] = MaskedSecret
+	}
 }
 
 func ParseSaveInputFromMap(values map[string]string) (SaveInput, bool) {
@@ -415,10 +420,10 @@ func ParseSaveInputFromMap(values map[string]string) (SaveInput, bool) {
 	}
 
 	in := SaveInput{
-		Type:           NotifyType(values[settings.KeyNotifyType]),
-		SMTPPassword:   values[settings.KeyNotifySMTPPassword],
-		WebhookSecret:  values[settings.KeyNotifyWebhookSecret],
-		TelegramToken:  values[settings.KeyNotifyTelegramToken],
+		Type:          NotifyType(values[settings.KeyNotifyType]),
+		SMTPPassword:  values[settings.KeyNotifySMTPPassword],
+		WebhookSecret: values[settings.KeyNotifyWebhookSecret],
+		TelegramToken: values[settings.KeyNotifyTelegramToken],
 	}
 	if raw := values[settings.KeyNotifyEmailJSON]; raw != "" {
 		_ = json.Unmarshal([]byte(raw), &in.Email)

@@ -31,15 +31,17 @@ func (i AgentInstaller) Probe(ctx context.Context) (map[string]any, error) {
 		"agent_exist":   out("test -x /usr/local/bin/fonu-agent && echo yes || echo no") == "yes",
 		"agent_running": out("systemctl is-active fonu-agent 2>/dev/null || true"),
 		"agent_version": out("/usr/local/bin/fonu-agent -version 2>/dev/null || echo 未知"),
-		"agent_token":   out("test -f /etc/fonu-agent/agent.env && sed -n 's/^FONU_AGENT_TOKEN=//p' /etc/fonu-agent/agent.env || true"),
-		"frps_alive":    out("systemctl is-active frps 2>/dev/null; pgrep -x frps >/dev/null && echo active || true"),
-		"frps_version":  out("/usr/local/bin/frps --version 2>/dev/null || echo 未安装"),
-		"frps_config":   out("test -f /etc/frp/frps.toml && echo /etc/frp/frps.toml || echo 配置文件不存在"),
-		"frps_unit":     out("systemctl status frps --no-pager 2>/dev/null | head -3 || echo 无 systemd 单位"),
-		"frps_log":      out("journalctl -u frps -n 5 --no-pager 2>/dev/null || true"),
-		"port7000":      out("ss -tlnp 2>/dev/null | grep ':7000 ' | head -1"),
-		"port80":        out("ss -tlnp 2>/dev/null | grep ':80 ' | head -1"),
-		"port443":       out("ss -tlnp 2>/dev/null | grep ':443 ' | head -1"),
+		// Token 只回「是否已配置 + 末 4 位」：明文不经过 HTTP 返回前端（库里同一字段也是掩码）
+		"agent_token_configured": out("test -s /etc/fonu-agent/agent.env && grep -q '^FONU_AGENT_TOKEN=' /etc/fonu-agent/agent.env && echo yes || echo no") == "yes",
+		"agent_token_hint":       out("sed -n 's/^FONU_AGENT_TOKEN=//p' /etc/fonu-agent/agent.env 2>/dev/null | tr -d '\\n' | tail -c 4"),
+		"frps_alive":             out("systemctl is-active frps 2>/dev/null; pgrep -x frps >/dev/null && echo active || true"),
+		"frps_version":           out("/usr/local/bin/frps --version 2>/dev/null || echo 未安装"),
+		"frps_config":            out("test -f /etc/frp/frps.toml && echo /etc/frp/frps.toml || echo 配置文件不存在"),
+		"frps_unit":              out("systemctl status frps --no-pager 2>/dev/null | head -3 || echo 无 systemd 单位"),
+		"frps_log":               out("journalctl -u frps -n 5 --no-pager 2>/dev/null || true"),
+		"port7000":               out("ss -tlnp 2>/dev/null | grep ':7000 ' | head -1"),
+		"port80":                 out("ss -tlnp 2>/dev/null | grep ':80 ' | head -1"),
+		"port443":                out("ss -tlnp 2>/dev/null | grep ':443 ' | head -1"),
 	}, nil
 }
 

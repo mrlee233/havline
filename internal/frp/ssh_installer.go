@@ -2,14 +2,17 @@ package frp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 // SSHInstaller 通过固定白名单命令在 VPS 上安装/升级 fonu-agent。
@@ -21,6 +24,58 @@ type SSHInstaller struct {
 	Password   string
 	PrivateKey string
 	Timeout    time.Duration
+	// KnownHostsPath 是主机密钥记录文件：首次连接按 TOFU 记录指纹，之后必须一致
+	KnownHostsPath string
+}
+
+// hostKeyCallback 用 known_hosts 校验主机密钥：首次见到的主机按 TOFU 记录指纹，
+// 已记录但与当前不一致则拒绝连接（避免中间人截获 VPS 的 root 凭据）。
+func (i SSHInstaller) hostKeyCallback() (ssh.HostKeyCallback, error) {
+	path := strings.TrimSpace(i.KnownHostsPath)
+	if path == "" {
+		return nil, fmt.Errorf("未配置 SSH 主机密钥记录文件")
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return nil, err
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		if err := os.WriteFile(path, nil, 0o600); err != nil {
+			return nil, err
+		}
+	}
+	known, err := knownhosts.New(path)
+	if err != nil {
+		return nil, fmt.Errorf("读取 SSH 主机密钥记录失败: %w", err)
+	}
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		err := known(hostname, remote, key)
+		if err == nil {
+			return nil
+		}
+		var keyErr *knownhosts.KeyError
+		if errors.As(err, &keyErr) {
+			if len(keyErr.Want) == 0 {
+				return appendKnownHost(path, remote, key)
+			}
+			return fmt.Errorf("SSH 主机密钥与首次记录不一致（%s 期望 %s，实际 %s）；若确认 VPS 重装过系统，请删除 %s 后重连",
+				remote.String(), ssh.FingerprintSHA256(keyErr.Want[0].Key), ssh.FingerprintSHA256(key), path)
+		}
+		return fmt.Errorf("SSH 主机密钥校验失败: %w", err)
+	}, nil
+}
+
+// appendKnownHost 把首次见到的主机密钥追加进 known_hosts（TOFU：首次信任，之后必须一致）。
+func appendKnownHost(path string, remote net.Addr, key ssh.PublicKey) error {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	line := knownhosts.Line([]string{knownhosts.Normalize(remote.String())}, key)
+	if _, err := file.WriteString(line + "\n"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (i SSHInstaller) client(ctx context.Context) (*ssh.Client, error) {
@@ -39,7 +94,11 @@ func (i SSHInstaller) client(ctx context.Context) (*ssh.Client, error) {
 	} else {
 		return nil, fmt.Errorf("SSH 密码或私钥不能为空")
 	}
-	config := &ssh.ClientConfig{User: i.User, Auth: []ssh.AuthMethod{auth}, HostKeyCallback: ssh.InsecureIgnoreHostKey(), Timeout: i.Timeout}
+	hostKey, err := i.hostKeyCallback()
+	if err != nil {
+		return nil, err
+	}
+	config := &ssh.ClientConfig{User: i.User, Auth: []ssh.AuthMethod{auth}, HostKeyCallback: hostKey, Timeout: i.Timeout}
 	if config.Timeout == 0 {
 		config.Timeout = 15 * time.Second
 	}
