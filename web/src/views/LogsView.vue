@@ -590,7 +590,8 @@ async function loadFrpLogs() {
   loadingFrp.value = true
   try {
     const raw = asList(await api.getFrpLogs(500))
-    frpLogs.value = raw.map((line) => parseFrpLogLine(String(line)))
+    // 日志文件按时间升序返回，展示按时间倒序（新日期在前）：反转后分页与筛选也都跟着一致
+    frpLogs.value = raw.map((line) => parseFrpLogLine(String(line))).reverse()
   } catch (error) {
     message.error(error instanceof Error ? error.message : '加载 FRP 日志失败')
   } finally {

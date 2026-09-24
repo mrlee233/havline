@@ -1,6 +1,7 @@
 <template>
   <PageHeader title="FRP 穿透" description="管理 NAS 到公网 VPS 的 frpc 客户端连接">
     <template #actions>
+      <n-button @click="showExport = true; loadExport()">查看脱敏配置</n-button>
       <n-button @click="openRuntimeModal">
         <template #icon><n-icon :component="SettingsOutline" /></template>
         应用配置
@@ -50,262 +51,92 @@
       </div>
     </section>
 
-    <FonuCard class="section-card" title="公网服务端" subtitle="可添加并管理多个 frps 服务端连接">
-      <template #header>
-        <n-button size="small" type="primary" @click="openServerModal()">
-          <template #icon><n-icon :component="AddOutline" /></template>
-          添加服务端
-        </n-button>
-      </template>
+    <EmptyState
+      v-if="servers.length === 0"
+      title="尚未配置公网服务端"
+      description="穿透规则要归属到一台公网服务端；服务端的增删改、启停与 Agent 安装升级都在「公网服务端」页。"
+    >
+      <template #action><router-link to="/frp-agent"><n-button type="primary">去公网服务端页</n-button></router-link></template>
+    </EmptyState>
+    <EmptyState v-else-if="proxies.length === 0" title="尚未创建穿透规则" description="可发布 TCP 服务，或通过 HTTP/HTTPS 域名将请求转入内网。">
+      <template #action><n-button type="primary" @click="openProxyModal()">添加规则</n-button></template>
+    </EmptyState>
 
-      <EmptyState v-if="servers.length === 0" title="尚未配置 FRP 服务端" description="先添加公网 VPS 的 frps 地址和认证 Token。">
-        <template #action><n-button type="primary" @click="openServerModal()">添加服务端</n-button></template>
-      </EmptyState>
-      <div v-else class="frp-server-table-wrap">
-        <n-data-table
-          class="frp-server-table"
-          :columns="serverColumns"
-          :data="servers"
-          :bordered="false"
-          :single-line="false"
-          size="small"
-          :scroll-x="1560"
-          :row-key="(row: FrpServer) => row.id"
-        />
-      </div>
-    </FonuCard>
-
-    <FonuCard class="section-card" title="穿透规则" subtitle="将内网服务映射到公网 VPS 的 TCP 或虚拟主机入口">
-      <template #header>
-        <div class="section-actions">
-          <n-button size="small" @click="showExport = true; loadExport()">查看脱敏配置</n-button>
-          <n-button size="small" type="primary" :disabled="servers.length === 0" @click="openProxyModal()">
-            <template #icon><n-icon :component="AddOutline" /></template>
-            添加规则
-          </n-button>
+    <!-- 左：服务端列表（选服务端）；右：该服务端的穿透规则与选中规则详情 -->
+    <div v-else class="frp-layout">
+      <aside class="server-sidebar">
+        <div class="server-sidebar__head">
+          <div class="server-sidebar__head-row">
+            <h3 class="server-sidebar__title">服务端列表</h3>
+          </div>
         </div>
-      </template>
+        <div class="server-sidebar__list">
+          <button
+            v-for="item in servers"
+            :key="item.id"
+            type="button"
+            class="server-item"
+            :class="{ 'server-item--active': item.id === selectedServerId }"
+            @click="selectServer(item.id)"
+          >
+            <div class="server-item__top">
+              <span class="server-item__name">{{ item.name }}</span>
+              <n-tag size="tiny" :bordered="false" :type="serverBootType(item)">{{ serverBootLabel(item) }}</n-tag>
+            </div>
+            <div class="server-item__endpoint mono">{{ item.server_addr }}:{{ item.server_port }}</div>
+            <div class="server-item__meta">
+              <span>{{ serverRuleCount(item.id) }} 条规则</span>
+              <span>{{ serverEnabledRuleCount(item.id) }} 条启用</span>
+            </div>
+            <div class="server-item__tags">
+              <n-tag size="tiny" :bordered="false" :type="item.tls_enabled ? 'success' : 'warning'">TLS</n-tag>
+              <n-tag size="tiny" :bordered="false" :type="item.has_token ? 'success' : 'error'">Token</n-tag>
+              <n-tag v-if="item.agent_configured" size="tiny" :bordered="false" type="info">Agent</n-tag>
+              <n-tag v-if="item.ssh_configured" size="tiny" :bordered="false" type="info">SSH</n-tag>
+            </div>
+          </button>
+        </div>
+      </aside>
 
-      <EmptyState v-if="proxies.length === 0" title="尚未创建穿透规则" description="可发布 TCP 服务，或通过 HTTP/HTTPS 域名将请求转入内网。">
-        <template #action><n-button type="primary" :disabled="servers.length === 0" @click="openProxyModal()">添加规则</n-button></template>
-      </EmptyState>
-      <n-data-table v-else class="frp-rules-table" :columns="columns" :data="proxies" :bordered="false" :single-line="false" :scroll-x="2020" :row-key="(row: FrpProxy) => row.id" />
-    </FonuCard>
+      <div class="rule-pane">
+        <div class="rule-pane__head">
+          <div class="rule-pane__intro">
+            <h3 class="rule-pane__title">穿透规则</h3>
+            <span class="rule-pane__sub">{{ selectedServer?.name || '未选择服务端' }} · {{ serverProxies.length }} 条</span>
+          </div>
+          <div class="rule-pane__actions">
+            <n-button size="small" @click="showExport = true; loadExport()">查看脱敏配置</n-button>
+            <router-link v-if="selectedServerId" :to="{ name: 'frp-agent', query: { server: String(selectedServerId) } }">
+              <n-button size="small" quaternary>管理该服务端</n-button>
+            </router-link>
+            <n-button size="small" type="primary" :disabled="servers.length === 0" @click="openProxyModal()">
+              <template #icon><n-icon :component="AddOutline" /></template>
+              添加规则
+            </n-button>
+          </div>
+        </div>
+
+        <EmptyState v-if="serverProxies.length === 0" title="该服务端还没有穿透规则" description="可发布 TCP 服务，或通过 HTTP/HTTPS 域名将请求转入内网。">
+          <template #action><n-button type="primary" :disabled="servers.length === 0" @click="openProxyModal()">添加规则</n-button></template>
+        </EmptyState>
+        <div class="rule-table-wrap">
+          <n-data-table
+            class="frp-rules-table"
+            :columns="columns"
+            :data="serverProxies"
+            :bordered="false"
+            :single-line="false"
+            :scroll-x="1890"
+            :row-key="(row: FrpProxy) => row.id"
+          />
+        </div>
+      </div>
+    </div>
 
     <FonuCard v-if="status.last_error" class="error-card" title="最近错误">
       <div class="error-card__content">{{ status.last_error }}</div>
     </FonuCard>
   </template>
-
-  <n-modal
-    v-model:show="showServerModal"
-    :mask-closable="false"
-    transform-origin="center"
-  >
-    <div class="proxy-modal frp-proxy-modal">
-      <div class="proxy-modal__form">
-        <div class="proxy-modal__header">
-          <h3 class="modal-title">{{ editingServer ? '编辑服务端' : '添加服务端' }}</h3>
-          <n-button size="small" quaternary @click="showServerModal = false">
-            <template #icon><n-icon :component="CloseOutline" /></template>
-          </n-button>
-        </div>
-        <div class="proxy-modal__tabbar">
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'basic' }" @click="serverFormTab = 'basic'">基础配置</button>
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'advanced' }" @click="serverFormTab = 'advanced'">高级配置</button>
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'remote' }" @click="serverFormTab = 'remote'">远程管理</button>
-        </div>
-        <div class="proxy-modal__scroll">
-          <n-form label-placement="top" class="proxy-modal__pane" @submit.prevent="saveServer">
-            <div v-show="serverFormTab === 'basic'" class="frp-server-modal__basic">
-      <section class="form-section">
-        <h3><n-icon :component="InformationCircleOutline" /> 基本信息</h3>
-        <div class="form-grid form-grid--wide">
-          <n-form-item label="服务端名称" required><n-input v-model:value="serverForm.name" placeholder="例如：生产服务器" /></n-form-item>
-          <n-form-item label="主机地址" required><n-input v-model:value="serverForm.server_addr" placeholder="例如：frps.example.com" /></n-form-item>
-          <n-form-item label="端口" required><n-input-number v-model:value="serverForm.server_port" :min="1" :max="65535" /></n-form-item>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h3><n-icon :component="LockClosedOutline" /> 认证</h3>
-        <n-form-item label="认证方式" required>
-          <n-radio-group v-model:value="serverForm.options.auth_method" name="auth-method">
-            <n-radio-button value="none">无</n-radio-button>
-            <n-radio-button value="token">令牌</n-radio-button>
-            <n-radio-button value="oidc">OIDC（开放身份连接）</n-radio-button>
-          </n-radio-group>
-        </n-form-item>
-        <n-form-item label="用户"><n-input v-model:value="serverForm.options.user" placeholder="例如：admin" /></n-form-item>
-        <n-form-item v-if="serverForm.options.auth_method === 'token'" :show-label="false" :show-feedback="false">
-          <ConfiguredSecretField
-            v-model="serverForm.token"
-            label="令牌"
-            :configured="!!editingServer?.has_token"
-            placeholder="请输入与 frps 一致的令牌"
-          />
-        </n-form-item>
-        <template v-if="serverForm.options.auth_method === 'oidc'">
-          <p class="form-hint">OIDC（OpenID Connect，开放身份连接）会向身份提供商申请访问令牌，再用于连接 FRP 服务端。</p>
-          <div class="form-grid">
-            <n-form-item label="客户端 ID（Client ID）" required><n-input v-model:value="serverForm.options.oidc_client_id" placeholder="身份提供商分配的客户端标识" /></n-form-item>
-            <n-form-item :show-label="false" :show-feedback="false">
-              <ConfiguredSecretField
-                v-model="serverForm.oidc_client_secret"
-                label="客户端密钥（Client Secret）"
-                :configured="!!editingServer?.has_oidc_client_secret"
-                placeholder="请输入客户端密钥"
-              />
-            </n-form-item>
-            <n-form-item label="令牌端点（Token Endpoint）" required><n-input v-model:value="serverForm.options.oidc_token_endpoint_url" placeholder="https://issuer.example.com/token" /></n-form-item>
-            <n-form-item label="受众（Audience）"><n-input v-model:value="serverForm.options.oidc_audience" placeholder="可选，用于限定令牌的目标服务" /></n-form-item>
-            <n-form-item label="额外权限范围（Scope）"><n-input v-model:value="serverForm.options.oidc_scope" placeholder="例如：openid profile" /></n-form-item>
-            <n-form-item label="OIDC 请求代理地址"><n-input v-model:value="serverForm.options.oidc_proxy_url" placeholder="http://user:pass@192.168.1.1:8080" /></n-form-item>
-          </div>
-          <div class="switch-row"><span>跳过 OIDC TLS 校验</span><n-switch v-model:value="serverForm.options.oidc_insecure_skip_verify" /></div>
-        </template>
-      </section>
-
-      <section class="form-section">
-        <h3><n-icon :component="DocumentOutline" /> 描述</h3>
-        <n-form-item label="描述"><n-input v-model:value="serverForm.options.remark" type="textarea" :rows="2" placeholder="添加一些关于此服务器的备注" /></n-form-item>
-      </section>
-            </div>
-            <div v-show="serverFormTab === 'remote'" class="frp-server-modal__remote">
-      <section class="form-section">
-        <h3><n-icon :component="SwapHorizontalOutline" /> frps vhost 反代端口</h3>
-        <p class="form-hint">frps 的 vhostHTTPPort / vhostHTTPSPort，即 Nginx 反代的回源端口（proxy_pass http://127.0.0.1:端口）。修改后需「下发 frps 配置」并重启 frps，且重新部署各规则的反代。留空用默认 8080 / 8443。</p>
-        <div class="form-grid">
-          <n-form-item label="HTTP 回源端口"><n-input-number v-model:value="serverForm.options.vhost_http_port" :min="1" :max="65535" placeholder="默认 8080" /></n-form-item>
-          <n-form-item label="HTTPS 回源端口"><n-input-number v-model:value="serverForm.options.vhost_https_port" :min="1" :max="65535" placeholder="默认 8443" /></n-form-item>
-        </div>
-        <div class="form-grid">
-          <n-form-item label="子域名根（subDomainHost）"><n-input v-model:value="serverForm.options.sub_domain_host" placeholder="例如：frps.example.com，规则填 subdomain 后生成为 sub.frps.example.com" /></n-form-item>
-          <n-form-item label="tcpmux 监听端口"><n-input-number v-model:value="serverForm.options.tcpmux_http_connect_port" :min="1" :max="65535" placeholder="存在 tcpmux 规则时必填" /></n-form-item>
-        </div>
-        <div class="form-grid">
-          <n-form-item label="端口白名单（allowPorts）"><n-input v-model:value="serverForm.options.allow_ports" placeholder="如 6000,6005-6010,7000-8000；留空不限制" /></n-form-item>
-          <n-form-item label="每客户端端口上限"><n-input-number v-model:value="serverForm.options.max_ports_per_client" :min="0" :max="65535" placeholder="0 表示不限" /></n-form-item>
-        </div>
-        <div class="form-grid">
-          <n-form-item label="自定义 404 页面（VPS 路径）"><n-input v-model:value="serverForm.options.custom_404_page" placeholder="例如 /var/www/404.html；留空用默认" /></n-form-item>
-          <div class="switch-row"><span>强制 TLS（frps 只接受 TLS 连接）</span><n-switch v-model:value="serverForm.options.tls_force" /></div>
-        </div>
-        <div class="switch-row"><span>frps 写文件日志（/var/log/frps.log）</span><n-switch v-model:value="serverForm.options.frps_log_to_file" /></div>
-        <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" class="narrow-input" /></n-form-item>
-      </section>
-
-      <section class="form-section">
-        <h3><n-icon :component="ServerOutline" /> frps 管理接口</h3>
-        <p class="form-hint">用于 Fonu 拉取穿透规则的实时连接与流量信息；需在 frps 的 frps.toml 中开启 webServer（dashboard），与 frpc 连接用的令牌无关。</p>
-        <div class="form-grid">
-          <n-form-item label="管理地址"><n-input v-model:value="serverForm.options.dashboard_addr" placeholder="frps 机器的 IP 或域名，留空则不采集流量" /></n-form-item>
-          <n-form-item label="管理端口"><n-input-number v-model:value="serverForm.options.dashboard_port" :min="0" :max="65535" placeholder="例如：7500" /></n-form-item>
-        </div>
-        <div class="form-grid">
-          <n-form-item label="管理用户"><n-input v-model:value="serverForm.options.dashboard_user" placeholder="webServer.user，未启用认证可留空" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false">
-            <ConfiguredSecretField
-              v-model="serverForm.dashboard_password"
-              label="管理密码"
-              :configured="!!editingServer?.dashboard_has_pwd"
-              placeholder="webServer.password"
-            />
-          </n-form-item>
-        </div>
-        <n-button v-if="editingServer?.dashboard_has_pwd" size="small" quaternary type="error" @click="serverForm.clear_dashboard_password = true">清除管理密码</n-button>
-      </section>
-
-      <section class="form-section">
-        <h3><n-icon :component="CloudOutline" /> 公网 Agent 管理</h3>
-        <p class="form-hint">Agent 部署在公网 VPS 上，保存 HTTP/HTTPS 规则后可由 Agent 自动生成反代；「公网 Agent」页提供完整管理面板。首次安装/升级需要 SSH，日常管理走 Agent API。</p>
-        <div class="form-grid">
-          <n-form-item label="Agent API 地址"><n-input v-model:value="serverForm.agent_url" placeholder="例如：http://vps.example.com:7700" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.agent_token" label="Agent Token" :configured="!!editingServer?.agent_configured" placeholder="留空保持不变" /></n-form-item>
-          <n-form-item label="SSH 地址"><n-input v-model:value="serverForm.ssh_host" placeholder="用于安装/升级/卸载 agent" /></n-form-item>
-          <n-form-item label="SSH 端口"><n-input-number v-model:value="serverForm.ssh_port" :min="1" :max="65535" /></n-form-item>
-          <n-form-item label="SSH 用户"><n-input v-model:value="serverForm.ssh_user" placeholder="root 或具备 sudo 权限的用户" /></n-form-item>
-          <n-form-item label="SSH 认证"><n-select v-model:value="serverForm.ssh_auth" :options="[{ label: '私钥', value: 'key' }, { label: '密码', value: 'password' }]" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.ssh_secret" label="SSH 密码/私钥" :configured="!!editingServer?.ssh_configured" placeholder="用于 Agent 安装与升级" /></n-form-item>
-        </div>
-        <div class="switch-row"><span>启用 Agent 日常管理</span><n-switch v-model:value="serverForm.mgmt_enabled" /></div>
-        <div v-if="editingServer?.agent_configured" class="agent-actions">
-          <n-button size="small" :loading="agentActionId === editingServer.id" @click="testAgent(editingServer)">测试连接</n-button>
-          <n-button size="small" :loading="agentActionId === editingServer.id" @click="pushAgentConfig(editingServer)">下发 frps 配置</n-button>
-          <router-link to="/frp-agent"><n-button size="small" quaternary>打开管理面板</n-button></router-link>
-        </div>
-      </section>
-            </div>
-            <div v-show="serverFormTab === 'advanced'" class="frp-server-modal__advanced">
-      <section class="form-section">
-        <h3><n-icon :component="DocumentTextOutline" /> 日志</h3>
-        <div class="form-grid">
-          <n-form-item label="日志级别"><n-select v-model:value="serverForm.options.log_level" :options="logLevelOptions" /></n-form-item>
-          <n-form-item label="最大天数"><n-input-number v-model:value="serverForm.options.log_max_days" :min="0" :max="3650" /></n-form-item>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <h3><n-icon :component="GitNetworkOutline" /> 传输</h3>
-        <n-form-item label="协议"><n-select v-model:value="serverForm.options.protocol" :options="transportOptions" /></n-form-item>
-        <div class="switch-row"><span>启用 TLS</span><n-switch v-model:value="serverForm.tls_enabled" /><span>禁用自定义 TLS 首字节</span><n-switch v-model:value="serverForm.options.tls_disable_custom_first_byte" /></div>
-        <div v-if="serverForm.tls_enabled" class="tls-panel">
-          <n-form-item label="服务器名称（SNI）"><n-input v-model:value="serverForm.tls_server_name" placeholder="例如：frps.example.com" /></n-form-item>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>证书文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('certificate')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_certificate" type="textarea" :rows="3" placeholder="粘贴客户端证书 PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>密钥文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('key')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_key" type="textarea" :rows="3" placeholder="粘贴客户端私钥 PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>受信任的 CA 内容</span><n-button size="small" quaternary @click="openTLSFilePicker('ca')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_trusted_ca" type="textarea" :rows="3" placeholder="粘贴 CA PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
-          <input ref="certificateFileInput" class="file-input" type="file" accept=".pem,.crt,.cer,.key,.txt" @change="loadTLSFile('certificate', $event)" />
-          <input ref="keyFileInput" class="file-input" type="file" accept=".pem,.key,.txt" @change="loadTLSFile('key', $event)" />
-          <input ref="caFileInput" class="file-input" type="file" accept=".pem,.crt,.cer,.ca,.txt" @change="loadTLSFile('ca', $event)" />
-          <div class="asset-actions">
-            <n-button v-if="editingServer?.options.tls_certificate_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_certificate = true">清除证书</n-button>
-            <n-button v-if="editingServer?.options.tls_key_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_key = true">清除密钥</n-button>
-            <n-button v-if="editingServer?.options.tls_trusted_ca_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_trusted_ca = true">清除 CA</n-button>
-          </div>
-        </div>
-        <n-collapse class="advanced-collapse">
-          <n-collapse-item title="高级连接设置" name="advanced">
-            <div class="form-grid">
-              <n-form-item label="代理 URL"><n-input v-model:value="serverForm.options.proxy_url" placeholder="http://user:pass@192.168.1.1:8080" /></n-form-item>
-              <n-form-item label="连接池数量"><n-input-number v-model:value="serverForm.options.pool_count" :min="0" :max="100" /></n-form-item>
-              <n-form-item label="拨号超时（秒）"><n-input-number v-model:value="serverForm.options.dial_server_timeout" :min="0" :max="600" /></n-form-item>
-              <n-form-item label="TCP 保活（秒）"><n-input-number v-model:value="serverForm.options.dial_server_keepalive" :min="0" :max="86400" /></n-form-item>
-              <n-form-item label="心跳间隔（秒）"><n-input-number v-model:value="serverForm.options.heartbeat_interval" :min="0" :max="3600" /></n-form-item>
-              <n-form-item label="心跳超时（秒）"><n-input-number v-model:value="serverForm.options.heartbeat_timeout" :min="0" :max="3600" /></n-form-item>
-              <n-form-item label="TCP Mux 保活（秒）"><n-input-number v-model:value="serverForm.options.tcp_mux_keepalive_interval" :min="0" :max="3600" /></n-form-item>
-              <n-form-item label="指定本地源 IP"><n-input v-model:value="serverForm.options.connect_server_local_ip" placeholder="可选" /></n-form-item>
-              <n-form-item label="DNS 服务器"><n-input v-model:value="serverForm.options.dns_server" placeholder="可选，例如：1.1.1.1" /></n-form-item>
-            </div>
-            <div class="switch-row"><span>TCP 多路复用</span><n-switch v-model:value="serverForm.options.tcp_mux" /><span>登录失败即退出</span><n-switch v-model:value="serverForm.options.login_fail_exit" /><span>自动连接</span><n-switch v-model:value="serverForm.options.auto_start" /></div>
-          </n-collapse-item>
-        </n-collapse>
-      </section>
-            </div>
-            <div class="modal-actions"><n-button @click="showServerModal = false">取消</n-button><n-button type="primary" :loading="savingServer" @click="saveServer">保存</n-button></div>
-          </n-form>
-        </div>
-      </div>
-      <div class="proxy-modal__help">
-        <h4>{{ serverFormTab === 'basic' ? '配置说明' : '高级配置说明' }}</h4>
-        <ol>
-          <li v-for="item in serverHelpItems" :key="item.title"><strong>{{ item.title }}</strong>：{{ item.text }}</li>
-        </ol>
-        <div class="proxy-modal__tip">
-          <n-icon :component="InformationCircleOutline" class="proxy-modal__tip-icon" />
-          <span>{{ serverHelpTip }}</span>
-        </div>
-      </div>
-    </div>
-  </n-modal>
 
   <n-modal
     v-model:show="showProxyModal"
@@ -509,59 +340,6 @@
     </div>
   </n-modal>
 
-  <n-modal v-model:show="showServerLogs">
-    <div class="frp-card-modal">
-      <div class="proxy-modal__header">
-        <h3 class="modal-title">公网服务端运行日志 - {{ serverLogsTarget?.name ?? '' }}</h3>
-        <n-button size="small" quaternary @click="showServerLogs = false">关闭</n-button>
-      </div>
-      <div class="proxy-modal__scroll">
-    <div class="logs-toolbar">
-      <span class="table-muted">{{ serverLogsTarget?.server_addr }}:{{ serverLogsTarget?.server_port }} · frpc-server-{{ serverLogsTarget?.id }}.log</span>
-      <n-button size="small" :loading="serverLogsLoading" @click="loadServerLogs">刷新</n-button>
-    </div>
-      <pre class="logs-box">{{ serverLogLines.length ? serverLogLines.join('\n') : '暂无该服务端的运行日志' }}</pre>
-      </div>
-      <div class="modal-footer"><n-button @click="showServerLogs = false">关闭</n-button></div>
-    </div>
-  </n-modal>
-
-  <n-modal v-model:show="showServerDetail" preset="card" class="frp-detail-card" :title="viewingServer?.name || '服务端详情'" :style="{ width: 'min(980px, 94vw)', maxHeight: 'calc(100vh - 40px)' }" :content-style="{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }">
-    <div v-if="viewingServer" class="server-detail">
-      <div class="server-detail__top"><div><h2>{{ viewingServer.name }}</h2><p>服务端详情和运行监测</p></div><n-button v-if="viewingServer.boot_status === 'running'" size="small" type="error" ghost @click="stopServer(viewingServer)"><template #icon><n-icon :component="StopOutline" /></template>停止</n-button><n-button v-else size="small" type="success" ghost @click="startServer(viewingServer)"><template #icon><n-icon :component="PlayOutline" /></template>启动</n-button><n-button size="small" @click="openFRPSConfig(viewingServer)"><template #icon><n-icon :component="DocumentOutline" /></template>frps.toml</n-button></div>
-      <div class="server-detail__grid">
-        <section class="server-detail__panel"><h3>基本信息</h3><div class="detail-fields"><div><label>主机地址</label><strong class="mono">{{ viewingServer.server_addr }}</strong></div><div><label>端口</label><strong>{{ viewingServer.server_port }}</strong></div><div><label>用户</label><strong>{{ viewingServer.options.user || '未设置' }}</strong></div><div><label>位置</label><strong class="server-detail__location"><n-icon :component="LocationOutline" /> {{ locationText(viewingServer) }}</strong></div><div><label>状态</label><StatusBadge :value="serverStartupType(viewingServer)" :text="serverStartupText(viewingServer)" /></div><div><label>协议</label><strong>{{ viewingServer.options.protocol.toUpperCase() }}</strong></div><div><label>创建时间</label><span>{{ formatDate(viewingServer.created_at) }}</span></div><div><label>最后更新</label><span>{{ formatDate(viewingServer.updated_at) }}</span></div></div></section>
-        <section class="server-detail__panel">
-          <h3>配置</h3>
-          <div class="detail-fields detail-fields--single">
-            <div><label>描述</label><span>{{ viewingServer.options.remark || '未提供描述。' }}</span></div>
-          </div>
-          <div class="detail-subgroup">
-            <div class="detail-subgroup__title">连接与认证</div>
-            <div class="detail-fields">
-              <div><label>TLS</label><n-tag size="small" :type="viewingServer.tls_enabled ? 'success' : 'warning'" :bordered="false">{{ viewingServer.tls_enabled ? '已启用' : '未启用' }}</n-tag></div>
-              <div><label>认证</label><span>{{ authMethodText(viewingServer.options.auth_method) }}{{ viewingServer.has_token ? '（Token 已配置）' : '' }}</span></div>
-              <div><label>客户端</label><span>{{ runtime.active_version || runtime.detected_version || '当前版本' }}</span></div>
-              <div><label>期望状态</label><span>{{ serverStartupText(viewingServer) }}</span></div>
-              <div><label>frpc 进程</label><span>{{ processStateText(viewingServer) }}{{ viewingServer.process_pid ? `（PID ${viewingServer.process_pid}）` : '' }}</span></div>
-              <div><label>FRP 连接</label><span>{{ connectionStateText(viewingServer) }}</span></div>
-              <div><label>状态来源</label><span>{{ viewingServer.state_source || '未知' }}</span></div>
-            </div>
-          </div>
-          <div class="detail-subgroup">
-            <div class="detail-subgroup__title">诊断</div>
-            <span v-if="(serverDiagnostics[viewingServer.id]?.checks ?? []).length" class="diag-checks"><n-tag v-for="check in serverDiagnostics[viewingServer.id]?.checks ?? []" :key="check.name" size="small" :type="checkTagType(check.state)" :bordered="false" :title="check.detail">{{ checkLabel(check.name) }}·{{ checkStateText(check.state) }}</n-tag></span>
-            <span v-else class="detail-muted">暂无诊断数据，可点「立即诊断」获取</span>
-          </div>
-        </section>
-      </div>
-      <section class="server-detail__panel server-status-panel"><div class="server-detail__section-title"><h3>服务器状态</h3></div><div class="server-status-summary"><div class="server-status-summary__item server-status-summary__item--state"><StatusBadge :kind="detailStatusKind" :text="detailStatusText" /></div><div class="server-status-summary__item"><label>可达率</label><strong>{{ detailAvailability.toFixed(1) }}%</strong></div><div class="server-status-summary__item"><label>平均延迟</label><strong>{{ detailAverageLatency }}ms</strong></div><div class="server-status-summary__item"><label>峰值延迟</label><strong>{{ detailPeakLatency }}ms</strong></div></div><div v-if="detailStatusBars.length" class="status-bars"><div v-for="(sample, index) in detailStatusBars" :key="`${sample.checked_at}-${index}`" class="status-bar" :class="sample.available ? 'status-bar--ok' : 'status-bar--failed'" :data-tooltip="statusBarTooltip(sample)" :aria-label="statusBarTooltip(sample)" role="img" tabindex="0" /></div><div v-else class="status-bars-empty">暂无最近 30 分钟诊断采样</div><div class="status-bars-footer"><span>30 分钟前</span><span><i /> 现在</span></div><div class="detail-status-meta"><span>最近检测：{{ formatDate(detailStatus.last_checked_at) || '尚未检测' }}</span><span v-if="detailStatus.last_error" class="detail-status-error">{{ detailStatus.last_error }}</span></div></section>
-      <section class="server-detail__panel latency-panel"><div class="server-detail__section-title"><h3>延迟曲线</h3><span class="latency-panel__hint">最近 30 分钟</span></div><VChart v-if="detailSamples.length" class="latency-chart" autoresize :option="detailChartOption" /><div v-else class="detail-empty">暂无最近 30 分钟诊断采样</div><div class="detail-chart-footer"><span>延迟（ms）</span><span><i /> 可连接 <b class="detail-legend-failed" /> 失败</span></div></section>
-      <section class="server-detail__panel"><div class="server-detail__section-title"><h3>代理</h3><n-button size="small" quaternary @click="loadDetailData"><template #icon><n-icon :component="RefreshOutline" /></template>刷新</n-button></div><n-data-table :columns="detailProxyColumns" :data="detailProxies" :bordered="false" :single-line="false" size="small" /></section>
-      <section class="server-detail__panel"><div class="server-detail__section-title"><h3>连接日志</h3><n-button size="small" quaternary @click="loadDetailData">刷新</n-button></div><pre class="detail-logs">{{ detailLogs.length ? detailLogs.join('\n') : '暂无该服务端连接日志' }}</pre></section>
-    </div>
-  </n-modal>
-
   <n-modal v-model:show="showExport">
     <div class="frp-card-modal">
       <div class="proxy-modal__header">
@@ -576,32 +354,6 @@
   </n-modal>
 
   <!-- 公网 Agent 管理已独立为 /frp-agent 页面（AgentView.vue） -->
-
-  <n-modal v-model:show="showFRPSConfig">
-    <div class="frp-card-modal">
-      <div class="proxy-modal__header">
-        <h3 class="modal-title">frps.toml 同源配置 - {{ frpsConfigTarget?.name || '' }}</h3>
-        <n-button size="small" quaternary @click="showFRPSConfig = false">关闭</n-button>
-      </div>
-      <div class="proxy-modal__scroll">
-        <p class="form-hint">与该服务端的 frpc 配置同源生成（bindPort / 认证 / 管理接口一致）；复制到 VPS 保存为 frps.toml 后执行 ./frps -c frps.toml。包含真实 Token，请勿外传。</p>
-                <p v-if="tcpRemotePorts.length" class="form-hint">
-          已启用的 TCP/UDP 隧道远程端口：<span class="mono">{{ tcpRemotePorts.join('、') }}</span>
-          —— 请确认 VPS 防火墙 / 安全组已放行这些端口（frps 侧 allowPorts 已按此生成，未放行时隧道会连不上）。
-        </p>
-        <p v-if="frpsCompare" class="form-hint" :class="{ 'frps-compare--warn': !frpsCompare.ok }">
-          {{ frpsCompare.text }}
-        </p>
-        <pre class="logs-box">{{ frpsConfigContent || '生成中…' }}</pre>
-      </div>
-      <div class="modal-footer">
-        <n-button size="small" :loading="comparingFrps" :disabled="!frpsConfigTarget" @click="compareFrpsConfig">
-          比对 VPS 实际文件
-        </n-button>
-        <n-button @click="showFRPSConfig = false">关闭</n-button>
-      </div>
-    </div>
-  </n-modal>
 
   <n-modal
     v-model:show="showGuide"
@@ -894,106 +646,39 @@ import { computed, h, onMounted, onUnmounted, reactive, ref, type VNode } from '
 import type { DataTableColumns } from 'naive-ui'
 import type { FrpProxyTraffic, FrpProxiesTraffic } from '../api/types'
 import { NButton, NIcon, NSpace, NSwitch, NTag, useDialog, useMessage } from 'naive-ui'
-import VChart from 'vue-echarts'
-import { use } from 'echarts/core'
-import { GridComponent, TooltipComponent } from 'echarts/components'
-import { LineChart, ScatterChart } from 'echarts/charts'
-import { CanvasRenderer } from 'echarts/renderers'
 import {
-  AddOutline, CloudOutline, CloseOutline, DocumentOutline, DocumentTextOutline, GitNetworkOutline, InformationCircleOutline,
-  FlashOutline, LayersOutline, LocationOutline, LockClosedOutline, PeopleOutline, PlayOutline, RefreshOutline, ServerOutline, SettingsOutline, StopOutline, SwapHorizontalOutline, TerminalOutline, TimeOutline,
+  AddOutline, CloseOutline, DocumentTextOutline, FlashOutline, GitNetworkOutline, InformationCircleOutline,
+  LayersOutline, PeopleOutline, PlayOutline, RefreshOutline, SettingsOutline, StopOutline, TerminalOutline, TimeOutline,
 } from '@vicons/ionicons5'
 import { RouterLink } from 'vue-router'
 import { api, asList } from '../api/client'
 import { formatBytes, formatDate, formatRate } from '../utils/format'
 
-import type { FrpBinary, FrpDownloadTask, FrpProxy, FrpProxyOptions, FrpProxyPayload, FrpRelease, FrpRuntimeInfo, FrpServer, FrpServerDetail, FrpServerDiagnostics, FrpServerOptions, FrpServerPayload, FrpServerStatusDetail, FrpStatus } from '../api/types'
+import type { FrpBinary, FrpDownloadTask, FrpProxy, FrpProxyOptions, FrpProxyPayload, FrpRelease, FrpRuntimeInfo, FrpServer, FrpStatus } from '../api/types'
 import FonuCard from '../components/FonuCard.vue'
-import ConfiguredSecretField from '../components/ConfiguredSecretField.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import MiniTrafficChart from '../components/MiniTrafficChart.vue'
 
-use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
-
 const message = useMessage()
 const dialog = useDialog()
 const status = ref<FrpStatus>({ status: 'unknown', configured: false, enabled_proxies: 0 })
 const servers = ref<FrpServer[]>([])
 const proxies = ref<FrpProxy[]>([])
-// 已启用的 TCP/UDP 隧道远程端口：用于提示在 VPS 防火墙放行（与 frps 的 allowPorts 同源）
-const tcpRemotePorts = computed(() => proxies.value
-  .filter((proxy) => proxy.enabled && (proxy.type === 'tcp' || proxy.type === 'udp') && proxy.remote_port)
-  .map((proxy) => proxy.remote_port as number))
 const proxyTraffic = ref<Record<number, FrpProxyTraffic>>({})
 const proxyTrafficErrors = ref<Record<number, string>>({})
-const serverDiagnostics = ref<Record<number, FrpServerDiagnostics>>({})
 const loadError = ref('')
 const actionLoading = ref<'start' | 'stop' | 'reload' | null>(null)
-const testingId = ref<number | null>(null)
-const serverStartingId = ref<number | null>(null)
-const agentActionId = ref<number | null>(null)
-const measuringId = ref<number | null>(null)
-const savingServer = ref(false)
 const savingProxy = ref(false)
-const showServerModal = ref(false)
 const showProxyModal = ref(false)
 const showExport = ref(false)
 const showGuide = ref(false)
 const guideTab = ref<'guide' | 'scenes'>('guide')
-const showServerDetail = ref(false)
 
-// frps.toml 同源配置弹窗：按服务端生成，与 frpc 侧端口/认证一致
-const showFRPSConfig = ref(false)
-const frpsConfigContent = ref('')
-// frps.toml 与 VPS 实际文件的比对结果（P1-3，需 agent ≥ 0.10.0）
-const frpsCompare = ref<{ ok: boolean; text: string } | null>(null)
-const comparingFrps = ref(false)
-
-// 比对前统一去注释、空行与首尾空白：注释和排版差异不算「被手工修改」
-function normalizedConfigLines(text: string) {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
-}
-
-async function compareFrpsConfig() {
-  const target = frpsConfigTarget.value
-  if (!target) return
-  comparingFrps.value = true
-  frpsCompare.value = null
-  try {
-    const remote = await api.getFrpAgentFRPSConfig(target.id)
-    if (!remote.exists) {
-      frpsCompare.value = { ok: false, text: `VPS 上还没有 ${remote.path || 'frps.toml'}，可直接下发写入` }
-      return
-    }
-    const expected = normalizedConfigLines(frpsConfigContent.value)
-    const actual = normalizedConfigLines(remote.content)
-    const index = expected.findIndex((line, i) => actual[i] !== line)
-    if (index === -1 && expected.length === actual.length) {
-      frpsCompare.value = { ok: true, text: `与 VPS 上的 ${remote.path} 一致（已忽略注释与空行）` }
-      return
-    }
-    const at = index === -1 ? Math.min(expected.length, actual.length) : index
-    frpsCompare.value = {
-      ok: false,
-      text: `不一致：第 ${at + 1} 行 下发「${expected[at] ?? '（无）'}」/ VPS「${actual[at] ?? '（无）'}」——VPS 上的 frps.toml 可能被手工改过，重新下发会覆盖`,
-    }
-  } catch (error) {
-    frpsCompare.value = { ok: false, text: error instanceof Error ? error.message : '比对失败' }
-  } finally {
-    comparingFrps.value = false
-  }
-}
-const frpsConfigTarget = ref<FrpServer | null>(null)
-const frpsConfigLoading = ref(false)
 const showRuntimeModal = ref(false)
 const proxyFormTab = ref<'basic' | 'advanced'>('basic')
-const serverFormTab = ref<'basic' | 'advanced' | 'remote'>('basic')
 const exportContent = ref('')
 const runtimeLoading = ref(false)
 const savingDownloadProxy = ref(false)
@@ -1012,34 +697,10 @@ const downloadProxyOptions = [
   { label: 'v4.gh-proxy.org', value: 'https://v4.gh-proxy.org/' },
   { label: 'cdn.gh-proxy.org', value: 'https://cdn.gh-proxy.org/' },
 ]
-const editingServer = ref<FrpServer | null>(null)
-const viewingServer = ref<FrpServer | null>(null)
-const detailProxies = ref<FrpProxy[]>([])
-const detailLogs = ref<string[]>([])
-const detailStatus = ref<FrpServerStatusDetail>({ available: false, availability: 0, average_latency_ms: 0, peak_latency_ms: 0, samples: [] })
 const editingProxy = ref<FrpProxy | null>(null)
-const certificateFileInput = ref<HTMLInputElement | null>(null)
-const keyFileInput = ref<HTMLInputElement | null>(null)
-const caFileInput = ref<HTMLInputElement | null>(null)
 let timer: number | undefined
 let downloadTimer: number | undefined
-let diagnosticsAt = 0
 
-function defaultServerOptions(): FrpServerOptions {
-  return {
-    auth_method: 'token', log_level: 'info', log_max_days: 3, protocol: 'tcp', dial_server_timeout: 10,
-    dial_server_keepalive: 7200, pool_count: 0, tcp_mux: true, tcp_mux_keepalive_interval: 60,
-    heartbeat_interval: 30, heartbeat_timeout: 90, login_fail_exit: true, tls_disable_custom_first_byte: false, auto_start: false,
-    dashboard_addr: '', dashboard_port: 0, dashboard_user: '',
-  }
-}
-
-const serverForm = reactive({
-  name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
-  agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: false,
-  oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
-  clear_tls_key: false, clear_tls_trusted_ca: false, options: defaultServerOptions(),
-})
 function defaultProxyOptions(): FrpProxyOptions & { allow_ips_text?: string } {
   return { transport: {}, health_check: {}, load_balancer: {}, nat_traversal: { disable_assisted_addrs: false }, allow_ips_text: '' }
 }
@@ -1075,27 +736,6 @@ const pluginTypeOptions = [
   { label: 'Unix Domain Socket', value: 'unix_domain_socket' }, { label: 'HTTP Proxy', value: 'http_proxy' }, { label: 'Socks5', value: 'socks5' }, { label: 'Static File', value: 'static_file' },
   { label: 'HTTP 转 HTTPS', value: 'http2https' }, { label: 'HTTPS 转 HTTP', value: 'https2http' }, { label: 'HTTPS 转 HTTPS', value: 'https2https' }, { label: 'HTTP 转 HTTP', value: 'http2http' }, { label: 'TLS 转 Raw', value: 'tls2raw' },
 ]
-const serverHelpItems = computed(() => {
-  if (serverFormTab.value === 'advanced') return [
-    { title: '日志', text: 'frpc 运行日志的级别与保留天数；排查连接问题时建议临时调到 debug。' },
-    { title: '传输协议', text: 'TCP 兼容性最好；KCP/QUIC 在丢包链路上更流畅，WebSocket/WSS 适合经过反向代理或 CDN 的场景，需 frps 侧支持。' },
-    { title: 'TLS', text: '默认启用；证书与密钥用于双向认证，受信任的 CA 用于校验 frps 证书，SNI 与 frps 侧证书域名一致。' },
-    { title: '连接调优', text: '心跳与 TCP 多路复用保持默认即可；网络不稳定时可加大超时，连接池可降低高并发时的建连延迟。' },
-  ]
-  const common = [
-    { title: '基本信息', text: '主机地址和端口对应 frps 的 bindAddr / bindPort，多个服务端可并行配置，规则保存时选择归属。' },
-    { title: '认证方式', text: '与 frps 的 auth 配置保持一致：无认证、令牌（auth.token）或 OIDC；令牌与密钥加密存储，编辑时留空保持不变。' },
-    { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Fonu 借此拉取穿透规则的实时连接与流量；不写入 frpc.toml，与连接认证无关。' },
-    { title: '描述', text: '仅用于在 Fonu 中区分多台服务端的备注信息。' },
-  ]
-  if (serverForm.options.auth_method === 'oidc') return [...common, { title: 'OIDC', text: '客户端 ID、密钥和令牌端点由身份提供商提供；受众与权限范围需与 frps 的 OIDC 校验配置匹配。' }]
-  return common
-})
-const serverHelpTip = computed(() => {
-  if (serverFormTab.value === 'advanced') return '传输参数需与 frps 服务端配置匹配；修改后请点击“校验并应用配置”。'
-  if (serverForm.options.auth_method === 'oidc') return 'OIDC 需要身份提供商支持客户端凭证模式，且 frps 侧已启用相同的 OIDC 校验。'
-  return '请先在 VPS 上部署 frps 并放行对应端口，再保存服务端配置。'
-})
 const proxyHelpItems = computed(() => {
   if (proxyFormTab.value === 'advanced') return [
     { title: '传输安全', text: '加密和压缩只作用于该规则；Proxy Protocol 需要内网服务支持对应版本。' },
@@ -1131,11 +771,6 @@ function applyProxyQuickExample() {
   message.success(`已填入${example.title}示例，请按实际环境调整后保存`)
 }
 
-const logLevelOptions = ['trace', 'debug', 'info', 'warn', 'error'].map((value) => ({ label: value.toUpperCase(), value }))
-const transportOptions = [
-  { label: 'TCP', value: 'tcp' }, { label: 'KCP', value: 'kcp' }, { label: 'QUIC', value: 'quic' },
-  { label: 'WebSocket', value: 'websocket' }, { label: 'WSS', value: 'wss' },
-]
 const proxyServerOptions = computed(() => servers.value.map((server) => ({ label: `${server.name} (${server.server_addr}:${server.server_port})`, value: server.id })))
 const statusLabel = computed(() => ({ running: '运行中', stopped: '已停止', unknown: '未配置' })[status.value.status] ?? '异常')
 // 返回的必须是 StatusKind 合法值（success/warning/error/disabled/unknown），
@@ -1157,35 +792,9 @@ const frpTypeTagType: Record<FrpProxy['type'], 'info' | 'success' | 'warning' | 
   tcp: 'info', udp: 'default', http: 'success', https: 'success', tcpmux: 'info', stcp: 'warning', sudp: 'warning', xtcp: 'warning',
 }
 
-// 公网服务端列表：与规则表一致用 n-data-table（列宽固定，表头与数据天然对齐）
-const serverColumns = computed<DataTableColumns<FrpServer>>(() => [
-  { title: '名称', key: 'name', width: 190, render: (row) => h('div', { class: 'cell-name' }, [h(NIcon, { component: CloudOutline }), h('span', row.name)]) },
-  { title: '主机', key: 'host', width: 170, render: (row) => h('span', { class: 'mono cell-wrap' }, row.server_addr) },
-  { title: '端口', key: 'port', width: 90, render: (row) => h(NTag, { size: 'small', bordered: false }, { default: () => String(row.server_port) }) },
-  { title: '延迟', key: 'latency', width: 130, render: (row) => h('div', { class: 'cell-inline', title: latencyDetail(row) }, [h(NIcon, { component: FlashOutline }), h('span', latencyText(row))]) },
-  { title: '位置', key: 'location', width: 150, render: (row) => h('div', { class: 'cell-inline' }, [h(NIcon, { component: LocationOutline }), h('span', locationText(row))]) },
-  { title: '配置', key: 'config', width: 230, render: (row) => h('div', { class: 'cell-inline' }, [
-    h(NTag, { size: 'small', bordered: false, type: row.tls_enabled ? 'success' : 'warning' }, { default: () => `TLS ${row.tls_enabled ? '已启用' : '未启用'}` }),
-    h(NTag, { size: 'small', bordered: false, type: row.has_token ? 'success' : 'error' }, { default: () => `Token ${row.has_token ? '已配置' : '缺失'}` }),
-  ]) },
-  { title: '启动状态', key: 'startup', width: 170, render: (row) => h(NTag, { size: 'small', bordered: false, type: serverStartupType(row), title: serverStateTooltip(row) }, { default: () => `${serverStartupText(row)} · ${connectionStateText(row)}` }) },
-  { title: '操作', key: 'actions', width: 560, align: 'right', render: (row) => h('div', { class: 'cell-actions' }, [
-    row.boot_status === 'running'
-      ? h(NButton, { size: 'small', type: 'error', ghost: true, loading: serverStartingId.value === row.id, onClick: () => stopServer(row) }, { default: () => '停止' })
-      : h(NButton, { size: 'small', type: 'success', ghost: true, loading: serverStartingId.value === row.id, onClick: () => startServer(row) }, { default: () => '启动' }),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerDetail(row) }, { default: () => '查看' }),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerLogs(row) }, { default: () => '日志' }),
-    h(NButton, { size: 'small', quaternary: true, loading: measuringId.value === row.id, onClick: () => measureServer(row) }, { default: () => '测速' }),
-    h(NButton, { size: 'small', quaternary: true, loading: testingId.value === row.id, onClick: () => testServer(row) }, { default: () => '校验' }),
-    row.agent_configured ? h(RouterLink, { to: '/frp-agent' }, { default: () => h(NButton, { size: 'small', quaternary: true }, { default: () => 'Agent 管理' }) }) : null,
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openServerModal(row) }, { default: () => '编辑' }),
-    h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => confirmDeleteServer(row) }, { default: () => '删除' }),
-  ]) },
-])
-
+// 穿透规则表格：列宽固定，各行列天然对齐（单元格由 render 创建，样式必须 :deep()）
 const columns = computed<DataTableColumns<FrpProxy>>(() => [
   { title: '名称', key: 'name', minWidth: 150, render: (row) => h('div', [h('strong', row.name), row.remark ? h('div', { class: 'table-muted' }, row.remark) : null]) },
-  { title: '服务端', key: 'server_id', minWidth: 130, render: (row) => servers.value.find((server) => server.id === row.server_id)?.name ?? `#${row.server_id}` },
   { title: '类型', key: 'type', width: 92, render: (row) => h(NTag, { size: 'small', type: frpTypeTagType[row.type], bordered: false, round: true }, () => row.type.toUpperCase()) },
   { title: '内网目标', key: 'local', minWidth: 170, render: (row) => h('code', proxyLocalTarget(row)) },
   { title: '公网入口', key: 'public', minWidth: 200, render: (row) => h('code', proxyPublicEndpoint(row)) },
@@ -1219,9 +828,38 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
   ]) },
 ])
 
+// 左侧选中服务端 → 右侧只列该服务端的规则；存 id 而不是对象，避免列表刷新后指向旧快照
+const selectedServerId = ref<number | null>(null)
+const selectedServer = computed(() => servers.value.find((item) => item.id === selectedServerId.value) ?? null)
+const serverProxies = computed(() => proxies.value.filter((item) => item.server_id === selectedServerId.value))
+
 const showProxyDetail = ref(false)
 const detailProxy = ref<FrpProxy | null>(null)
 const proxyDetailTab = ref<'overview' | 'logs'>('overview')
+
+// 左侧列表的状态标签：只用列表接口就带的 boot_status，不为此额外拉诊断
+function serverBootLabel(server: FrpServer) {
+  switch (server.boot_status) {
+    case 'running': return '运行中'
+    case 'starting': return '启动中'
+    case 'error': return '异常'
+    default: return '已停止'
+  }
+}
+function serverBootType(server: FrpServer): 'success' | 'warning' | 'error' | 'default' {
+  switch (server.boot_status) {
+    case 'running': return 'success'
+    case 'starting': return 'warning'
+    case 'error': return 'error'
+    default: return 'default'
+  }
+}
+function serverRuleCount(serverID: number) {
+  return proxies.value.filter((item) => item.server_id === serverID).length
+}
+function serverEnabledRuleCount(serverID: number) {
+  return proxies.value.filter((item) => item.server_id === serverID && item.enabled).length
+}
 const proxyLogLines = ref<string[]>([])
 const proxyLogsLoading = ref(false)
 
@@ -1256,6 +894,12 @@ function recordProxyRateSample() {
   const now = Date.now()
   proxyRateHistory.value.push({ at: now, upload: stats.traffic_in_rate, download: stats.traffic_out_rate })
   proxyRateHistory.value = proxyRateHistory.value.filter((p) => now - p.at <= 5 * 60 * 1000)
+}
+
+// 切服务端：右侧表格跟着换
+function selectServer(id: number) {
+  if (selectedServerId.value === id) return
+  selectedServerId.value = id
 }
 
 function openProxyDetail(proxy: FrpProxy, tab: 'overview' | 'logs' = 'overview') {
@@ -1295,133 +939,10 @@ function proxyDetailValue(proxy: FrpProxy, key: 'local' | 'public' | 'transport'
     case 'lb': return proxy.options?.load_balancer?.group ?? '未配置'
   }
 }
-const detailProxyColumns = computed<DataTableColumns<FrpProxy>>(() => [
-  { title: '名称', key: 'name', minWidth: 130 },
-  { title: '类型', key: 'type', width: 80, render: (row) => h('span', { class: 'type-chip' }, row.type.toUpperCase()) },
-  { title: '本地目标', key: 'local', minWidth: 150, render: (row) => h('code', `${row.local_ip}:${row.local_port}`) },
-  { title: '公网入口', key: 'public', minWidth: 180, render: (row) => h('code', proxyPublicEndpoint(row)) },
-  { title: '状态', key: 'enabled', width: 90, render: (row) => h('span', { class: row.enabled ? 'detail-status--on' : 'detail-status--off' }, row.enabled ? '已启用' : '已停用') },
-])
-const detailSamples = computed(() => detailStatus.value.samples)
-const detailStatusBars = computed(() => {
-  const samples = detailSamples.value
-  if (samples.length <= 30) return samples
-  const step = (samples.length - 1) / 29
-  return Array.from({ length: 30 }, (_, index) => samples[Math.round(index * step)]).filter(Boolean)
-})
-const detailAvailability = computed(() => detailStatus.value.availability)
-const detailAverageLatency = computed(() => detailStatus.value.average_latency_ms)
-const detailPeakLatency = computed(() => detailStatus.value.peak_latency_ms)
-const detailStatusText = computed(() => detailStatus.value.available ? '正常' : detailSamples.value.length ? '异常' : '待检测')
-const detailStatusKind = computed(() => detailStatus.value.available ? 'success' : detailSamples.value.length ? 'error' : 'warning')
-const detailChartOption = computed(() => {
-  const samples = detailSamples.value
-  const times = samples.map((sample) => sample.checked_at)
-  const latency = samples.map((sample) => sample.available ? sample.latency_ms ?? 0 : null)
-  const failures = samples.map((sample, index) => sample.available ? null : [index, 0])
-  return {
-    animation: false,
-    grid: { left: 42, right: 18, top: 20, bottom: 32 },
-    tooltip: { trigger: 'axis', formatter: (params: Array<{ dataIndex: number }>) => formatChartTooltip(samples, params[0]?.dataIndex ?? 0) },
-    xAxis: { type: 'category', boundaryGap: false, data: times, axisLabel: { formatter: (value: string) => formatChartTime(value) } },
-    yAxis: { type: 'value', min: 0, name: 'ms', nameTextStyle: { padding: [0, 0, 0, 8] } },
-    series: [
-      { name: '延迟', type: 'line', smooth: 0.25, connectNulls: false, data: latency, symbol: 'circle', symbolSize: 6, lineStyle: { color: '#18a058', width: 2 }, itemStyle: { color: '#18a058' }, areaStyle: { color: 'rgba(24,160,88,0.12)' } },
-      { name: '失败', type: 'scatter', data: failures, symbolSize: 9, itemStyle: { color: '#d03050' }, tooltip: { formatter: () => '连接失败' } },
-    ],
-  }
-})
-
-function formatChartTime(value: string) {
-  const date = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z')
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatChartTooltip(samples: FrpServerDetail['status']['samples'], index: number) {
-  const sample = samples[index]
-  if (!sample) return ''
-  const time = formatChartTime(sample.checked_at)
-  if (sample.available) return time + '<br/>延迟：' + (sample.latency_ms ?? 0) + ' ms'
-  return time + '<br/>连接失败' + (sample.error ? '：' + sample.error : '')
-}
-
-function statusBarTooltip(sample: FrpServerDetail['status']['samples'][number]) {
-  const time = formatChartTime(sample.checked_at)
-  if (sample.available) return `${time}：可连接，延迟 ${sample.latency_ms ?? 0} ms`
-  return `${time}：连接失败${sample.error ? `：${sample.error}` : ''}`
-}
-
-function resetServerForm() {
-  Object.assign(serverForm, {
-    name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
-    oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
-    clear_tls_key: false, clear_tls_trusted_ca: false,
-  })
-  Object.assign(serverForm.options, defaultServerOptions())
-}
-
 function resetProxyForm() {
   proxyFormTab.value = 'basic'
-  Object.assign(proxyForm, { server_id: servers.value.find((server) => server.enabled)?.id ?? servers.value[0]?.id ?? 0, name: '', type: 'tcp', local_ip: '127.0.0.1', local_port: 80, remote_port: 0, domains_text: '', locations_text: '', allow_users_text: '', metadatas_text: '', request_headers_text: '', response_headers_text: '', host_header_rewrite: '', enabled: true, remark: '', plugin_type: '', plugin_local_addr: '', plugin_unix_path: '', plugin_local_path: '', plugin_username: '', plugin_password: '' })
+  Object.assign(proxyForm, { server_id: selectedServerId.value ?? servers.value.find((server) => server.enabled)?.id ?? servers.value[0]?.id ?? 0, name: '', type: 'tcp', local_ip: '127.0.0.1', local_port: 80, remote_port: 0, domains_text: '', locations_text: '', allow_users_text: '', metadatas_text: '', request_headers_text: '', response_headers_text: '', host_header_rewrite: '', enabled: true, remark: '', plugin_type: '', plugin_local_addr: '', plugin_unix_path: '', plugin_local_path: '', plugin_username: '', plugin_password: '' })
   Object.assign(proxyForm.options, defaultProxyOptions())
-}
-
-function openServerModal(server?: FrpServer) {
-  editingServer.value = server ?? null
-  serverFormTab.value = 'basic'
-  resetServerForm()
-  if (server) {
-    Object.assign(serverForm, { ...server, token: '', oidc_client_secret: '', agent_token: '', ssh_secret: '' })
-    Object.assign(serverForm.options, server.options)
-  }
-  showServerModal.value = true
-}
-
-function openServerDetail(server: FrpServer) {
-  viewingServer.value = server
-  detailStatus.value = { available: false, availability: 0, average_latency_ms: 0, peak_latency_ms: 0, samples: [] }
-  detailProxies.value = []
-  detailLogs.value = []
-  showServerDetail.value = true
-  void loadDetailData()
-}
-
-async function loadDetailData() {
-  const server = viewingServer.value
-  if (!server) return
-  try {
-    const [detail, nextLogs] = await Promise.all([api.getFrpServerDetail(server.id), api.getFrpLogs(300)])
-    viewingServer.value = detail.server
-    detailStatus.value = detail.status
-    serverDiagnostics.value = { ...serverDiagnostics.value, [server.id]: {
-      server_id: server.id, available: detail.status.available, latency_ms: detail.status.average_latency_ms,
-      location: serverDiagnostics.value[server.id]?.location, error: detail.status.last_error,
-    } }
-    detailProxies.value = asList(detail.proxies)
-    const matchingLogs = asList(nextLogs).filter((line) => line.includes(server.server_addr) || line.includes(`[${server.name}]`))
-    detailLogs.value = (matchingLogs.length ? matchingLogs : asList(nextLogs)).slice(-100)
-  } catch (error) { message.error(error instanceof Error ? error.message : '读取服务端详情失败') }
-}
-
-
-const showServerLogs = ref(false)
-const serverLogsTarget = ref<FrpServer | null>(null)
-const serverLogLines = ref<string[]>([])
-const serverLogsLoading = ref(false)
-
-function openServerLogs(server: FrpServer) {
-  serverLogsTarget.value = server
-  showServerLogs.value = true
-  void loadServerLogs()
-}
-
-async function loadServerLogs() {
-  const server = serverLogsTarget.value
-  if (!server) return
-  serverLogsLoading.value = true
-  try { serverLogLines.value = asList(await api.getFrpLogs(200, server.id)) }
-  catch (error) { message.error(error instanceof Error ? error.message : '读取服务端日志失败') }
-  finally { serverLogsLoading.value = false }
 }
 
 function openProxyModal(proxy?: FrpProxy) {
@@ -1446,102 +967,14 @@ async function load() {
     status.value = nextStatus
     servers.value = asList(nextServers)
     proxies.value = asList(nextProxies)
-    void loadServerDiagnostics(servers.value)
+    // 选中服务端失效（被删 / 首次进入）时回落到第一台，右侧表格不空
+    if (selectedServerId.value === null || !servers.value.some((item) => item.id === selectedServerId.value)) {
+      selectedServerId.value = servers.value[0]?.id ?? null
+    }
     void loadProxyTraffic()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '加载 FRP 配置失败'
   }
-}
-
-async function loadServerDiagnostics(items: FrpServer[]) {
-  if (items.length === 0 || Date.now() - diagnosticsAt < 30_000) return
-  diagnosticsAt = Date.now()
-  const results = await Promise.all(items.map(async (server) => {
-    try { return await api.getFrpServerDiagnostics(server.id) }
-    catch { return { server_id: server.id, available: false, error: '不可达' } }
-  }))
-  serverDiagnostics.value = Object.fromEntries(results.map((item) => [item.server_id, item]))
-}
-
-function latencyText(server: FrpServer) {
-  const diagnostics = serverDiagnostics.value[server.id]
-  if (!diagnostics) return '未测速'
-  if (!diagnostics.available) return diagnostics.error?.includes('本机网络策略') ? '受限' : '不可达'
-  return `${diagnostics.latency_ms ?? 0} ms`
-}
-
-function latencyDetail(server: FrpServer) {
-  return serverDiagnostics.value[server.id]?.error || ''
-}
-
-function locationText(server: FrpServer) {
-  return serverDiagnostics.value[server.id]?.location || server.server_addr || '定位中'
-}
-
-function authMethodText(method: FrpServerOptions['auth_method']) {
-  return { none: '无认证', token: 'Token', oidc: 'OIDC（开放身份连接）' }[method] ?? method
-}
-
-function serverStartupText(server: FrpServer) {
-  const labels = { starting: '启动中', running: '运行中', stopped: '已停止', error: '异常' }
-  return labels[server.boot_status] ?? '已停止'
-}
-
-function serverStartupType(server: FrpServer) {
-  if (server.boot_status === 'running') return 'success'
-  if (server.boot_status === 'starting') return 'warning'
-  if (server.boot_status === 'error') return 'error'
-  return 'default'
-}
-
-function processStateText(server: FrpServer) {
-  return ({ starting: '启动中', running: '运行中', stopped: '已停止', error: '异常', unknown: '未知' } as Record<string, string>)[server.process_state] ?? '未知'
-}
-
-function connectionStateText(server: FrpServer) {
-  return ({ connected: '已连接', connecting: '连接中', disconnected: '未连接', error: '连接异常', unknown: '连接未知' } as Record<string, string>)[server.connection_state] ?? '连接未知'
-}
-
-function serverStateTooltip(server: FrpServer) {
-  return `期望：${serverStartupText(server)}；frpc：${processStateText(server)}；FRP：${connectionStateText(server)}${server.last_error ? `；${server.last_error}` : ''}`
-}
-
-async function saveServer() {
-  savingServer.value = true
-  try {
-    const payload: FrpServerPayload = {
-      name: serverForm.name, server_addr: serverForm.server_addr, server_port: serverForm.server_port,
-      agent_url: serverForm.agent_url, agent_token: serverForm.agent_token, ssh_host: serverForm.ssh_host,
-      ssh_port: serverForm.ssh_port, ssh_user: serverForm.ssh_user, ssh_auth: serverForm.ssh_auth,
-      ssh_secret: serverForm.ssh_secret, mgmt_enabled: serverForm.mgmt_enabled,
-      tls_enabled: serverForm.tls_enabled, tls_server_name: serverForm.tls_server_name, enabled: serverForm.enabled,
-      token: serverForm.token, options: { ...serverForm.options }, oidc_client_secret: serverForm.oidc_client_secret,
-      dashboard_password: serverForm.dashboard_password, clear_dashboard_password: serverForm.clear_dashboard_password,
-      tls_certificate: serverForm.tls_certificate, tls_key: serverForm.tls_key, tls_trusted_ca: serverForm.tls_trusted_ca,
-      clear_tls_certificate: serverForm.clear_tls_certificate, clear_tls_key: serverForm.clear_tls_key,
-      clear_tls_trusted_ca: serverForm.clear_tls_trusted_ca,
-    }
-    if (editingServer.value) await api.updateFrpServer(editingServer.value.id, payload)
-    else await api.createFrpServer(payload)
-    showServerModal.value = false
-    message.success('服务端配置已保存')
-    await load()
-  } catch (error) { message.error(error instanceof Error ? error.message : '保存失败') }
-  finally { savingServer.value = false }
-}
-
-async function testAgent(server: FrpServer) {
-  agentActionId.value = server.id
-  try { await api.testFrpAgent(server.id); message.success('Agent 连接正常') }
-  catch (error) { message.error(error instanceof Error ? error.message : 'Agent 连接失败') }
-  finally { agentActionId.value = null }
-}
-
-async function pushAgentConfig(server: FrpServer) {
-  agentActionId.value = server.id
-  try { await api.pushFrpConfigToAgent(server.id); message.success('frps 配置已下发') }
-  catch (error) { message.error(error instanceof Error ? error.message : '下发配置失败') }
-  finally { agentActionId.value = null }
 }
 
 async function saveProxy() {
@@ -1594,61 +1027,6 @@ async function runAction(action: 'start' | 'stop' | 'reload') {
 function startClient() { return runAction('start') }
 function stopClient() { return runAction('stop') }
 function reloadClient() { return runAction('reload') }
-
-async function startServer(server: FrpServer) {
-  serverStartingId.value = server.id
-  try {
-    const updated = await api.startFrpServer(server.id)
-    servers.value = servers.value.map((item) => item.id === updated.id ? updated : item)
-    viewingServer.value = updated
-    message.success('服务端已标记为启动状态')
-  } catch (error) { message.error(error instanceof Error ? error.message : '启动服务端失败') }
-  finally { serverStartingId.value = null }
-}
-
-async function stopServer(server: FrpServer) {
-  serverStartingId.value = server.id
-  try {
-    const updated = await api.stopFrpServer(server.id)
-    servers.value = servers.value.map((item) => item.id === updated.id ? updated : item)
-    viewingServer.value = updated
-    message.success('服务端已停止')
-  } catch (error) { message.error(error instanceof Error ? error.message : '停止服务端失败') }
-  finally { serverStartingId.value = null }
-}
-
-async function measureServer(server: FrpServer) {
-  measuringId.value = server.id
-  try {
-    const diagnostics = await api.getFrpServerDiagnostics(server.id)
-    serverDiagnostics.value = { ...serverDiagnostics.value, [server.id]: diagnostics }
-    if (!diagnostics.available) {
-      message.error(diagnostics.error || '控制端口不可达')
-      return
-    }
-    // TCP 可达不等于可用：登录失败等关键项单独提示
-    const login = diagnostics.checks?.find((check) => check.name === 'frpc_login')
-    if (login?.state === 'failed') {
-      message.warning(`控制端口可达，但 ${login.detail ?? 'frpc 登录失败'}`)
-      return
-    }
-    message.info(`控制端口延迟 ${diagnostics.latency_ms ?? 0} ms`)
-  } catch (error) { message.error(error instanceof Error ? error.message : '测速失败') }
-  finally { measuringId.value = null }
-}
-
-const diagnosticCheckLabels: Record<string, string> = {
-  tcp_reachable: '控制端口', frpc_login: 'frpc 登录', proxy_reachable: '发布入口', dns_resolution: 'DNS 解析', location: '定位',
-}
-function checkLabel(name: string) {
-  return diagnosticCheckLabels[name] ?? name
-}
-function checkStateText(state: string) {
-  return { ok: '正常', failed: '异常', unknown: '未知' }[state] ?? state
-}
-function checkTagType(state: string) {
-  return state === 'ok' ? 'success' : state === 'failed' ? 'error' : 'warning'
-}
 
 async function openRuntimeModal() {
   showRuntimeModal.value = true
@@ -1768,20 +1146,9 @@ function formatBinarySize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-async function testServer(server: FrpServer) {
-  testingId.value = server.id
-  try { message.success((await api.testFrpServer(server.id)).message) }
-  catch (error) { message.error(error instanceof Error ? error.message : '校验失败') }
-  finally { testingId.value = null }
-}
-
 async function toggleProxy(proxy: FrpProxy, enabled: boolean) {
   try { await api.updateFrpProxy(proxy.id, { ...proxy, enabled }); await load() }
   catch (error) { message.error(error instanceof Error ? error.message : '更新失败') }
-}
-
-function confirmDeleteServer(server: FrpServer) {
-  dialog.warning({ title: '删除服务端', content: `将删除「${server.name}」及其规则；不会停止本机 frpc。是否继续？`, positiveText: '删除', negativeText: '取消', onPositiveClick: async () => { try { await api.deleteFrpServer(server.id); message.success('服务端已删除'); await load() } catch (error) { message.error(error instanceof Error ? error.message : '删除失败') } } })
 }
 
 function confirmDeleteProxy(proxy: FrpProxy) {
@@ -1791,19 +1158,6 @@ function confirmDeleteProxy(proxy: FrpProxy) {
 async function loadExport() {
   try { exportContent.value = (await api.exportFrpConfig()).content }
   catch (error) { message.error(error instanceof Error ? error.message : '导出失败') }
-}
-
-async function openFRPSConfig(server: FrpServer) {
-  frpsConfigTarget.value = server
-  showFRPSConfig.value = true
-  frpsCompare.value = null
-  frpsConfigLoading.value = true
-  try { frpsConfigContent.value = (await api.getFrpFRPSConfig(server.id)).content }
-  catch (error) {
-    showFRPSConfig.value = false
-    message.error(error instanceof Error ? error.message : '生成 frps.toml 失败')
-  }
-  finally { frpsConfigLoading.value = false }
 }
 
 function proxyPublicEndpoint(proxy: FrpProxy) {
@@ -1850,33 +1204,8 @@ function proxyTransportTags(proxy: FrpProxy) {
   return tags
 }
 
-function openTLSFilePicker(target: 'certificate' | 'key' | 'ca') {
-  const inputs = { certificate: certificateFileInput, key: keyFileInput, ca: caFileInput }
-  inputs[target].value?.click()
-}
-
-async function loadTLSFile(target: 'certificate' | 'key' | 'ca', event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file) return
-  if (file.size > 1 << 20) {
-    message.error('证书文件不能超过 1MB')
-    return
-  }
-  const content = (await file.text()).trim()
-  if (!content.includes('-----BEGIN')) {
-    message.error('请选择 PEM 格式的证书、私钥或 CA 文件')
-    return
-  }
-  if (target === 'certificate') serverForm.tls_certificate = content
-  if (target === 'key') serverForm.tls_key = content
-  if (target === 'ca') serverForm.tls_trusted_ca = content
-  message.success(`已加载 ${file.name}`)
-}
-
 onMounted(async () => { await load(); timer = window.setInterval(load, 5_000) })
-onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling() })
+onUnmounted(() => { if (timer) window.clearInterval(timer); if (proxyRateTimer) { window.clearInterval(proxyRateTimer); proxyRateTimer = null } stopDownloadPolling() })
 </script>
 
 <style scoped>
@@ -2116,10 +1445,6 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .table-muted { margin-top: 4px; color: var(--fonu-text-muted); font-size: 12px; }
 .type-chip { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
 /* 规则表单元格由 render 函数的 h() 创建，不带 scoped 属性，必须 :deep() 才能命中 */
-.frp-rules-table :deep(.table-muted) { color: var(--fonu-text-muted); font-size: 12px; }
-.frp-rules-table :deep(.type-chip) { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
-.frp-rules-table :deep(.mono) { font-family: var(--fonu-mono); font-size: 13px; }
-.frp-rules-table :deep(.text-secondary) { color: var(--fonu-text-secondary); }
 .runtime-actions, .runtime-section__title, .binary-row, .binary-row__actions { display: flex; align-items: center; gap: var(--fonu-space-3); }
 .runtime-actions { justify-content: flex-end; margin-bottom: var(--fonu-space-4); }
 .runtime-section { padding: var(--fonu-space-4) 0; border-top: 1px solid var(--fonu-border); }
@@ -2201,4 +1526,32 @@ onUnmounted(() => { if (timer) window.clearInterval(timer); stopDownloadPolling(
 .frps-compare--warn {
   color: var(--fonu-warning);
 }
+/* 左：服务端列表；右：该服务端的穿透规则（与「公网服务端」页 .agent-layout 同构） */
+.frp-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: var(--fonu-space-4); align-items: start; }
+.server-sidebar { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); overflow: hidden; }
+.server-sidebar__head { padding: var(--fonu-space-4); border-bottom: 1px solid var(--fonu-border); }
+.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
+.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); flex-shrink: 0; }
+.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--fonu-space-3); max-height: 720px; overflow: auto; }
+.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); background: var(--fonu-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.server-item:hover { border-color: var(--fonu-brand-hover); }
+.server-item--active { border-color: var(--fonu-brand); box-shadow: 0 0 0 1px var(--fonu-brand-soft); }
+.server-item__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.server-item__name { font-size: 14px; font-weight: 600; color: var(--fonu-text); overflow-wrap: anywhere; }
+.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--fonu-text-secondary); overflow-wrap: anywhere; }
+.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-3); margin-top: 6px; font-size: 12px; color: var(--fonu-text-muted); }
+.server-item__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.rule-pane { min-width: 0; display: flex; flex-direction: column; gap: var(--fonu-space-4); }
+.rule-pane__head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--fonu-space-3); padding: var(--fonu-space-3) var(--fonu-space-4); background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); }
+.rule-pane__intro { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--fonu-space-3); min-width: 0; }
+.rule-pane__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); }
+.rule-pane__sub { font-size: 12.5px; color: var(--fonu-text-secondary); }
+.rule-pane__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-2); }
+.rule-table-wrap { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); background: var(--fonu-surface); box-shadow: var(--fonu-shadow); overflow: hidden; padding: var(--fonu-space-2) 0; }
+.frp-rules-table :deep(.table-muted) { color: var(--fonu-text-muted); font-size: 12px; }
+.frp-rules-table :deep(.type-chip) { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
+.frp-rules-table :deep(.mono) { font-family: var(--fonu-mono); font-size: 13px; }
+.frp-rules-table :deep(.text-secondary) { color: var(--fonu-text-secondary); }
+@media (max-width: 1100px) { .frp-layout { grid-template-columns: 1fr; } .server-sidebar__list { max-height: none; } }
 </style>
