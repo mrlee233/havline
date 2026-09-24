@@ -40,7 +40,8 @@ import (
 // 0.12.0：frps 安装包的 proxy 参数改白名单 + 下载后校验 SHA-256；Basic Auth 自动生成的密码不再写进
 // nginx 配置注释（改为只在 PUT 响应里回一次）。
 // 0.12.1：frps 启停失败如实回报（不再无条件写「已启动」）；HTTP 服务补 ReadTimeout/IdleTimeout。
-const AgentVersion = "0.12.1"
+// 0.12.2：新增域名 vhost 的版本列表 / 对比 / 回滚端点；写配置前留版本，校验失败时恢复上一个可用版本。
+const AgentVersion = "0.12.2"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -167,6 +168,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/routes", s.auth(s.routes))
 	mux.HandleFunc("PUT /api/v1/routes", s.auth(s.putRoute))
 	mux.HandleFunc("GET /api/v1/routes/{domain}/conf", s.auth(s.routeConf))
+	mux.HandleFunc("GET /api/v1/routes/{domain}/versions", s.auth(s.routeVersions))
+	mux.HandleFunc("GET /api/v1/routes/{domain}/versions/{name}", s.auth(s.routeVersion))
+	mux.HandleFunc("POST /api/v1/routes/{domain}/versions/{name}/rollback", s.auth(s.rollbackRoute))
 	mux.HandleFunc("PUT /api/v1/china-cidr", s.auth(s.putChinaCIDR))
 	mux.HandleFunc("POST /api/v1/nginx/install", s.auth(s.installNginx))
 	mux.HandleFunc("DELETE /api/v1/routes/{domain}", s.auth(s.deleteRoute))
@@ -862,6 +866,8 @@ func (s *Server) deleteRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
+	// 版本历史跟着 vhost 一起清掉，避免同域名重新部署后看到上一轮部署的旧版本
+	_ = os.RemoveAll(fsutil.VersionsDir(path))
 	if err := s.reloadNginx(); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -1086,12 +1092,8 @@ func (s *Server) writeRoute(req routeRequest) error {
 	if err := s.applyLimitState(req); err != nil {
 		return err
 	}
-	if err := atomicWrite(path, []byte(content), 0o640); err != nil {
+	if err := s.applyRouteContent(path, []byte(content)); err != nil {
 		return err
-	}
-	if err := s.validateNginx(); err != nil {
-		_ = os.Remove(path)
-		return fmt.Errorf("nginx config rejected: %w", err)
 	}
 	return s.reloadNginx()
 }

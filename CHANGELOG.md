@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.9] - 2026-09-24
+
+### 新增
+
+- **配置版本历史 / 对比 / 回滚**：主 `nginx.conf` 每次保存前留一份版本（`<path>.versions/`，保留最近 10 次**内容有变化**的改动，内容相同自动去重）；设置页「Nginx 全局配置」内可看版本列表、逐行差异并一键回滚——回滚先过语法校验与 `nginx -t`，不过关不覆盖当前配置
+- 公网反代页的「查看配置」弹窗内可看该域名在 VPS 上的历史版本、与当前配置做差异对比并回滚（需 agent ≥ 0.12.2）
+- **通知渠道补齐**：新增企业微信机器人、钉钉机器人、飞书机器人（钉钉正文以「Fonu · 」开头，机器人用「自定义关键词 = Fonu」即可命中；加签方式暂不支持）
+- **阈值型告警**（默认关闭）：CPU / 内存 / 磁盘持续超阈值、隧道连续 N 次未在 frps 上注册时通知，恢复时再通知一次；阈值与开关在设置页「告警事件」里配置
+- **API Token**：新增 `api_tokens` 表与 `Authorization: Bearer <token>` 认证，供脚本 / HomeAssistant / 手机快捷指令调用；设置页「高级」可签发（明文只显示一次）、查看最近使用时间与撤销
+
+### 修复
+
+- agent 写 vhost 时 `nginx -t` 校验失败**不再直接删文件**（那等于把在跑的站点从磁盘上抹掉），改为恢复上一个可用版本
+- 配置版本名做路径校验，拒绝带 `/` 或 `..` 的名称，避免接口被用来读版本目录以外的文件
+- 通知：切换 Webhook 预设时服务地址自动换成该预设默认值（此前会把 Bark 的 `api.day.app` 带到企业微信上）
+- API Token 的令牌管理、改密、退出**只允许登录会话**——否则一个 write 令牌能给自己提权或无限续期
+
+### 改进
+
+- `internal/fsutil` 新增 `BackupVersioned` / `ListVersions` / `ReadVersion`；`internal/nginx` 的回滚与 `Apply` 共用抽出的 `activate()`，两条路径行为一致
+- 新增 `internal/monitor` 巡检包（每 2 分钟一轮，注册进 `internal/scheduler`）；资源类告警同一项 30 分钟静默期，回落到阈值以下即清冷却，开关关闭时连采集与探测都跳过
+- `providerUsesKey()` 收敛「凭据放 Key 还是 WebhookSecret」的判定；前端新增 `ConfigDiffView.vue` 与 `utils/diff.ts`（LCS 行级差异，超长文本退化为整体替换）
+- API Token 的 `last_used_at` 限频回写（1 分钟一次），单连接 SQLite 上不做每请求写
+
+### 测试
+
+- `internal/auth/token_test.go`（令牌生命周期 / 过期 / 非法输入 / 明文不落盘）、`internal/api/middleware_test.go`（只读令牌只读、写令牌可写、令牌不能管理令牌、错误凭据 401）
+- `internal/monitor/monitor_test.go`（连续失败只报一次、恢复报一次、未达阈值静默）
+- `internal/notify/push_test.go` 增加企业微信 / 钉钉 / 飞书三家的端点与 payload 用例；`internal/fsutil` 增加版本列表 / 内容去重 / 路径校验用例
+
+### 变更
+
+- `AgentVersion` 0.12.1 → **0.12.2**（域名 vhost 的版本列表 / 对比 / 回滚端点，写配置前留版本）；内嵌 `fonu-agent-linux-amd64` 与 `-arm64` 已重编，VPS 上需点「升级 Agent」才会生效
+- 版本号提升到 1.2.9（版本单一来源仍是根目录 `VERSION`）；`web/package.json` 同步对齐
+- 新增 `docs/feature-benchmark-2026-09-24.md`：同类项目对标与增补建议，含 §九 本轮 P0 实施状态
+
 ## [v1.2.8] - 2026-09-24
 
 ### 修复

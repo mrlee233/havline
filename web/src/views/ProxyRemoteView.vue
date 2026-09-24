@@ -340,7 +340,7 @@
         </div>
       </n-modal>
 
-      <!-- 反代配置查看 -->
+      <!-- 反代配置查看 / 版本对比与回滚 -->
       <n-modal v-model:show="confModal" :mask-closable="true">
         <div class="proxy-modal">
           <div class="proxy-modal__header">
@@ -353,7 +353,49 @@
               <span class="mono">fonu-{{ confDomain }}.conf</span>）。请勿在 VPS 上手工修改：
               下次部署会被重新生成覆盖，改动请到「部署设置」或穿透规则里调整。
             </p>
-            <pre class="code-block conf-view">{{ confContent || '加载中…' }}</pre>
+            <div class="conf-layout">
+              <aside class="conf-versions">
+                <div class="conf-versions__head">
+                  <span>历史版本</span>
+                  <span class="conf-versions__count">{{ routeVersions.length }} / 最近 10 次</span>
+                </div>
+                <p v-if="versionError" class="conf-versions__empty conf-versions__empty--error">{{ versionError }}</p>
+                <p v-else-if="routeVersions.length === 0" class="conf-versions__empty">暂无历史版本（本次部署是第一个版本）</p>
+                <ul v-else class="conf-versions__list">
+                  <li
+                    v-for="version in routeVersions"
+                    :key="version.name"
+                    class="conf-versions__item"
+                    :class="{ 'conf-versions__item--active': selectedVersionName === version.name }"
+                    @click="selectVersion(version)"
+                  >
+                    <span class="mono conf-versions__time">{{ formatDate(version.created_at) }}</span>
+                    <span class="conf-versions__size">{{ formatBytes(version.size) }}</span>
+                  </li>
+                </ul>
+              </aside>
+              <div class="conf-body">
+                <ConfigDiffView
+                  v-if="selectedVersionName"
+                  :from-text="confContent"
+                  :to-text="selectedVersionContent"
+                  from-label="当前配置"
+                  :to-label="`版本 ${formatDate(versionCreatedAt(selectedVersionName))}`"
+                />
+                <pre v-else class="code-block conf-view">{{ confContent || '加载中…' }}</pre>
+                <div v-if="selectedVersionName" class="conf-actions">
+                  <span class="conf-actions__hint">回滚前会先做语法校验与 nginx -t，校验不过不会覆盖当前配置。</span>
+                  <n-popconfirm @positive-click="rollbackToVersion">
+                    <template #trigger>
+                      <n-button size="small" type="warning" :loading="rollingBack" :disabled="versionLoading">
+                        回滚到该版本
+                      </n-button>
+                    </template>
+                    确定把 <span class="mono">{{ confDomain }}</span> 的 vhost 回滚到该版本？
+                  </n-popconfirm>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="modal-footer">
             <n-button :disabled="!confContent" @click="copyConf">复制</n-button>
@@ -371,6 +413,7 @@ import {
   CheckmarkCircleOutline, CopyOutline, InformationCircleOutline, LayersOutline, OpenOutline, PulseOutline, RefreshOutline, SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import EmptyState from '../components/EmptyState.vue'
+import ConfigDiffView from '../components/ConfigDiffView.vue'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import FonuCard from '../components/FonuCard.vue'
 import LoadError from '../components/LoadError.vue'
@@ -379,7 +422,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type {
   CertificateRecord, FrpAgentRouteDetail, FrpAgentRouteHealth, FrpAgentStatus, FrpProxy, FrpProxyTraffic,
-  FrpRouteDriftReport, FrpServer,
+  FrpRouteDriftReport, FrpServer, NginxConfigVersionEntry,
 } from '../api/types'
 import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../utils/format'
 import { copyText } from '../utils/clipboard'
@@ -430,6 +473,13 @@ const settingsForm = ref({
 const confModal = ref(false)
 const confDomain = ref('')
 const confContent = ref('')
+const confProxyId = ref<number | null>(null)
+const routeVersions = ref<NginxConfigVersionEntry[]>([])
+const selectedVersionName = ref('')
+const selectedVersionContent = ref('')
+const versionLoading = ref(false)
+const versionError = ref('')
+const rollingBack = ref(false)
 
 const server = computed(() => servers.value.find((item) => item.id === selectedId.value) ?? null)
 const agentStatusOk = computed(() => statusLoaded.value && agentStatus.value !== null)
@@ -840,14 +890,72 @@ async function viewConf(candidate: FrpProxy) {
   if (!current) return
   if (busy.value) return
   busy.value = `conf:${candidate.id}`
+  confProxyId.value = candidate.id
   try {
     const conf = await api.getFrpAgentRouteConf(current.id, candidate.id)
     confDomain.value = conf.domain
     confContent.value = conf.content
     confModal.value = true
+    await loadRouteVersions(candidate.id)
   } catch (error) {
     loadErrorMsg.value = `读取配置失败 —— ${error instanceof Error ? error.message : '未知错误'}`
   } finally { busy.value = null }
+}
+
+// 版本历史读不到不影响「查看配置」本身：只在弹窗内提示（老版本 agent 没有这个端点）
+async function loadRouteVersions(proxyId: number) {
+  const current = server.value
+  if (!current) return
+  routeVersions.value = []
+  selectedVersionName.value = ''
+  selectedVersionContent.value = ''
+  versionError.value = ''
+  try {
+    const result = await api.getFrpAgentRouteVersions(current.id, proxyId)
+    routeVersions.value = result.versions ?? []
+  } catch (error) {
+    versionError.value = error instanceof Error ? error.message : '读取版本历史失败'
+  }
+}
+
+// 点已选中的版本 = 取消对比，回到当前配置
+async function selectVersion(version: NginxConfigVersionEntry) {
+  const current = server.value
+  if (!current || confProxyId.value === null || versionLoading.value) return
+  if (selectedVersionName.value === version.name) {
+    selectedVersionName.value = ''
+    selectedVersionContent.value = ''
+    return
+  }
+  versionLoading.value = true
+  try {
+    const result = await api.getFrpAgentRouteVersion(current.id, confProxyId.value, version.name)
+    selectedVersionName.value = version.name
+    selectedVersionContent.value = result.content
+  } catch (error) {
+    message.error(`读取该版本失败：${error instanceof Error ? error.message : '未知错误'}`)
+  } finally { versionLoading.value = false }
+}
+
+async function rollbackToVersion() {
+  const current = server.value
+  if (!current || confProxyId.value === null || !selectedVersionName.value) return
+  rollingBack.value = true
+  try {
+    await api.rollbackFrpAgentRouteVersion(current.id, confProxyId.value, selectedVersionName.value)
+    message.success('已回滚到所选版本，Nginx 已重载')
+    const conf = await api.getFrpAgentRouteConf(current.id, confProxyId.value)
+    confContent.value = conf.content
+    // 回滚会新增一个版本，且可能改变漂移状态，两边都要重读
+    await loadRouteVersions(confProxyId.value)
+    await refreshAll()
+  } catch (error) {
+    message.error(`回滚失败：${error instanceof Error ? error.message : '未知错误'}`)
+  } finally { rollingBack.value = false }
+}
+
+function versionCreatedAt(name: string): string {
+  return routeVersions.value.find((item) => item.name === name)?.created_at ?? ''
 }
 
 async function copyConf() {
@@ -979,6 +1087,30 @@ onMounted(() => { void load() })
 .conf-scroll { padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
 .conf-scroll .field-hint { margin-bottom: var(--fonu-space-3); line-height: 1.65; }
 .conf-view { max-height: 62vh; }
+/* 版本面板 + 差异区：左侧固定宽度列表，右侧自适应（与弹窗 900px 宽度对齐） */
+.conf-layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--fonu-space-4); }
+.conf-versions { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: hidden; }
+.conf-versions__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
+  background: var(--fonu-bg-muted); font-size: 12px; color: var(--fonu-text-secondary);
+}
+.conf-versions__count { color: var(--fonu-text-muted); }
+.conf-versions__empty { padding: var(--fonu-space-3); font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
+.conf-versions__empty--error { color: var(--fonu-error); }
+.conf-versions__list { max-height: 52vh; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.conf-versions__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
+  font-size: 12px; color: var(--fonu-text-secondary); cursor: pointer;
+}
+.conf-versions__item:hover { background: var(--fonu-bg-muted); }
+.conf-versions__item--active { background: var(--fonu-info-soft); color: var(--fonu-text); }
+.conf-versions__time { font-size: 12px; }
+.conf-versions__size { flex: none; color: var(--fonu-text-muted); }
+.conf-body { min-width: 0; display: grid; gap: var(--fonu-space-3); align-content: start; }
+.conf-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
+.conf-actions__hint { font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
 .form-hint { color: var(--fonu-text-secondary); font-size: 12.5px; }
 .mono { font-family: var(--fonu-mono); font-size: 13px; }
 .mono-wrap { white-space: normal; word-break: break-all; }

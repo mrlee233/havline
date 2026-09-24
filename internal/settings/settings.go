@@ -8,68 +8,74 @@ import (
 )
 
 const (
-	KeyTheme                 = "theme"
-	KeyTimezone              = "timezone"
-	KeyLogRetentionDays      = "log_retention_days"
-	KeyDDNSCheckInterval     = "ddns_check_interval_minutes"
-	KeyCertRenewThreshold    = "cert_renew_threshold_days"
-	KeyRootDomain            = "root_domain"
-	KeyACMEEmail             = "acme_email"
-	KeyACMECA                = "acme_ca"
-	KeyZeroSSLAPIKey         = "zerossl_api_key"
-	KeyNotifyWebhookURL      = "notify_webhook_url"
-	KeyNotifyType            = "notify_type"
-	KeyNotifyEmailJSON       = "notify_email_json"
-	KeyNotifySMTPPassword    = "notify_smtp_password"
-	KeyNotifyWebhookJSON     = "notify_webhook_json"
-	KeyNotifyWebhookSecret   = "notify_webhook_secret"
-	KeyNotifyTelegramJSON    = "notify_telegram_json"
-	KeyNotifyTelegramToken   = "notify_telegram_token"
-	KeyNotifyOnDDNSError            = "notify_on_ddns_error" // legacy, migrated to KeyNotifyOnDDNSFailure
-	KeyNotifyOnCertError            = "notify_on_cert_error" // legacy, migrated to KeyNotifyOnCertExpiry
-	KeyNotifyOnNginxError           = "notify_on_nginx_error" // legacy, ignored
-	KeyNotifyOnDDNSIPChange         = "notify_on_ddns_ip_change"
-	KeyNotifyOnDDNSFailure          = "notify_on_ddns_failure"
-	KeyNotifyOnCertExpiry           = "notify_on_cert_expiry"
-	KeyNotifyOnCertRenewSuccess     = "notify_on_cert_renew_success"
-	KeyNotifyOnIPFrequentAccess     = "notify_on_ip_frequent_access"
-	KeyNotifyOnCertRenewFailure     = "notify_on_cert_renew_failure"
-	KeyNotifyOnLoginFailure         = "notify_on_login_failure"
-	KeyNotifyOnNginxReloadFailure   = "notify_on_nginx_reload_failure"
-	KeyNotifyIPFrequentThreshold    = "notify_ip_frequent_threshold"
-	KeyNotifyIPFrequentWindowSec    = "notify_ip_frequent_window_sec"
-	KeyNotifyLoginFailureThreshold  = "notify_login_failure_threshold"
-	KeyNotifyLoginFailureWindowSec  = "notify_login_failure_window_sec"
-	KeyTrustedProxy          = "trusted_proxy_json"
-	KeyGlobalIPBlacklist     = "global_ip_blacklist"
-	KeyGlobalIPWhitelist     = "global_ip_whitelist"
-	KeyChinaCIDRUpdateHours  = "china_cidr_update_interval_hours"
-	KeyChinaCIDRSourceV4     = "china_cidr_source_url_v4"
-	KeyChinaCIDRSourceV6     = "china_cidr_source_url_v6"
-	KeyChinaCIDRUpdatedAt    = "china_cidr_updated_at"
-	KeyChinaCIDRCountV4      = "china_cidr_count_v4"
-	KeyChinaCIDRCountV6      = "china_cidr_count_v6"
-	KeyChinaCIDRLastError    = "china_cidr_last_error"
-	KeyFRPEnabled            = "frp_enabled"
-	KeyFRPServerAddr         = "frp_server_addr"
-	KeyFRPServerPort         = "frp_server_port"
-	KeyFRPAuthToken          = "frp_auth_token"
-	KeyFRPTLSEnabled         = "frp_tls_enabled"
-	KeyFRPCustomDomains      = "frp_custom_domains"
-	KeyFRPLastError          = "frp_last_error"
-	KeyFRPStartedAt          = "frp_started_at"
-	KeyNginxGlobalMode       = "nginx_global_mode"
+	KeyTheme                       = "theme"
+	KeyTimezone                    = "timezone"
+	KeyLogRetentionDays            = "log_retention_days"
+	KeyDDNSCheckInterval           = "ddns_check_interval_minutes"
+	KeyCertRenewThreshold          = "cert_renew_threshold_days"
+	KeyRootDomain                  = "root_domain"
+	KeyACMEEmail                   = "acme_email"
+	KeyACMECA                      = "acme_ca"
+	KeyZeroSSLAPIKey               = "zerossl_api_key"
+	KeyNotifyWebhookURL            = "notify_webhook_url"
+	KeyNotifyType                  = "notify_type"
+	KeyNotifyEmailJSON             = "notify_email_json"
+	KeyNotifySMTPPassword          = "notify_smtp_password"
+	KeyNotifyWebhookJSON           = "notify_webhook_json"
+	KeyNotifyWebhookSecret         = "notify_webhook_secret"
+	KeyNotifyTelegramJSON          = "notify_telegram_json"
+	KeyNotifyTelegramToken         = "notify_telegram_token"
+	KeyNotifyOnDDNSError           = "notify_on_ddns_error"  // legacy, migrated to KeyNotifyOnDDNSFailure
+	KeyNotifyOnCertError           = "notify_on_cert_error"  // legacy, migrated to KeyNotifyOnCertExpiry
+	KeyNotifyOnNginxError          = "notify_on_nginx_error" // legacy, ignored
+	KeyNotifyOnDDNSIPChange        = "notify_on_ddns_ip_change"
+	KeyNotifyOnDDNSFailure         = "notify_on_ddns_failure"
+	KeyNotifyOnCertExpiry          = "notify_on_cert_expiry"
+	KeyNotifyOnCertRenewSuccess    = "notify_on_cert_renew_success"
+	KeyNotifyOnIPFrequentAccess    = "notify_on_ip_frequent_access"
+	KeyNotifyOnCertRenewFailure    = "notify_on_cert_renew_failure"
+	KeyNotifyOnLoginFailure        = "notify_on_login_failure"
+	KeyNotifyOnNginxReloadFailure  = "notify_on_nginx_reload_failure"
+	KeyNotifyIPFrequentThreshold   = "notify_ip_frequent_threshold"
+	KeyNotifyIPFrequentWindowSec   = "notify_ip_frequent_window_sec"
+	KeyNotifyLoginFailureThreshold = "notify_login_failure_threshold"
+	KeyNotifyLoginFailureWindowSec = "notify_login_failure_window_sec"
+	KeyNotifyOnResourceThreshold   = "notify_on_resource_threshold"
+	KeyNotifyOnTunnelDown          = "notify_on_tunnel_down"
+	KeyNotifyCPUThreshold          = "notify_cpu_threshold"
+	KeyNotifyMemoryThreshold       = "notify_memory_threshold"
+	KeyNotifyDiskThreshold         = "notify_disk_threshold"
+	KeyNotifyTunnelFailThreshold   = "notify_tunnel_fail_threshold"
+	KeyTrustedProxy                = "trusted_proxy_json"
+	KeyGlobalIPBlacklist           = "global_ip_blacklist"
+	KeyGlobalIPWhitelist           = "global_ip_whitelist"
+	KeyChinaCIDRUpdateHours        = "china_cidr_update_interval_hours"
+	KeyChinaCIDRSourceV4           = "china_cidr_source_url_v4"
+	KeyChinaCIDRSourceV6           = "china_cidr_source_url_v6"
+	KeyChinaCIDRUpdatedAt          = "china_cidr_updated_at"
+	KeyChinaCIDRCountV4            = "china_cidr_count_v4"
+	KeyChinaCIDRCountV6            = "china_cidr_count_v6"
+	KeyChinaCIDRLastError          = "china_cidr_last_error"
+	KeyFRPEnabled                  = "frp_enabled"
+	KeyFRPServerAddr               = "frp_server_addr"
+	KeyFRPServerPort               = "frp_server_port"
+	KeyFRPAuthToken                = "frp_auth_token"
+	KeyFRPTLSEnabled               = "frp_tls_enabled"
+	KeyFRPCustomDomains            = "frp_custom_domains"
+	KeyFRPLastError                = "frp_last_error"
+	KeyFRPStartedAt                = "frp_started_at"
+	KeyNginxGlobalMode             = "nginx_global_mode"
 )
 
 var Defaults = map[string]string{
-	KeyTheme:              "system",
-	KeyTimezone:           "Asia/Shanghai",
-	KeyLogRetentionDays:   "30",
-	KeyDDNSCheckInterval:  "5",
-	KeyCertRenewThreshold: "30",
-	KeyACMECA:                    "letsencrypt",
-	KeyChinaCIDRUpdateHours:      "24",
-	KeyNginxGlobalMode:           "auto",
+	KeyTheme:                "system",
+	KeyTimezone:             "Asia/Shanghai",
+	KeyLogRetentionDays:     "30",
+	KeyDDNSCheckInterval:    "5",
+	KeyCertRenewThreshold:   "30",
+	KeyACMECA:               "letsencrypt",
+	KeyChinaCIDRUpdateHours: "24",
+	KeyNginxGlobalMode:      "auto",
 }
 
 type Store struct {

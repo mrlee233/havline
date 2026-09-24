@@ -11,9 +11,15 @@ export const WEBHOOK_PROVIDER_OPTIONS: { label: string; value: WebhookProvider }
   { label: 'Bark', value: 'bark' },
   { label: 'ntfy', value: 'ntfy' },
   { label: 'Gotify', value: 'gotify' },
+  { label: '企业微信机器人', value: 'wecom' },
+  { label: '钉钉机器人', value: 'dingtalk' },
+  { label: '飞书机器人', value: 'feishu' },
   { label: '自定义 Webhook', value: 'custom' },
 ]
 
 export const DEFAULT_BARK_SERVER = 'https://api.day.app'
 export const DEFAULT_NTFY_SERVER = 'https://ntfy.sh'
+export const DEFAULT_WECOM_SERVER = 'https://qyapi.weixin.qq.com'
+export const DEFAULT_DINGTALK_SERVER = 'https://oapi.dingtalk.com'
+export const DEFAULT_FEISHU_SERVER = 'https://open.feishu.cn'
 export const MASKED_SECRET = '********'

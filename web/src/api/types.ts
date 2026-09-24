@@ -237,7 +237,7 @@ export interface SystemLogEntry {
 }
 
 export type NotifyType = '' | 'email' | 'webhook' | 'telegram'
-export type WebhookProvider = 'bark' | 'ntfy' | 'gotify' | 'custom'
+export type WebhookProvider = 'bark' | 'ntfy' | 'gotify' | 'wecom' | 'dingtalk' | 'feishu' | 'custom'
 
 export interface NotifyEmailConfig {
   host: string
@@ -893,4 +893,50 @@ export interface GlobalNginxView {
   generated_snippet: string
   content: string
   backups: NginxBackupEntry[]
+}
+
+// 配置版本（本机主配置与公网 vhost 共用同一形状）
+export interface NginxConfigVersionEntry {
+  name: string
+  size: number
+  created_at: string
+}
+
+export interface NginxConfigVersionsView {
+  message?: string
+  content: string
+  versions: NginxConfigVersionEntry[]
+}
+
+export interface NginxConfigVersionView {
+  name: string
+  content: string
+}
+
+// 公网 VPS 上某个域名 vhost 的版本历史（需 agent ≥ 0.12.2）
+export interface FrpAgentRouteVersions {
+  domain: string
+  content: string
+  versions: NginxConfigVersionEntry[]
+}
+
+export interface FrpAgentRouteVersion {
+  domain: string
+  name: string
+  content: string
+}
+
+// API Token：明文只在创建响应里出现一次
+// （令牌本身不含密钥材料，是随机串的 SHA-256 存库）
+export interface ApiToken {
+  id: number
+  name: string
+  scope: 'read' | 'write'
+  expires_at?: string
+  last_used_at?: string
+  created_at: string
+}
+
+export interface CreatedApiToken extends ApiToken {
+  token: string
 }

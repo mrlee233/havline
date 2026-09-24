@@ -398,38 +398,105 @@ func (h *FRPMultiHandler) AgentRoutes(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, details)
 }
 
-// AgentRouteConf 返回指定穿透规则（首个域名）当前反代配置内容。
-func (h *FRPMultiHandler) AgentRouteConf(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r.PathValue("id"))
+// agentRouteTarget 解析服务端与规则归属，返回该规则用于公网反代的首个域名。
+// status 非 0 表示校验失败，调用方直接把 status 与 errMsg 写回响应。
+func (h *FRPMultiHandler) agentRouteTarget(r *http.Request, serverIDRaw, proxyIDRaw string) (serverID, proxyID int64, domain string, status int, errMsg string) {
+	serverID, err := parseID(serverIDRaw)
 	if err != nil {
-		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
-		return
+		return 0, 0, "", http.StatusBadRequest, "FRP 服务端 ID 无效"
 	}
-	proxyID, err := parseID(r.PathValue("proxyID"))
+	proxyID, err = parseID(proxyIDRaw)
 	if err != nil {
-		writeError(r, w, http.StatusBadRequest, "FRP 规则 ID 无效")
-		return
+		return 0, 0, "", http.StatusBadRequest, "FRP 规则 ID 无效"
 	}
 	proxy, err := h.svc.GetProxy(r.Context(), proxyID)
-	if err != nil || proxy.ServerID != id {
-		writeError(r, w, http.StatusNotFound, "FRP 规则不存在")
-		return
+	if err != nil || proxy.ServerID != serverID {
+		return 0, 0, "", http.StatusNotFound, "FRP 规则不存在"
 	}
 	if len(proxy.CustomDomains) == 0 {
-		writeError(r, w, http.StatusBadRequest, "该规则没有自定义域名")
+		return 0, 0, "", http.StatusBadRequest, "该规则没有自定义域名"
+	}
+	return serverID, proxyID, proxy.CustomDomains[0], 0, ""
+}
+
+// AgentRouteConf 返回指定穿透规则（首个域名）当前反代配置内容。
+func (h *FRPMultiHandler) AgentRouteConf(w http.ResponseWriter, r *http.Request) {
+	serverID, proxyID, domain, status, msg := h.agentRouteTarget(r, r.PathValue("id"), r.PathValue("proxyID"))
+	if status != 0 {
+		writeError(r, w, status, msg)
 		return
 	}
-	client, ok := h.svc.AgentClient(r.Context(), id)
+	client, ok := h.svc.AgentClient(r.Context(), serverID)
 	if !ok {
 		writeError(r, w, http.StatusBadGateway, "公网 agent 未配置或 Token 未保存")
 		return
 	}
-	content, err := client.RouteConf(r.Context(), proxy.CustomDomains[0])
+	content, err := client.RouteConf(r.Context(), domain)
 	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"proxy_id": proxyID, "domain": proxy.CustomDomains[0], "content": content})
+	writeJSON(w, http.StatusOK, map[string]any{"proxy_id": proxyID, "domain": domain, "content": content})
+}
+
+// AgentRouteVersions 返回规则首个域名在 VPS 上的当前 vhost 与历史版本，供差异对比与回滚。
+func (h *FRPMultiHandler) AgentRouteVersions(w http.ResponseWriter, r *http.Request) {
+	serverID, _, domain, status, msg := h.agentRouteTarget(r, r.PathValue("id"), r.PathValue("proxyID"))
+	if status != 0 {
+		writeError(r, w, status, msg)
+		return
+	}
+	client, ok := h.svc.AgentClient(r.Context(), serverID)
+	if !ok {
+		writeError(r, w, http.StatusBadGateway, "公网 agent 未配置或 Token 未保存")
+		return
+	}
+	result, err := client.RouteVersions(r.Context(), domain)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// AgentRouteVersion 读取某个历史版本的内容（与当前 vhost 对比用）。
+func (h *FRPMultiHandler) AgentRouteVersion(w http.ResponseWriter, r *http.Request) {
+	serverID, _, domain, status, msg := h.agentRouteTarget(r, r.PathValue("id"), r.PathValue("proxyID"))
+	if status != 0 {
+		writeError(r, w, status, msg)
+		return
+	}
+	client, ok := h.svc.AgentClient(r.Context(), serverID)
+	if !ok {
+		writeError(r, w, http.StatusBadGateway, "公网 agent 未配置或 Token 未保存")
+		return
+	}
+	result, err := client.RouteVersion(r.Context(), domain, r.PathValue("name"))
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// AgentRollbackRouteVersion 让 VPS 上的 vhost 回退到指定版本（agent 侧校验不过会保持当前配置）。
+func (h *FRPMultiHandler) AgentRollbackRouteVersion(w http.ResponseWriter, r *http.Request) {
+	serverID, _, domain, status, msg := h.agentRouteTarget(r, r.PathValue("id"), r.PathValue("proxyID"))
+	if status != 0 {
+		writeError(r, w, status, msg)
+		return
+	}
+	client, ok := h.svc.AgentClient(r.Context(), serverID)
+	if !ok {
+		writeError(r, w, http.StatusBadGateway, "公网 agent 未配置或 Token 未保存")
+		return
+	}
+	result, err := client.RollbackRouteVersion(r.Context(), domain, r.PathValue("name"))
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 // AgentInstallNginx 触发 VPS 上一键安装 Nginx（需 agent 以 root 运行）。

@@ -20,6 +20,12 @@ func SendWebhook(ctx context.Context, client *http.Client, cfg RuntimeConfig, co
 		return sendNtfy(ctx, client, cfg, content.PushTitle, content.PlainBody)
 	case WebhookGotify:
 		return sendGotify(ctx, client, cfg, content.PushTitle, content.PlainBody)
+	case WebhookWecom:
+		return sendWecom(ctx, client, cfg, content.PushTitle, content.PlainBody)
+	case WebhookDingtalk:
+		return sendDingtalk(ctx, client, cfg, content.PushTitle, content.PlainBody)
+	case WebhookFeishu:
+		return sendFeishu(ctx, client, cfg, content.PushTitle, content.PlainBody)
 	case WebhookCustom:
 		return sendCustomWebhook(ctx, client, cfg, content)
 	default:
@@ -58,7 +64,7 @@ func sendNtfy(ctx context.Context, client *http.Client, cfg RuntimeConfig, title
 	}
 	server := normalizeServerURL(cfg.Webhook.Server)
 	if server == "" {
-		server = "https://ntfy.sh"
+		server = DefaultNtfyServer
 	}
 	endpoint := joinURL(server, topic)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(message))
@@ -83,18 +89,69 @@ func sendGotify(ctx context.Context, client *http.Client, cfg RuntimeConfig, tit
 		return fmt.Errorf("Gotify 服务地址未配置")
 	}
 	endpoint := joinURL(server, "message") + "?token=" + url.QueryEscape(token)
-	payload := map[string]any{
+	return postJSON(ctx, client, endpoint, map[string]any{
 		"title":    title,
 		"message":  message,
 		"priority": 5,
+	})
+}
+
+// 企业微信群机器人：POST /cgi-bin/webhook/send?key=<key>，markdown 正文
+func sendWecom(ctx context.Context, client *http.Client, cfg RuntimeConfig, title, message string) error {
+	key := webhookSecret(cfg)
+	if key == "" {
+		return fmt.Errorf("企业微信机器人 Key 未配置")
 	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
+	server := normalizeServerURL(cfg.Webhook.Server)
+	if server == "" {
+		server = DefaultWecomServer
 	}
-	req.Header.Set("Content-Type", "application/json")
-	return doRequest(client, req)
+	endpoint := joinURL(server, "cgi-bin", "webhook", "send") + "?key=" + url.QueryEscape(key)
+	return postJSON(ctx, client, endpoint, map[string]any{
+		"msgtype":  "markdown",
+		"markdown": map[string]string{"content": markdownBody(title, message)},
+	})
+}
+
+// 钉钉群机器人：POST /robot/send?access_token=<key>。
+// 正文固定带 “Fonu · ” 前缀，机器人用「自定义关键词 = Fonu」的安全设置即可命中。
+func sendDingtalk(ctx context.Context, client *http.Client, cfg RuntimeConfig, title, message string) error {
+	key := webhookSecret(cfg)
+	if key == "" {
+		return fmt.Errorf("钉钉机器人 Access Token 未配置")
+	}
+	server := normalizeServerURL(cfg.Webhook.Server)
+	if server == "" {
+		server = DefaultDingtalkServer
+	}
+	titled := "Fonu · " + title
+	endpoint := joinURL(server, "robot", "send") + "?access_token=" + url.QueryEscape(key)
+	return postJSON(ctx, client, endpoint, map[string]any{
+		"msgtype":  "markdown",
+		"markdown": map[string]string{"title": titled, "text": markdownBody(titled, message)},
+	})
+}
+
+// 飞书自定义机器人：POST /open-apis/bot/v2/hook/<key>，纯文本消息
+func sendFeishu(ctx context.Context, client *http.Client, cfg RuntimeConfig, title, message string) error {
+	key := webhookSecret(cfg)
+	if key == "" {
+		return fmt.Errorf("飞书机器人 Key 未配置")
+	}
+	server := normalizeServerURL(cfg.Webhook.Server)
+	if server == "" {
+		server = DefaultFeishuServer
+	}
+	endpoint := joinURL(server, "open-apis", "bot", "v2", "hook", key)
+	return postJSON(ctx, client, endpoint, map[string]any{
+		"msg_type": "text",
+		"content":  map[string]string{"text": title + "\n" + message},
+	})
+}
+
+// markdownBody 拼出国内 IM 机器人都能渲染的 markdown（企业微信 / 钉钉都认 ## 标题 + 正文）
+func markdownBody(title, message string) string {
+	return "## " + title + "\n" + message
 }
 
 func sendCustomWebhook(ctx context.Context, client *http.Client, cfg RuntimeConfig, content AlertContent) error {
@@ -102,8 +159,16 @@ func sendCustomWebhook(ctx context.Context, client *http.Client, cfg RuntimeConf
 	if target == "" {
 		return fmt.Errorf("Webhook URL 未配置")
 	}
-	body, _ := json.Marshal(content.webhookPayload())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
+	return postJSON(ctx, client, target, content.webhookPayload())
+}
+
+// postJSON 发一个 JSON POST：各国内 IM 机器人都是这个形状，只是 URL 与 payload 不同。
+func postJSON(ctx context.Context, client *http.Client, endpoint string, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}

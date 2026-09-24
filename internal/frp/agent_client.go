@@ -80,6 +80,9 @@ func (c *AgentClient) Status(ctx context.Context) (map[string]any, error) {
 // agentMinVersionInsights 是 P1 三个只读端点（metrics / logs / frps-config）要求的最低 agent 版本
 const agentMinVersionInsights = "0.11.0"
 
+// agentMinVersionRouteVersions 是域名 vhost 版本列表 / 对比 / 回滚端点要求的最低 agent 版本
+const agentMinVersionRouteVersions = "0.12.2"
+
 // ErrAgentEndpointMissing 表示 VPS 上的 agent 版本过旧、没有该端点（HTTP 404/405）
 var ErrAgentEndpointMissing = errors.New("VPS 上的 agent 版本过低，不支持该接口")
 
@@ -93,11 +96,11 @@ func (e *statusError) Error() string {
 	return fmt.Sprintf("agent 返回 HTTP %d: %s", e.code, e.body)
 }
 
-// wrapEndpointMissing 把「端点不存在」统一成带升级提示的错误，其它错误原样返回
-func wrapEndpointMissing(err error) error {
+// wrapEndpointMissing 把「端点不存在」统一成带升级提示的错误（按端点给出最低版本），其它错误原样返回
+func wrapEndpointMissing(err error, minVersion string) error {
 	var statusErr *statusError
 	if errors.As(err, &statusErr) && (statusErr.code == http.StatusNotFound || statusErr.code == http.StatusMethodNotAllowed) {
-		return fmt.Errorf("%w（需 ≥ %s），请在服务端详情里升级 Agent", ErrAgentEndpointMissing, agentMinVersionInsights)
+		return fmt.Errorf("%w（需 ≥ %s），请在服务端详情里升级 Agent", ErrAgentEndpointMissing, minVersion)
 	}
 	return err
 }
@@ -106,7 +109,7 @@ func wrapEndpointMissing(err error) error {
 func (c *AgentClient) Metrics(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := c.request(ctx, http.MethodGet, "/api/v1/metrics", nil, &result); err != nil {
-		return nil, wrapEndpointMissing(err)
+		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
 	}
 	return result, nil
 }
@@ -118,7 +121,7 @@ func (c *AgentClient) NginxLogs(ctx context.Context, kind string, lines int) (ma
 	query.Set("lines", strconv.Itoa(lines))
 	var result map[string]any
 	if err := c.request(ctx, http.MethodGet, "/api/v1/logs/nginx?"+query.Encode(), nil, &result); err != nil {
-		return nil, wrapEndpointMissing(err)
+		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
 	}
 	return result, nil
 }
@@ -127,7 +130,7 @@ func (c *AgentClient) NginxLogs(ctx context.Context, kind string, lines int) (ma
 func (c *AgentClient) Certs(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := c.request(ctx, http.MethodGet, "/api/v1/certs", nil, &result); err != nil {
-		return nil, wrapEndpointMissing(err)
+		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
 	}
 	return result, nil
 }
@@ -136,7 +139,7 @@ func (c *AgentClient) Certs(ctx context.Context) (map[string]any, error) {
 func (c *AgentClient) NginxReload(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := c.request(ctx, http.MethodPost, "/api/v1/nginx/reload", nil, &result); err != nil {
-		return nil, wrapEndpointMissing(err)
+		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
 	}
 	return result, nil
 }
@@ -145,7 +148,7 @@ func (c *AgentClient) NginxReload(ctx context.Context) (map[string]any, error) {
 func (c *AgentClient) FRPSConfig(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := c.request(ctx, http.MethodGet, "/api/v1/frps/config", nil, &result); err != nil {
-		return nil, wrapEndpointMissing(err)
+		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
 	}
 	return result, nil
 }
@@ -257,4 +260,33 @@ func (c *AgentClient) PushCertificate(ctx context.Context, domain, fullchain, pr
 	return c.request(ctx, http.MethodPost, "/api/v1/certs", map[string]string{
 		"domain": domain, "fullchain_pem": fullchain, "key_pem": privateKey,
 	}, nil)
+}
+
+// RouteVersions 返回域名当前 vhost 内容与历史版本列表（需 agent ≥ 0.12.2）。
+func (c *AgentClient) RouteVersions(ctx context.Context, domain string) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodGet, "/api/v1/routes/"+domain+"/versions", nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err, agentMinVersionRouteVersions)
+	}
+	return result, nil
+}
+
+// RouteVersion 读取某个历史版本的内容，供与当前 vhost 做差异对比。
+func (c *AgentClient) RouteVersion(ctx context.Context, domain, name string) (map[string]any, error) {
+	var result map[string]any
+	path := "/api/v1/routes/" + domain + "/versions/" + url.PathEscape(name)
+	if err := c.request(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err, agentMinVersionRouteVersions)
+	}
+	return result, nil
+}
+
+// RollbackRouteVersion 让 VPS 上的 vhost 回退到指定版本。
+func (c *AgentClient) RollbackRouteVersion(ctx context.Context, domain, name string) (map[string]any, error) {
+	var result map[string]any
+	path := "/api/v1/routes/" + domain + "/versions/" + url.PathEscape(name) + "/rollback"
+	if err := c.request(ctx, http.MethodPost, path, nil, &result); err != nil {
+		return nil, wrapEndpointMissing(err, agentMinVersionRouteVersions)
+	}
+	return result, nil
 }

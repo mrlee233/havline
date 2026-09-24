@@ -164,7 +164,11 @@
           <div v-else-if="notifyType === 'webhook'" class="settings-fields settings-fields--compact">
             <div class="settings-field">
               <div class="settings-field__label">Webhook 预设</div>
-              <n-select v-model:value="notifyWebhook.provider" :options="WEBHOOK_PROVIDER_OPTIONS" />
+              <n-select
+                v-model:value="notifyWebhook.provider"
+                :options="WEBHOOK_PROVIDER_OPTIONS"
+                @update:value="onWebhookProviderChange"
+              />
             </div>
             <template v-if="notifyWebhook.provider === 'bark'">
               <div class="settings-field">
@@ -204,6 +208,46 @@
                 label="App Token"
                 :configured="notifyWebhook.has_secret"
                 placeholder="Gotify App Token"
+              />
+            </template>
+            <template v-else-if="notifyWebhook.provider === 'wecom'">
+              <div class="settings-field">
+                <div class="settings-field__label">企业微信服务地址</div>
+                <n-input v-model:value="notifyWebhook.server" :placeholder="DEFAULT_WECOM_SERVER" />
+              </div>
+              <ConfiguredSecretField
+                v-model="notifyWebhookKey"
+                label="机器人 Key"
+                :configured="notifyWebhook.has_secret"
+                placeholder="Webhook 地址里 key= 后面的部分"
+              />
+              <p class="field-hint">群机器人 → 添加机器人 → 复制 Webhook 地址，取其中 key= 之后的部分。</p>
+            </template>
+            <template v-else-if="notifyWebhook.provider === 'dingtalk'">
+              <div class="settings-field">
+                <div class="settings-field__label">钉钉服务地址</div>
+                <n-input v-model:value="notifyWebhook.server" :placeholder="DEFAULT_DINGTALK_SERVER" />
+              </div>
+              <ConfiguredSecretField
+                v-model="notifyWebhookKey"
+                label="Access Token"
+                :configured="notifyWebhook.has_secret"
+                placeholder="access_token 参数值"
+              />
+              <p class="field-hint">
+                安全设置选「自定义关键词」并填 <span class="mono">Fonu</span>：消息正文固定以「Fonu · 」开头。加签方式暂不支持。
+              </p>
+            </template>
+            <template v-else-if="notifyWebhook.provider === 'feishu'">
+              <div class="settings-field">
+                <div class="settings-field__label">飞书服务地址</div>
+                <n-input v-model:value="notifyWebhook.server" :placeholder="DEFAULT_FEISHU_SERVER" />
+              </div>
+              <ConfiguredSecretField
+                v-model="notifyWebhookKey"
+                label="机器人 Key"
+                :configured="notifyWebhook.has_secret"
+                placeholder="Webhook 地址 /hook/ 后面的部分"
               />
             </template>
             <template v-else>
@@ -268,6 +312,26 @@
                       <div class="settings-field">
                         <label class="settings-field__label">统计窗口（秒）</label>
                         <n-input-number v-model:value="notifyLoginFailureWindowSec" :min="10" :max="3600" class="settings-field__input" />
+                      </div>
+                    </template>
+                    <template v-else-if="event.thresholdKey === 'resource'">
+                      <div class="settings-field">
+                        <label class="settings-field__label">CPU 阈值（%）</label>
+                        <n-input-number v-model:value="notifyCPUThreshold" :min="1" :max="100" class="settings-field__input" />
+                      </div>
+                      <div class="settings-field">
+                        <label class="settings-field__label">内存阈值（%）</label>
+                        <n-input-number v-model:value="notifyMemoryThreshold" :min="1" :max="100" class="settings-field__input" />
+                      </div>
+                      <div class="settings-field">
+                        <label class="settings-field__label">磁盘阈值（%）</label>
+                        <n-input-number v-model:value="notifyDiskThreshold" :min="1" :max="100" class="settings-field__input" />
+                      </div>
+                    </template>
+                    <template v-else-if="event.thresholdKey === 'tunnel_fail'">
+                      <div class="settings-field">
+                        <label class="settings-field__label">连续失败次数</label>
+                        <n-input-number v-model:value="notifyTunnelFailThreshold" :min="1" :max="20" class="settings-field__input" />
                       </div>
                     </template>
                   </div>
@@ -421,6 +485,50 @@
             class="nginx-framework__editor"
           />
         </details>
+        <details class="nginx-framework">
+          <summary>主配置版本与回滚（{{ configVersions.length }} 个历史版本）</summary>
+          <p class="field-hint">
+            保存规则或设置时会重新生成 <code>nginx.conf</code>，这里保留最近 10 次内容有变化的版本。
+            若配置被外部改动导致 Nginx 起不来，可直接回滚（回滚前先校验语法与 nginx -t，不过关不会覆盖当前配置）。
+          </p>
+          <p v-if="configVersionsError" class="config-versions__error">{{ configVersionsError }}</p>
+          <div class="config-versions">
+            <div class="config-versions__list">
+              <div
+                v-for="version in configVersions"
+                :key="version.name"
+                class="config-versions__item"
+                :class="{ 'config-versions__item--active': selectedConfigVersion === version.name }"
+                @click="selectConfigVersion(version)"
+              >
+                <span class="mono">{{ formatDate(version.created_at) }}</span>
+                <span class="config-versions__size">{{ formatBytes(version.size) }}</span>
+              </div>
+              <p v-if="configVersions.length === 0" class="config-versions__empty">暂无历史版本</p>
+            </div>
+            <div class="config-versions__body">
+              <ConfigDiffView
+                v-if="selectedConfigVersion"
+                :from-text="configCurrentContent"
+                :to-text="selectedConfigVersionContent"
+                from-label="当前主配置"
+                :to-label="`版本 ${formatDate(configVersionCreatedAt(selectedConfigVersion))}`"
+              />
+              <NginxCodeEditor v-else :model-value="configCurrentContent" readonly min-height="200px" />
+              <div v-if="selectedConfigVersion" class="config-versions__actions">
+                <span class="config-versions__hint">回滚会先校验该版本，通过后才写回并重载 Nginx。</span>
+                <n-popconfirm @positive-click="rollbackConfigVersion">
+                  <template #trigger>
+                    <n-button size="small" type="warning" :loading="configVersionBusy">
+                      回滚到该版本
+                    </n-button>
+                  </template>
+                  确定把主配置回滚到该版本？
+                </n-popconfirm>
+              </div>
+            </div>
+          </div>
+        </details>
         <div class="log-panel-head global-nginx-head">
           <div class="nginx-mode-toggle">
             <n-button
@@ -488,6 +596,68 @@
           小白勿碰。若保存后 Nginx 启动失败，请点「恢复自动生成」或「回滚」还原配置。
         </n-alert>
       </FonuCard>
+      <FonuCard title="API Token" subtitle="给脚本、HomeAssistant、手机快捷指令调用">
+        <p class="field-hint">
+          浏览器之外的调用方拿不到会话 cookie，可在这里签发令牌，用
+          <code>Authorization: Bearer &lt;token&gt;</code> 调用接口。明文只在创建时显示一次。
+        </p>
+        <n-alert v-if="createdToken" type="success" :bordered="false" class="token-created">
+          <div class="token-created__head">
+            <strong>令牌已创建，请立即复制</strong>
+            <span>关闭后无法再次查看明文，只能撤销重建。</span>
+          </div>
+          <div class="token-created__row">
+            <code class="token-created__value">{{ createdToken }}</code>
+            <n-button size="small" @click="copyCreatedToken">复制</n-button>
+          </div>
+        </n-alert>
+
+        <div class="settings-fields settings-fields--compact token-create">
+          <div class="settings-field">
+            <label class="settings-field__label">名称</label>
+            <n-input v-model:value="tokenForm.name" placeholder="例如 homeassistant" />
+          </div>
+          <div class="settings-field">
+            <label class="settings-field__label">权限</label>
+            <n-select v-model:value="tokenForm.scope" :options="tokenScopeOptions" />
+          </div>
+          <div class="settings-field">
+            <label class="settings-field__label">有效期</label>
+            <n-select v-model:value="tokenForm.expiresInDays" :options="tokenExpiryOptions" />
+          </div>
+          <div class="settings-field">
+            <label class="settings-field__label">新建</label>
+            <n-button type="primary" :loading="creatingToken" :disabled="!tokenForm.name.trim()" @click="createToken">
+              创建令牌
+            </n-button>
+          </div>
+        </div>
+
+        <LoadError v-if="tokenError" :message="tokenError" />
+        <div v-if="apiTokens.length > 0" class="token-list">
+          <div v-for="token in apiTokens" :key="token.id" class="token-row">
+            <div class="token-row__main">
+              <span class="token-row__name">{{ token.name }}</span>
+              <StatusBadge
+                :text="token.scope === 'write' ? '读写' : '只读'"
+                :kind="token.scope === 'write' ? 'warning' : 'disabled'"
+              />
+            </div>
+            <div class="token-row__meta">
+              <span>创建 {{ formatDate(token.created_at) }}</span>
+              <span>{{ token.last_used_at ? `最近使用 ${formatDate(token.last_used_at)}` : '尚未使用' }}</span>
+              <span>{{ token.expires_at ? `有效期至 ${formatDate(token.expires_at)}` : '永不过期' }}</span>
+            </div>
+            <n-popconfirm @positive-click="deleteToken(token)">
+              <template #trigger>
+                <n-button size="small" type="warning" quaternary>撤销</n-button>
+              </template>
+              撤销后该令牌立即失效，确定继续？
+            </n-popconfirm>
+          </div>
+        </div>
+        <p v-else-if="!tokenError" class="field-hint">还没有令牌。</p>
+      </FonuCard>
         </div>
       </n-tab-pane>
     </n-tabs>
@@ -526,8 +696,10 @@ import {
 } from '@vicons/ionicons5'
 import { api } from '../api/client'
 import type {
+  ApiToken,
   ChinaCIDRStatus,
   GlobalNginxView,
+  NginxConfigVersionEntry,
   NotifyEmailConfig,
   NotifyTelegramConfig,
   NotifyTestPayload,
@@ -536,6 +708,7 @@ import type {
   WebhookProvider,
 } from '../api/types'
 import ConfiguredSecretField from '../components/ConfiguredSecretField.vue'
+import ConfigDiffView from '../components/ConfigDiffView.vue'
 import FonuCard from '../components/FonuCard.vue'
 import NginxCodeEditor from '../components/NginxCodeEditor.vue'
 import LoadError from '../components/LoadError.vue'
@@ -543,19 +716,27 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { DEFAULT_PRIVATE_CIDRS, mergeIPList, stripDefaultIPList } from '../constants/ipPolicy'
 import {
+  DEFAULT_CPU_THRESHOLD,
+  DEFAULT_DISK_THRESHOLD,
   DEFAULT_LOGIN_FAILURE_THRESHOLD,
   DEFAULT_LOGIN_FAILURE_WINDOW_SEC,
+  DEFAULT_MEMORY_THRESHOLD,
+  DEFAULT_TUNNEL_FAIL_THRESHOLD,
   NOTIFY_EVENT_GROUPS,
 } from '../constants/notifyEvents'
 import {
   DEFAULT_BARK_SERVER,
+  DEFAULT_DINGTALK_SERVER,
+  DEFAULT_FEISHU_SERVER,
   DEFAULT_NTFY_SERVER,
+  DEFAULT_WECOM_SERVER,
   MASKED_SECRET,
   NOTIFY_TYPE_OPTIONS,
   WEBHOOK_PROVIDER_OPTIONS,
 } from '../constants/notifyProviders'
 import { useTheme } from '../composables/useTheme'
-import { formatDate, formatRelativeTime } from '../utils/format'
+import { copyText } from '../utils/clipboard'
+import { formatBytes, formatDate, formatRelativeTime } from '../utils/format'
 import type { StatusKind } from '../utils/status'
 
 const message = useMessage()
@@ -584,11 +765,79 @@ const notifyEventFlags = reactive<Record<string, boolean>>({
   on_ip_frequent_access: false,
   on_login_failure: false,
   on_nginx_reload_failure: true,
+  on_resource_threshold: false,
+  on_tunnel_down: false,
 })
 const notifyIPFrequentThreshold = ref(100)
 const notifyIPFrequentWindowSec = ref(60)
 const notifyLoginFailureThreshold = ref(DEFAULT_LOGIN_FAILURE_THRESHOLD)
 const notifyLoginFailureWindowSec = ref(DEFAULT_LOGIN_FAILURE_WINDOW_SEC)
+const notifyCPUThreshold = ref(DEFAULT_CPU_THRESHOLD)
+const notifyMemoryThreshold = ref(DEFAULT_MEMORY_THRESHOLD)
+const notifyDiskThreshold = ref(DEFAULT_DISK_THRESHOLD)
+const notifyTunnelFailThreshold = ref(DEFAULT_TUNNEL_FAIL_THRESHOLD)
+
+// API Token：明文只在创建响应里回一次，因此单独用一个 ref 暂存展示
+const apiTokens = ref<ApiToken[]>([])
+const tokenError = ref('')
+const creatingToken = ref(false)
+const createdToken = ref('')
+const tokenForm = reactive({ name: '', scope: 'read' as 'read' | 'write', expiresInDays: 0 })
+const tokenScopeOptions = [
+  { label: '只读（仅 GET）', value: 'read' },
+  { label: '读写（与会话同权）', value: 'write' },
+]
+const tokenExpiryOptions = [
+  { label: '永不过期', value: 0 },
+  { label: '30 天', value: 30 },
+  { label: '90 天', value: 90 },
+  { label: '365 天', value: 365 },
+]
+
+async function loadApiTokens() {
+  try {
+    const result = await api.listApiTokens()
+    apiTokens.value = result.tokens ?? []
+    tokenError.value = ''
+  } catch (error) {
+    tokenError.value = `读取令牌失败 —— ${error instanceof Error ? error.message : '未知错误'}`
+  }
+}
+
+async function createToken() {
+  const name = tokenForm.name.trim()
+  if (!name || creatingToken.value) return
+  creatingToken.value = true
+  try {
+    const result = await api.createApiToken({
+      name,
+      scope: tokenForm.scope,
+      expires_in_days: tokenForm.expiresInDays,
+    })
+    createdToken.value = result.token
+    tokenForm.name = ''
+    await loadApiTokens()
+    message.success('令牌已创建，请复制明文')
+  } catch (error) {
+    message.error(`创建令牌失败：${error instanceof Error ? error.message : '未知错误'}`)
+  } finally { creatingToken.value = false }
+}
+
+async function copyCreatedToken() {
+  if (await copyText(createdToken.value)) message.success('已复制令牌')
+  else message.error('复制失败，请手动选择文本复制')
+}
+
+async function deleteToken(token: ApiToken) {
+  try {
+    await api.deleteApiToken(token.id)
+    if (createdToken.value) createdToken.value = ''
+    await loadApiTokens()
+    message.success('令牌已撤销')
+  } catch (error) {
+    message.error(`撤销失败：${error instanceof Error ? error.message : '未知错误'}`)
+  }
+}
 const notifyTesting = ref(false)
 const notifySMTPPassword = ref('')
 const notifyWebhookKey = ref('')
@@ -609,6 +858,22 @@ const notifyWebhook = reactive({
   url: '',
   has_secret: false,
 })
+
+function defaultWebhookServer(provider: WebhookProvider): string {
+  switch (provider) {
+    case 'ntfy': return DEFAULT_NTFY_SERVER
+    case 'wecom': return DEFAULT_WECOM_SERVER
+    case 'dingtalk': return DEFAULT_DINGTALK_SERVER
+    case 'feishu': return DEFAULT_FEISHU_SERVER
+    case 'gotify': return ''
+    default: return DEFAULT_BARK_SERVER
+  }
+}
+
+// 切换预设时把服务地址换成该预设的默认值：否则会把上一个预设的地址（如 api.day.app）带到新预设上
+function onWebhookProviderChange(provider: WebhookProvider) {
+  notifyWebhook.server = defaultWebhookServer(provider)
+}
 const notifyTelegram = reactive({
   chat_id: '',
   proxy_url: '',
@@ -639,6 +904,12 @@ const globalNginxServerMode = ref<'auto' | 'custom'>('auto')
 const globalNginxDirty = ref(false)
 const globalNginxSaving = ref(false)
 const globalNginxBackups = ref<{ name: string; created_at: string }[]>([])
+const configVersions = ref<NginxConfigVersionEntry[]>([])
+const configCurrentContent = ref('')
+const selectedConfigVersion = ref('')
+const selectedConfigVersionContent = ref('')
+const configVersionsError = ref('')
+const configVersionBusy = ref(false)
 
 const globalNginxCustomHint = `# 在此添加 http 块内的自定义指令
 # 上传大小限制（全局默认 50M，单条规则可在 server 块覆盖）
@@ -777,6 +1048,56 @@ async function loadGlobalNginx() {
   } catch {
     // optional on load
   }
+  await loadConfigVersions()
+}
+
+// 主配置（nginx.conf）的版本历史：与全局片段是两份文件，分开读、分开回滚
+async function loadConfigVersions() {
+  try {
+    const view = await api.getNginxConfigVersions()
+    configCurrentContent.value = view.content
+    configVersions.value = view.versions ?? []
+    configVersionsError.value = ''
+  } catch (error) {
+    configVersionsError.value = error instanceof Error ? error.message : '读取主配置版本失败'
+  }
+}
+
+// 点已选中的版本 = 取消对比
+async function selectConfigVersion(version: NginxConfigVersionEntry) {
+  if (configVersionBusy.value) return
+  if (selectedConfigVersion.value === version.name) {
+    selectedConfigVersion.value = ''
+    selectedConfigVersionContent.value = ''
+    return
+  }
+  configVersionBusy.value = true
+  try {
+    const result = await api.getNginxConfigVersion(version.name)
+    selectedConfigVersion.value = version.name
+    selectedConfigVersionContent.value = result.content
+  } catch (error) {
+    message.error(`读取该版本失败：${error instanceof Error ? error.message : '未知错误'}`)
+  } finally { configVersionBusy.value = false }
+}
+
+async function rollbackConfigVersion() {
+  if (!selectedConfigVersion.value) return
+  configVersionBusy.value = true
+  try {
+    const view = await api.rollbackNginxConfigVersion(selectedConfigVersion.value)
+    configCurrentContent.value = view.content
+    configVersions.value = view.versions ?? []
+    selectedConfigVersion.value = ''
+    selectedConfigVersionContent.value = ''
+    message.success(view.message || '已回滚到所选版本')
+  } catch (error) {
+    message.error(`回滚失败：${error instanceof Error ? error.message : '未知错误'}`)
+  } finally { configVersionBusy.value = false }
+}
+
+function configVersionCreatedAt(name: string): string {
+  return configVersions.value.find((item) => item.name === name)?.created_at ?? ''
 }
 
 function setGlobalNginxEditMode(mode: 'auto' | 'custom') {
@@ -911,7 +1232,7 @@ function applyNotifySettings(settings: Record<string, string>) {
   try {
     const webhook = JSON.parse(settings.notify_webhook_json || '{}') as NotifyWebhookConfig
     notifyWebhook.provider = webhook.provider ?? 'bark'
-    notifyWebhook.server = webhook.server ?? (webhook.provider === 'ntfy' ? DEFAULT_NTFY_SERVER : DEFAULT_BARK_SERVER)
+    notifyWebhook.server = webhook.server ?? defaultWebhookServer(webhook.provider)
     notifyWebhook.topic = webhook.topic ?? ''
     notifyWebhook.url = webhook.url ?? ''
     notifyWebhook.has_secret = webhook.has_secret ?? false
@@ -955,6 +1276,8 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_ip_frequent_access = flagOptIn('notify_on_ip_frequent_access')
     notifyEventFlags.on_login_failure = flagOptIn('notify_on_login_failure')
     notifyEventFlags.on_nginx_reload_failure = flagOn('notify_on_nginx_reload_failure')
+    notifyEventFlags.on_resource_threshold = flagOptIn('notify_on_resource_threshold')
+    notifyEventFlags.on_tunnel_down = flagOptIn('notify_on_tunnel_down')
   } else {
     const legacyDDNS = flagOn('notify_on_ddns_error')
     const legacyCert = flagOn('notify_on_cert_error')
@@ -966,11 +1289,17 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_nginx_reload_failure = true
     notifyEventFlags.on_ip_frequent_access = false
     notifyEventFlags.on_login_failure = false
+    notifyEventFlags.on_resource_threshold = false
+    notifyEventFlags.on_tunnel_down = false
   }
   notifyIPFrequentThreshold.value = Number(settings.notify_ip_frequent_threshold || 100)
   notifyIPFrequentWindowSec.value = Number(settings.notify_ip_frequent_window_sec || 60)
   notifyLoginFailureThreshold.value = Number(settings.notify_login_failure_threshold || DEFAULT_LOGIN_FAILURE_THRESHOLD)
   notifyLoginFailureWindowSec.value = Number(settings.notify_login_failure_window_sec || DEFAULT_LOGIN_FAILURE_WINDOW_SEC)
+  notifyCPUThreshold.value = Number(settings.notify_cpu_threshold || DEFAULT_CPU_THRESHOLD)
+  notifyMemoryThreshold.value = Number(settings.notify_memory_threshold || DEFAULT_MEMORY_THRESHOLD)
+  notifyDiskThreshold.value = Number(settings.notify_disk_threshold || DEFAULT_DISK_THRESHOLD)
+  notifyTunnelFailThreshold.value = Number(settings.notify_tunnel_fail_threshold || DEFAULT_TUNNEL_FAIL_THRESHOLD)
 }
 
 function buildNotifyEmailJSON(): string {
@@ -1076,6 +1405,12 @@ function buildSavePayload() {
     notify_on_ip_frequent_access: notifyEventFlags.on_ip_frequent_access ? '1' : '0',
     notify_on_login_failure: notifyEventFlags.on_login_failure ? '1' : '0',
     notify_on_nginx_reload_failure: notifyEventFlags.on_nginx_reload_failure ? '1' : '0',
+    notify_on_resource_threshold: notifyEventFlags.on_resource_threshold ? '1' : '0',
+    notify_on_tunnel_down: notifyEventFlags.on_tunnel_down ? '1' : '0',
+    notify_cpu_threshold: String(notifyCPUThreshold.value || DEFAULT_CPU_THRESHOLD),
+    notify_memory_threshold: String(notifyMemoryThreshold.value || DEFAULT_MEMORY_THRESHOLD),
+    notify_disk_threshold: String(notifyDiskThreshold.value || DEFAULT_DISK_THRESHOLD),
+    notify_tunnel_fail_threshold: String(notifyTunnelFailThreshold.value || DEFAULT_TUNNEL_FAIL_THRESHOLD),
     notify_ip_frequent_threshold: String(notifyIPFrequentThreshold.value || 100),
     notify_ip_frequent_window_sec: String(notifyIPFrequentWindowSec.value || 60),
     notify_login_failure_threshold: String(notifyLoginFailureThreshold.value || DEFAULT_LOGIN_FAILURE_THRESHOLD),
@@ -1174,7 +1509,10 @@ async function onRestoreFile({ file }: { file: UploadFileInfo }) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  void loadApiTokens()
+})
 </script>
 
 <style scoped>
@@ -1296,6 +1634,42 @@ onMounted(load)
 .nginx-framework__editor {
   margin-top: 8px;
 }
+
+/* 主配置版本：左侧版本列表 + 右侧当前内容 / 差异 */
+.config-versions { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--fonu-space-4); margin-top: 8px; }
+.config-versions__list { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: auto; max-height: 320px; }
+.config-versions__item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
+  font-size: 12px; color: var(--fonu-text-secondary); cursor: pointer;
+}
+.config-versions__item:hover { background: var(--fonu-bg-muted); }
+.config-versions__item--active { background: var(--fonu-info-soft); color: var(--fonu-text); }
+.config-versions__size { flex: none; color: var(--fonu-text-muted); }
+.config-versions__empty { padding: var(--fonu-space-3); font-size: 12px; color: var(--fonu-text-muted); }
+.config-versions__body { min-width: 0; display: grid; gap: var(--fonu-space-3); align-content: start; }
+.config-versions__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
+.config-versions__hint { font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
+.config-versions__error { margin: 8px 0 0; font-size: 12px; color: var(--fonu-error); line-height: 1.6; }
+
+/* API Token：创建区一行放四项，列表一行一项 */
+/* 必须带上 .settings-fields 提高优先级：那条纵向 flex 规则在样式表里位置更靠后，
+   否则 display 会被它覆盖回 flex-column（子项被推到右侧、整卡变很高） */
+.settings-fields.token-create {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.token-created { margin: 12px 0; }
+.token-created__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.token-created__row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.token-created__value { flex: 1; min-width: 0; font-family: var(--fonu-mono); font-size: 12px; overflow-wrap: anywhere; }
+.token-list { display: grid; gap: 8px; margin-top: 12px; }
+.token-row { display: flex; align-items: center; gap: var(--fonu-space-3); padding: 10px var(--fonu-space-3); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); }
+.token-row__main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.token-row__name { font-weight: 600; color: var(--fonu-text); }
+.token-row__meta { flex: 1; display: flex; gap: var(--fonu-space-3); flex-wrap: wrap; font-size: 12px; color: var(--fonu-text-muted); }
 
 .global-nginx-head {
   margin-top: 12px;

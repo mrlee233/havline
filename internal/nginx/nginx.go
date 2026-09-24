@@ -131,8 +131,12 @@ func (m *Manager) Apply(ctx context.Context, rules []proxy.Rule, certs []CertSou
 	}
 
 	currentPath := m.cfg.NginxConfigPath()
-	// 覆盖前留 .bak（fsutil.Backup 对文件不存在视为无需备份）
+	// 覆盖前留退路：.bak 保留最近一次（兼容既有读取方），.versions/ 保留最近 10 份（供版本对比与回滚）
 	if err := fsutil.Backup(currentPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return ApplyResult{}, err
+	}
+	if _, err := fsutil.BackupVersioned(currentPath, maxConfigVersions); err != nil {
 		_ = os.Remove(tmpPath)
 		return ApplyResult{}, err
 	}
@@ -142,6 +146,12 @@ func (m *Manager) Apply(ctx context.Context, rules []proxy.Rule, certs []CertSou
 		return ApplyResult{}, err
 	}
 
+	return m.activate(ctx)
+}
+
+// activate 让磁盘上的主配置在 nginx 里生效：未运行则启动，运行中优先 reload、失败再重启。
+// Apply 与回滚共用这段，保证「写回磁盘」与「让它生效」在两条路径上行为一致。
+func (m *Manager) activate(ctx context.Context) (ApplyResult, error) {
 	if !m.available() {
 		return ApplyResult{Message: "Nginx 未安装，配置已保存"}, nil
 	}

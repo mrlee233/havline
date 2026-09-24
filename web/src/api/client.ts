@@ -223,7 +223,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(backup ? { backup } : {}),
     }),
+  getNginxConfigVersions: () =>
+    request<import('./types').NginxConfigVersionsView>('/api/settings/nginx/config/versions'),
+  getNginxConfigVersion: (name: string) =>
+    request<import('./types').NginxConfigVersionView>(`/api/settings/nginx/config/versions/${encodeURIComponent(name)}`),
+  rollbackNginxConfigVersion: (name: string) =>
+    request<import('./types').NginxConfigVersionsView>(
+      `/api/settings/nginx/config/versions/${encodeURIComponent(name)}/rollback`,
+      { method: 'POST' },
+    ),
   getChinaCIDRStatus: () => request<ChinaCIDRStatus>('/api/settings/china-cidr'),
+  listApiTokens: () => request<{ tokens: import('./types').ApiToken[] }>('/api/settings/tokens'),
+  createApiToken: (payload: { name: string; scope: 'read' | 'write'; expires_in_days: number }) =>
+    request<import('./types').CreatedApiToken>('/api/settings/tokens', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteApiToken: (id: number) =>
+    request<{ ok: boolean }>(`/api/settings/tokens/${id}`, { method: 'DELETE' }),
   refreshChinaCIDR: () =>
     request<ChinaCIDRStatus>('/api/settings/china-cidr/refresh', { method: 'POST' }),
   testNotify: (payload: NotifyTestPayload) =>
@@ -315,6 +332,17 @@ export const api = {
   deployFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean; basic_auth_user?: string; basic_auth_password?: string }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'POST' }),
   getFrpAgentRouteConf: (serverId: number, proxyId: number) =>
     request<{ proxy_id: number; domain: string; content: string }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}/conf`),
+  getFrpAgentRouteVersions: (serverId: number, proxyId: number) =>
+    request<import('./types').FrpAgentRouteVersions>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}/versions`),
+  getFrpAgentRouteVersion: (serverId: number, proxyId: number, name: string) =>
+    request<import('./types').FrpAgentRouteVersion>(
+      `/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}/versions/${encodeURIComponent(name)}`,
+    ),
+  rollbackFrpAgentRouteVersion: (serverId: number, proxyId: number, name: string) =>
+    request<{ ok: boolean; domain: string; name: string }>(
+      `/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}/versions/${encodeURIComponent(name)}/rollback`,
+      { method: 'POST' },
+    ),
   installFrpAgentNginx: (serverId: number) =>
     request<{ ok: boolean; manager?: string; output?: string; path?: string; error?: string }>(`/api/frpmulti/servers/${serverId}/agent/nginx/install`, { method: 'POST' }),
   getFrpAgentRouteHealth: (serverId: number) =>

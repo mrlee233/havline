@@ -5,8 +5,15 @@
 package fsutil
 
 import (
+	"bytes"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 )
 
 // WriteFileAtomic 先写同目录的临时文件再 rename：读者要么看到旧内容、要么看到新内容。
@@ -52,4 +59,116 @@ func Backup(path string) error {
 		return err
 	}
 	return WriteFileAtomic(path+".bak", data, 0o600)
+}
+
+// VersionsDir 返回某文件的版本目录（<path>.versions），供列表 / 回滚读取。
+func VersionsDir(path string) string {
+	return path + ".versions"
+}
+
+// BackupVersioned 把现有文件留存为 <path>.versions/<时间戳>-<随机>.conf，并只保留最近 keep 份。
+// 文件名前缀是 UTC 时间戳（同一秒内用随机后缀避开冲突），因此目录内按文件名倒序就是版本新旧顺序。
+// 文件不存在视为无需备份，返回空串；keep <= 0 表示不剪枝。
+func BackupVersioned(path string, keep int) (string, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	dir := VersionsDir(path)
+	// 内容与最新版本一致时不重复记录：Apply 每次保存都会调用，去重后保留期才对应「真实的 N 次变更」
+	if versions, err := ListVersions(path); err == nil && len(versions) > 0 {
+		if newest, err := ReadVersion(path, versions[0].Name); err == nil && bytes.Equal(newest, data) {
+			return filepath.Join(dir, versions[0].Name), nil
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	name := time.Now().UTC().Format("20060102T150405.000") + "-" + randSuffix() + filepath.Ext(path)
+	target := filepath.Join(dir, name)
+	if err := WriteFileAtomic(target, data, 0o600); err != nil {
+		return "", err
+	}
+	if keep > 0 {
+		pruneVersions(dir, keep)
+	}
+	return target, nil
+}
+
+// VersionEntry 描述一个已留存的版本（名称前缀是 UTC 时间戳，因此按名称倒序就是新旧顺序）。
+type VersionEntry struct {
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// ListVersions 按新的在前列出版本；版本目录不存在时返回空列表（首次备份前是正常状态）。
+func ListVersions(path string) ([]VersionEntry, error) {
+	entries, err := os.ReadDir(VersionsDir(path))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]VersionEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		out = append(out, VersionEntry{Name: entry.Name(), Size: info.Size(), CreatedAt: info.ModTime().UTC()})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	return out, nil
+}
+
+// ReadVersion 读取指定版本的内容。版本名虽然来自 ListVersions，这里仍校验一次：
+// 带路径分隔符 / 上跳的名称直接拒绍，避免接口被用来读版本目录以外的文件。
+func ReadVersion(path, name string) ([]byte, error) {
+	if name == "" || name != filepath.Base(name) || name == "." || name == ".." {
+		return nil, fmt.Errorf("版本名无效")
+	}
+	data, err := os.ReadFile(filepath.Join(VersionsDir(path), name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("版本不存在")
+		}
+		return nil, err
+	}
+	return data, nil
+}
+
+// pruneVersions 只保留最新的 keep 份（按文件名倒序，前缀是时间戳）。
+// 剪枝失败不影响本次备份结果，因此只忽略错误。
+func pruneVersions(dir string, keep int) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		names = append(names, entry.Name())
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(names)))
+	for _, name := range names[min(keep, len(names)):] {
+		_ = os.Remove(filepath.Join(dir, name))
+	}
+}
+
+func randSuffix() string {
+	var buf [2]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "0000"
+	}
+	return hex.EncodeToString(buf[:])
 }

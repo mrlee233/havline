@@ -123,6 +123,33 @@ func (h *NginxHandler) RollbackGlobal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, view)
 }
 
+func (h *NginxHandler) GetConfigVersions(w http.ResponseWriter, r *http.Request) {
+	view, err := h.proxy.GetNginxConfigVersions()
+	if err != nil {
+		writeServiceError(r, w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *NginxHandler) GetConfigVersion(w http.ResponseWriter, r *http.Request) {
+	view, err := h.proxy.ReadNginxConfigVersion(r.PathValue("name"))
+	if err != nil {
+		writeServiceError(r, w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+func (h *NginxHandler) RollbackConfigVersion(w http.ResponseWriter, r *http.Request) {
+	view, err := h.proxy.RollbackNginxConfigVersion(r.Context(), r.PathValue("name"))
+	if err != nil {
+		writeServiceError(r, w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
 func writeServiceError(r *http.Request, w http.ResponseWriter, err error) {
 	if err == nil {
 		return

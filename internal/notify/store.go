@@ -76,6 +76,10 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 
 	cfg.LoginFailureThreshold = intSetting(s.settings, ctx, settings.KeyNotifyLoginFailureThreshold, DefaultLoginFailureThreshold)
 	cfg.LoginFailureWindowSec = intSetting(s.settings, ctx, settings.KeyNotifyLoginFailureWindowSec, DefaultLoginFailureWindowSec)
+	cfg.CPUThreshold = intSetting(s.settings, ctx, settings.KeyNotifyCPUThreshold, DefaultCPUThreshold)
+	cfg.MemoryThreshold = intSetting(s.settings, ctx, settings.KeyNotifyMemoryThreshold, DefaultMemoryThreshold)
+	cfg.DiskThreshold = intSetting(s.settings, ctx, settings.KeyNotifyDiskThreshold, DefaultDiskThreshold)
+	cfg.TunnelFailThreshold = intSetting(s.settings, ctx, settings.KeyNotifyTunnelFailThreshold, DefaultTunnelFailThreshold)
 
 	if hasNotifyEventSettings(ctx, s.settings) {
 		cfg.OnDDNSIPChange = flag(s.settings, ctx, settings.KeyNotifyOnDDNSIPChange, true)
@@ -86,6 +90,9 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 		cfg.OnIPFrequentAccess = flag(s.settings, ctx, settings.KeyNotifyOnIPFrequentAccess, false)
 		cfg.OnLoginFailure = flag(s.settings, ctx, settings.KeyNotifyOnLoginFailure, false)
 		cfg.OnNginxReloadFailure = flag(s.settings, ctx, settings.KeyNotifyOnNginxReloadFailure, true)
+		// 资源与隧道告警默认关闭：升级后不改变现有用户收到的通知
+		cfg.OnResourceThreshold = flag(s.settings, ctx, settings.KeyNotifyOnResourceThreshold, false)
+		cfg.OnTunnelDown = flag(s.settings, ctx, settings.KeyNotifyOnTunnelDown, false)
 	} else {
 		legacyDDNS := flag(s.settings, ctx, settings.KeyNotifyOnDDNSError, true)
 		legacyCert := flag(s.settings, ctx, settings.KeyNotifyOnCertError, true)
@@ -184,6 +191,8 @@ func hasNotifyEventSettings(ctx context.Context, store *settings.Store) bool {
 		settings.KeyNotifyOnCertRenewFailure,
 		settings.KeyNotifyOnLoginFailure,
 		settings.KeyNotifyOnNginxReloadFailure,
+		settings.KeyNotifyOnResourceThreshold,
+		settings.KeyNotifyOnTunnelDown,
 	}
 	for _, key := range keys {
 		raw, err := store.Get(ctx, key)
@@ -224,6 +233,24 @@ func (s *Store) Save(ctx context.Context, in SaveInput) error {
 		return err
 	}
 	if err := s.settings.SetBool(ctx, settings.KeyNotifyOnNginxReloadFailure, in.OnNginxReloadFailure); err != nil {
+		return err
+	}
+	if err := s.settings.SetBool(ctx, settings.KeyNotifyOnResourceThreshold, in.OnResourceThreshold); err != nil {
+		return err
+	}
+	if err := s.settings.SetBool(ctx, settings.KeyNotifyOnTunnelDown, in.OnTunnelDown); err != nil {
+		return err
+	}
+	if err := s.settings.SetInt(ctx, settings.KeyNotifyCPUThreshold, clampThreshold(in.CPUThreshold, DefaultCPUThreshold)); err != nil {
+		return err
+	}
+	if err := s.settings.SetInt(ctx, settings.KeyNotifyMemoryThreshold, clampThreshold(in.MemoryThreshold, DefaultMemoryThreshold)); err != nil {
+		return err
+	}
+	if err := s.settings.SetInt(ctx, settings.KeyNotifyDiskThreshold, clampThreshold(in.DiskThreshold, DefaultDiskThreshold)); err != nil {
+		return err
+	}
+	if err := s.settings.SetInt(ctx, settings.KeyNotifyTunnelFailThreshold, clampThreshold(in.TunnelFailThreshold, DefaultTunnelFailThreshold)); err != nil {
 		return err
 	}
 	threshold := in.IPFrequentThreshold
@@ -269,7 +296,7 @@ func (s *Store) Save(ctx context.Context, in SaveInput) error {
 	secretValue := strings.TrimSpace(in.WebhookSecret)
 	if secretValue != "" && secretValue != MaskedSecret {
 		webhook.HasSecret = true
-	} else if webhook.Provider == WebhookBark || webhook.Provider == WebhookGotify {
+	} else if providerUsesKey(webhook.Provider) {
 		if strings.TrimSpace(webhook.Key) != "" && webhook.Key != MaskedSecret {
 			webhook.HasSecret = true
 		}
@@ -306,11 +333,7 @@ func (s *Store) Save(ctx context.Context, in SaveInput) error {
 
 	webhookPlain := secretValue
 	if webhookPlain == "" || webhookPlain == MaskedSecret {
-		if webhook.Provider == WebhookBark || webhook.Provider == WebhookGotify {
-			if strings.TrimSpace(webhook.Key) != "" && webhook.Key != MaskedSecret {
-				webhookPlain = strings.TrimSpace(webhook.Key)
-			}
-		} else if webhook.Provider == WebhookNtfy {
+		if providerUsesKey(webhook.Provider) {
 			if strings.TrimSpace(webhook.Key) != "" && webhook.Key != MaskedSecret {
 				webhookPlain = strings.TrimSpace(webhook.Key)
 			}
@@ -375,6 +398,18 @@ func validateSaveInput(in SaveInput) error {
 		case WebhookGotify:
 			if strings.TrimSpace(in.Webhook.Key) == "" && !in.Webhook.HasSecret {
 				return fmt.Errorf("请填写 Gotify App Token")
+			}
+		case WebhookWecom:
+			if strings.TrimSpace(in.Webhook.Key) == "" && !in.Webhook.HasSecret {
+				return fmt.Errorf("请填写企业微信机器人 Key")
+			}
+		case WebhookDingtalk:
+			if strings.TrimSpace(in.Webhook.Key) == "" && !in.Webhook.HasSecret {
+				return fmt.Errorf("请填写钉钉机器人 Access Token")
+			}
+		case WebhookFeishu:
+			if strings.TrimSpace(in.Webhook.Key) == "" && !in.Webhook.HasSecret {
+				return fmt.Errorf("请填写飞书机器人 Key")
 			}
 		case WebhookCustom:
 			if strings.TrimSpace(in.Webhook.URL) == "" {
@@ -452,7 +487,25 @@ func ParseSaveInputFromMap(values map[string]string) (SaveInput, bool) {
 	in.IPFrequentWindowSec = intSettingFromMap(values, settings.KeyNotifyIPFrequentWindowSec, DefaultIPFrequentWindowSec)
 	in.LoginFailureThreshold = intSettingFromMap(values, settings.KeyNotifyLoginFailureThreshold, DefaultLoginFailureThreshold)
 	in.LoginFailureWindowSec = intSettingFromMap(values, settings.KeyNotifyLoginFailureWindowSec, DefaultLoginFailureWindowSec)
+	in.OnResourceThreshold = values[settings.KeyNotifyOnResourceThreshold] == "1" || strings.EqualFold(values[settings.KeyNotifyOnResourceThreshold], "true")
+	in.OnTunnelDown = values[settings.KeyNotifyOnTunnelDown] == "1" || strings.EqualFold(values[settings.KeyNotifyOnTunnelDown], "true")
+	in.CPUThreshold = intSettingFromMap(values, settings.KeyNotifyCPUThreshold, DefaultCPUThreshold)
+	in.MemoryThreshold = intSettingFromMap(values, settings.KeyNotifyMemoryThreshold, DefaultMemoryThreshold)
+	in.DiskThreshold = intSettingFromMap(values, settings.KeyNotifyDiskThreshold, DefaultDiskThreshold)
+	in.TunnelFailThreshold = intSettingFromMap(values, settings.KeyNotifyTunnelFailThreshold, DefaultTunnelFailThreshold)
 	return in, true
+}
+
+// clampThreshold 把未配置或越界的阈值拉回合法范围：0/负数用默认值，超过 100 的按 100 处理
+// （百分比阈值与「连续失败次数」的上限都用这一条）。
+func clampThreshold(value, fallback int) int {
+	if value <= 0 {
+		return fallback
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }
 
 func intSettingFromMap(values map[string]string, key string, fallback int) int {

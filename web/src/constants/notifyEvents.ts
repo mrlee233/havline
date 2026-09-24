@@ -3,7 +3,7 @@ export interface NotifyEventOption {
   label: string
   hint?: string
   hasThreshold?: boolean
-  thresholdKey?: 'ip_frequent' | 'login_failure'
+  thresholdKey?: 'ip_frequent' | 'login_failure' | 'resource' | 'tunnel_fail'
 }
 
 export interface NotifyEventGroup {
@@ -71,6 +71,20 @@ export const NOTIFY_EVENT_GROUPS: NotifyEventGroup[] = [
         label: 'Nginx 重载失败',
         hint: '保存反代或证书后 Nginx 未能成功重载',
       },
+      {
+        key: 'on_resource_threshold',
+        label: '资源占用过高',
+        hint: 'CPU / 内存 / 磁盘持续超过阈值，同一项每 30 分钟最多提醒一次',
+        hasThreshold: true,
+        thresholdKey: 'resource',
+      },
+      {
+        key: 'on_tunnel_down',
+        label: '隧道连续不通',
+        hint: '连续多次巡检未在 frps 上注册，恢复时再通知一次',
+        hasThreshold: true,
+        thresholdKey: 'tunnel_fail',
+      },
     ],
   },
 ]
@@ -79,3 +93,7 @@ export const DEFAULT_IP_FREQUENT_THRESHOLD = 100
 export const DEFAULT_IP_FREQUENT_WINDOW_SEC = 60
 export const DEFAULT_LOGIN_FAILURE_THRESHOLD = 5
 export const DEFAULT_LOGIN_FAILURE_WINDOW_SEC = 300
+export const DEFAULT_CPU_THRESHOLD = 90
+export const DEFAULT_MEMORY_THRESHOLD = 90
+export const DEFAULT_DISK_THRESHOLD = 85
+export const DEFAULT_TUNNEL_FAIL_THRESHOLD = 3

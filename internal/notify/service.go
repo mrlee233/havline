@@ -242,6 +242,10 @@ func (s *Service) enabledFor(cfg RuntimeConfig, event string) bool {
 		return cfg.OnLoginFailure
 	case EventNginxReloadFailure:
 		return cfg.OnNginxReloadFailure
+	case EventResourceThreshold:
+		return cfg.OnResourceThreshold
+	case EventTunnelDown:
+		return cfg.OnTunnelDown
 	default:
 		return true
 	}

@@ -25,11 +25,11 @@ type RuleNginxView struct {
 }
 
 type GlobalNginxView struct {
-	Mode                string            `json:"mode"`
-	GeneratedFramework  string            `json:"generated_framework"`
-	GeneratedSnippet    string            `json:"generated_snippet"`
-	Content             string            `json:"content"`
-	Backups             []NginxBackupInfo `json:"backups"`
+	Mode               string            `json:"mode"`
+	GeneratedFramework string            `json:"generated_framework"`
+	GeneratedSnippet   string            `json:"generated_snippet"`
+	Content            string            `json:"content"`
+	Backups            []NginxBackupInfo `json:"backups"`
 }
 
 type SaveRuleNginxInput struct {
@@ -346,6 +346,71 @@ func mapBackups(entries []nginx.BackupEntry) []NginxBackupInfo {
 	for _, entry := range entries {
 		out = append(out, NginxBackupInfo{
 			Name:      entry.Name,
+			CreatedAt: entry.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		})
+	}
+	return out
+}
+
+// NginxConfigVersionInfo 描述主配置（nginx.conf）的一个历史版本。
+type NginxConfigVersionInfo struct {
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	CreatedAt string `json:"created_at"`
+}
+
+type NginxConfigVersionsView struct {
+	Message  string                   `json:"message,omitempty"`
+	Content  string                   `json:"content"`
+	Versions []NginxConfigVersionInfo `json:"versions"`
+}
+
+type NginxConfigVersionView struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
+// GetNginxConfigVersions 返回当前主配置与其历史版本，前端拿两者做差异对比。
+func (s *ProxyService) GetNginxConfigVersions() (NginxConfigVersionsView, error) {
+	content, err := s.nginx.ReadConfig()
+	if err != nil {
+		return NginxConfigVersionsView{}, err
+	}
+	versions, err := s.nginx.ListConfigVersions()
+	if err != nil {
+		return NginxConfigVersionsView{}, err
+	}
+	return NginxConfigVersionsView{Content: content, Versions: mapConfigVersions(versions)}, nil
+}
+
+func (s *ProxyService) ReadNginxConfigVersion(name string) (NginxConfigVersionView, error) {
+	content, err := s.nginx.ReadConfigVersion(name)
+	if err != nil {
+		return NginxConfigVersionView{}, err
+	}
+	return NginxConfigVersionView{Name: name, Content: content}, nil
+}
+
+// RollbackNginxConfigVersion 回滚主配置；校验不过时 nginx 层不会动磁盘上的当前配置。
+func (s *ProxyService) RollbackNginxConfigVersion(ctx context.Context, name string) (NginxConfigVersionsView, error) {
+	result, err := s.nginx.RollbackConfigVersion(ctx, name)
+	if err != nil {
+		return NginxConfigVersionsView{}, err
+	}
+	view, err := s.GetNginxConfigVersions()
+	if err != nil {
+		return NginxConfigVersionsView{}, err
+	}
+	view.Message = result.Message
+	return view, nil
+}
+
+func mapConfigVersions(entries []nginx.ConfigVersion) []NginxConfigVersionInfo {
+	out := make([]NginxConfigVersionInfo, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, NginxConfigVersionInfo{
+			Name:      entry.Name,
+			Size:      entry.Size,
 			CreatedAt: entry.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		})
 	}
