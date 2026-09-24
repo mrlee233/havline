@@ -39,7 +39,7 @@
 | Docker | 20.10+（含 compose v2） |
 | 内存 | ≥ 512MB 空闲（构建期建议 ≥ 2GB，前端编译吃内存） |
 | 磁盘 | ≥ 2GB（镜像约 300MB + 数据目录按日志量增长） |
-| 网络 | 构建期需访问 npm registry、Go module proxy、GitHub（下载 frpc 0.71.0）；运行期需访问你的 DNS 服务商 API（DDNS/证书） |
+| 网络 | 构建期需访问 npm registry 与 Go module proxy；运行期需访问 GitHub（按需下载 frpc）与你的 DNS 服务商 API（DDNS/证书） |
 | 端口 | 管理端口 6893；反代端口默认 80/443（Bridge）或 18080/9443（飞牛 host 模式） |
 
 ## 2. 构建镜像（所有部署方式的前提）
@@ -50,7 +50,7 @@
 docker compose build
 ```
 
-一次构建同时产出：前端 `dist`、Go 后端二进制、内置 frpc 0.71.0 的运行镜像，标签为 `fonu:local`。
+一次构建同时产出：前端 `dist`、Go 后端二进制与运行镜像（frpc 不预装，运行期用「应用配置」按需下载），标签为 `fonu:local`。
 
 **版本号**：读取根目录 `VERSION` 文件（当前 `1.1.0`）自动注入前后端显示；要改版本号只需编辑该文件后重新 build。
 

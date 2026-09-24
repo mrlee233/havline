@@ -2,6 +2,39 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.8] - 2026-09-24
+
+### 修复
+
+- 公网服务端：`frps` 启停失败不再假成功——之前忽略 `systemctl` 的 err 后无条件写「frps.service 已启动」，现在失败时返回 `ok:false` 与 stderr，运维不会误以为服务在跑
+- frps 配置写入：`.bak` 备份失败时立即中止并删除 `.verify`，不再覆盖唯一副本（旧配置得留退路）
+- 安装 frps 后下发同源 `frps.toml` 失败不再静默吞掉：结果里带 `config_warning` 并追加到 `notes`
+- 请求体解析：证书申请 / 续期、DDNS 测试改为严格 400；frps 安装允许空请求体（走默认版本）但拒绝 JSON 语法错误
+- 会话与登录：同一 IP 在 5 分钟内失败 5 次后返回 429（成功后清零，带过期清理与上限）；改密码只失效该账号的**其他**会话，不再把当前会话一并踢掉；会话 cookie 按 `r.TLS` / `X-Forwarded-Proto` 决定是否加 `Secure`（默认明文部署不加，否则浏览器丢 cookie 导致登不进去），`clearSessionCookie` 补 `SameSite=Lax`
+- 后台下载改为继承应用 ctx（新增 `Service.SetBaseContext`），App 关闭时随之中止；`scheduler` 每个任务包 `recover()`，单个任务 panic 不再带走整个进程，且建表时跳过非正间隔（`time.NewTicker` 会 panic）
+- 两个 `http.Server` 补 `ReadTimeout` / `IdleTimeout`（agent 60s/2min；应用 5min/2min，**不设 `WriteTimeout`**——否则日志 SSE 会被中途切断）
+- 公网反代页：`refreshAll` 的 7 个独立接口由串行 `await` 改为 `Promise.all`，每次刷新不再等于 7 个往返相加
+- 内网穿透页：删除 74 条随服务端 UI 迁走的死样式；公网服务端页合并逐字重复的样式块
+- 文档与工程：修正 README / DEPLOYMENT / `frps_template.go` 中「Docker 镜像内置 frpc 0.71.0」的不准确说法（镜像不预装、按需下载）；`.dockerignore` 删掉两行已失效的归档排除项并修掉 ` docs` 的前导空格
+
+### 改进
+
+- 新增 `internal/fsutil`：`WriteFileAtomic`（同目录随机名临时文件 + rename + 显式 chmod）与 `Backup`（文件不存在视为无需备份），收敛 agent / frp / nginx / chinacidr 各处自建的 `.tmp` 与 `.bak` 逻辑（其中 nginx 原来用固定 `.tmp` 名，并发写同一路径会互相踩）
+- 流量采集：`notify.RecordAccessHit`（写库 + 判断通知）从写锁内移到锁外，不再顶住 `/api/proxies/traffic` 与 `/clients` 的读
+- `internal/frp` 的 agent 客户端改为按 `serverID` 缓存（指纹 = `AgentURL` + Token 密文），批量同步 N 条路由不再新建 N 个连接池与 TLS 握手
+- 前端新增 `useVisibilityPolling()`：标签页隐藏时暂停轮询、回前台立即补一次；公网反代页与内网穿透页已接入，仪表盘流量轮询加 in-flight 互斥避免堆积并发请求
+- 新增 `docs/README.md` 文档索引；给 `agent-capability-plan` / `agent-view-design` / `-v2` / `upstream-sync-plan` 加实施状态与时效说明
+
+### 测试
+
+- Go 新增 4 个测试文件：`backup`（`../` 逃逸与 `../data-other/` 同前缀绕过、还原权限固定）、`scheduler`（非正间隔跳过、panic 后继续）、`frp`（`shellPath` 单引号转义、`isELFBinary`）、`agent`（`validateRoute` 表驱动、`nginxRoute` 关键行、`fileSHA256`）
+- 前端引入 vitest（`npm test` = `vitest run`），新增 13 个单测覆盖 `utils/format.ts` 与 `utils/status.ts`（含一条守住「n-tag 的 type 值不能当状态值」的回归用例）；CI 增加「Run web unit tests」一步
+
+### 变更
+
+- `AgentVersion` 0.12.0 → **0.12.1**（frps 启停失败如实回报、HTTP 服务补超时）；内嵌 `fonu-agent-linux-amd64` 与 `-arm64` 已重编，VPS 上需点「升级 Agent」才会生效
+- 版本号提升到 1.2.8（版本单一来源仍是根目录 `VERSION`）；`web/package.json` 的版本同步对齐，本地构建不再显示 1.0.2
+
 ## [v1.2.7] - 2026-09-24
 
 ### 修复

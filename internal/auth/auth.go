@@ -118,7 +118,7 @@ func (s *Service) AdminIDForSession(ctx context.Context, sessionID string) (int,
 	return adminID, nil
 }
 
-func (s *Service) ChangePassword(ctx context.Context, adminID int, oldPassword, newPassword string) error {
+func (s *Service) ChangePassword(ctx context.Context, adminID int, oldPassword, newPassword, keepSessionID string) error {
 	if err := validate.Password(newPassword); err != nil {
 		return err
 	}
@@ -134,7 +134,11 @@ func (s *Service) ChangePassword(ctx context.Context, adminID int, oldPassword, 
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `UPDATE admins SET password_hash = ? WHERE id = ?`, string(newHash), adminID)
+	if _, err := s.db.ExecContext(ctx, `UPDATE admins SET password_hash = ? WHERE id = ?`, string(newHash), adminID); err != nil {
+		return err
+	}
+	// 改密后失效该账号的其他会话（保留当前这次，否则用户会被自己踢下线）
+	_, err = s.db.ExecContext(ctx, `DELETE FROM sessions WHERE admin_id = ? AND id <> ?`, adminID, keepSessionID)
 	return err
 }
 

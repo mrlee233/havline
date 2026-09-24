@@ -33,6 +33,10 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Run web unit tests
+        working-directory: web
+        run: npm test
+
       - name: Sync web dist into embed directory
         run: |
           rm -rf cmd/fonu/web/dist

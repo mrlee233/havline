@@ -1,5 +1,7 @@
 # 公网 Agent 页（`AgentView.vue`）设计方案
 
+> **时效说明（2026-09-24）**：文中「顶部下拉选服务端」的结构已被 v1.2.6 的**左列表 + 右详情**取代（页面标题也改为「公网服务端」），现状见 `docs/frp-server-list-merge-plan.md`。
+
 > 本文按 `breezell-design` 两遍流程产出：**Pass 1a 检测栈 → Pass 1b 确定设计方向与令牌 → Pass 2 实施规格**，
 > 并结合本项目（Fonu）既有页面与设计系统。落地时以本文为准，`docs/agent-view-refactor-plan.md`（结构整改）被本文吸收。
 >

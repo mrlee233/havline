@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fonu/fonu/internal/fsutil"
 	"github.com/fonu/fonu/internal/sysinfo"
 )
 
@@ -38,7 +39,8 @@ import (
 // 0.11.0：新增 /api/v1/certs 证书清单与 /api/v1/nginx/reload 显式重载（回传校验/重载失败原因）。
 // 0.12.0：frps 安装包的 proxy 参数改白名单 + 下载后校验 SHA-256；Basic Auth 自动生成的密码不再写进
 // nginx 配置注释（改为只在 PUT 响应里回一次）。
-const AgentVersion = "0.12.0"
+// 0.12.1：frps 启停失败如实回报（不再无条件写「已启动」）；HTTP 服务补 ReadTimeout/IdleTimeout。
+const AgentVersion = "0.12.1"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -181,7 +183,7 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	server := &http.Server{Addr: s.cfg.ListenAddr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	server := &http.Server{Addr: s.cfg.ListenAddr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -341,18 +343,27 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		_ = exec.Command("systemctl", "daemon-reload").Run()
 	}
 	// nohup 手工跑的 frps 让位给 systemd；已在 systemd 下运行则重启以加载新二进制
-	if exec.Command("systemctl", "is-active", "--quiet", "frps").Run() != nil {
-		if exec.Command("pgrep", "-x", "frps").Run() == nil {
-			_ = exec.Command("pkill", "-x", "frps").Run()
-			time.Sleep(time.Second)
-			notes = append(notes, "已停止 nohup 方式运行的旧 frps 进程")
-		}
-		_ = exec.Command("systemctl", "enable", "--now", "frps").Run()
-		notes = append(notes, "frps.service 已启动")
-	} else {
-		_ = exec.Command("systemctl", "restart", "frps").Run()
-		notes = append(notes, "frps.service 已重启以加载新版本")
+	active := exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil
+	if !active && exec.Command("pgrep", "-x", "frps").Run() == nil {
+		_ = exec.Command("pkill", "-x", "frps").Run()
+		time.Sleep(time.Second)
+		notes = append(notes, "已停止 nohup 方式运行的旧 frps 进程")
 	}
+	args := []string{"restart", "frps"}
+	label := "已重启以加载新版本"
+	if !active {
+		args = []string{"enable", "--now", "frps"}
+		label = "已启动"
+	}
+	// 启动失败必须如实回报：之前忽略 err 后无条件写「已启动」，运维会以为服务在跑
+	if out, err := exec.Command("systemctl", args...).CombinedOutput(); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"ok": false, "version": version, "binary": installPath, "notes": notes,
+			"error": fmt.Sprintf("frps 二进制已安装，但 systemctl %s 失败：%v：%s", strings.Join(args, " "), err, tailText(string(out), 400)),
+		})
+		return
+	}
+	notes = append(notes, "frps.service "+label)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": version, "binary": installPath, "notes": notes})
 }
 
@@ -1511,24 +1522,7 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".fonu-agent-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if err := tmp.Chmod(mode); err != nil {
-		tmp.Close()
-		return err
-	}
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return fsutil.WriteFileAtomic(path, data, mode)
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

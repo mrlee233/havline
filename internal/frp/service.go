@@ -14,6 +14,7 @@ import (
 
 	"github.com/fonu/fonu/internal/certificate"
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/fsutil"
 	"github.com/fonu/fonu/internal/secret"
 )
 
@@ -39,8 +40,14 @@ type Service struct {
 
 	downloadMu   sync.RWMutex
 	downloadTask DownloadTask
-	locationMu   sync.Mutex
-	locations    map[string]locationCache
+	// baseCtx 是应用级 ctx：后台下载随之取消（之前用 context.Background()，App 关闭后仍在跑）
+	baseCtx    context.Context
+	locationMu sync.Mutex
+	locations  map[string]locationCache
+
+	// agentClients 缓存每台服务端的 agent HTTP 客户端（含连接池），按 URL+Token 指纹失效
+	agentMu      sync.Mutex
+	agentClients map[int64]cachedAgentClient
 
 	// 诊断短 TTL 缓存与并发上限，避免列表页轮询叠加外部探测
 	diagMu       sync.Mutex
@@ -167,6 +174,13 @@ func (s *Service) StartDownload(version string) (DownloadTask, error) {
 	return s.downloadTask, nil
 }
 
+// SetBaseContext 注入应用级 ctx，供后台下载继承；由 app 启动时调用。
+func (s *Service) SetBaseContext(ctx context.Context) {
+	s.downloadMu.Lock()
+	defer s.downloadMu.Unlock()
+	s.baseCtx = ctx
+}
+
 func (s *Service) DownloadStatus() DownloadTask {
 	s.downloadMu.RLock()
 	defer s.downloadMu.RUnlock()
@@ -174,7 +188,13 @@ func (s *Service) DownloadStatus() DownloadTask {
 }
 
 func (s *Service) runDownload(version string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	s.downloadMu.RLock()
+	base := s.baseCtx
+	s.downloadMu.RUnlock()
+	if base == nil {
+		base = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(base, 10*time.Minute)
 	defer cancel()
 	binary, err := s.downloadRelease(ctx, version, s.updateDownload)
 	if err != nil {
@@ -772,10 +792,20 @@ func (s *Service) InstallFRPSOnAgent(ctx context.Context, serverID int64, versio
 	if err != nil {
 		return nil, err
 	}
-	// 安装后把同源 frps.toml 一起下发，保证 systemd 启动即指向正确配置
-	if server, err := s.store.GetServer(ctx, serverID); err == nil {
-		if content, err := s.buildFRPSServerConfig(ctx, server); err == nil {
-			_ = client.PushFRPSConfig(ctx, content)
+	// 安装后把同源 frps.toml 一起下发，保证 systemd 启动即指向正确配置。
+	// 失败不能吞掉：否则前端只看到「安装成功」，VPS 上跑的仍是旧配置。
+	warning := ""
+	if server, err := s.store.GetServer(ctx, serverID); err != nil {
+		warning = "frps 已安装，但读取服务端配置失败：" + err.Error()
+	} else if content, err := s.buildFRPSServerConfig(ctx, server); err != nil {
+		warning = "frps 已安装，但生成 frps.toml 失败：" + err.Error()
+	} else if err := client.PushFRPSConfig(ctx, content); err != nil {
+		warning = "frps 已安装，但 frps.toml 下发失败：" + err.Error()
+	}
+	if warning != "" {
+		result["config_warning"] = warning
+		if list, ok := result["notes"].([]any); ok {
+			result["notes"] = append(list, warning)
 		}
 	}
 	return result, nil
@@ -1259,6 +1289,12 @@ func (s *Service) DeleteProxy(ctx context.Context, id int64) error {
 	return nil
 }
 
+// cachedAgentClient 是按 URL+Token 指纹缓存的 agent 客户端；指纹用密文而非明文，避免内存里多存一份 Token。
+type cachedAgentClient struct {
+	fingerprint string
+	client      *AgentClient
+}
+
 func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient, bool) {
 	server, err := s.store.GetServer(ctx, serverID)
 	if err != nil || !server.MgmtEnabled || server.AgentURL == "" || !server.AgentConfigured {
@@ -1272,7 +1308,19 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	if err != nil || token == "" {
 		return nil, false
 	}
-	return NewAgentClient(server.AgentURL, token), true
+	// 复用同一个 http.Client：批量同步 N 条路由时不再每次新建 Transport 与 TLS 握手
+	fingerprint := server.AgentURL + "|" + encoded
+	s.agentMu.Lock()
+	defer s.agentMu.Unlock()
+	if s.agentClients == nil {
+		s.agentClients = make(map[int64]cachedAgentClient)
+	}
+	if cached, ok := s.agentClients[serverID]; ok && cached.fingerprint == fingerprint {
+		return cached.client, true
+	}
+	client := NewAgentClient(server.AgentURL, token)
+	s.agentClients[serverID] = cachedAgentClient{fingerprint: fingerprint, client: client}
+	return client, true
 }
 
 func (s *Service) syncAgentRoute(ctx context.Context, proxy Proxy) {
@@ -1494,8 +1542,10 @@ func (s *Service) persistServerConfigForVerify(ctx context.Context, server Serve
 		_ = os.Remove(officialPath + ".verify")
 		return err
 	}
-	if current, readErr := os.ReadFile(officialPath); readErr == nil {
-		_ = os.WriteFile(officialPath+".bak", current, 0o600)
+	// 备份失败就不能覆盖唯一副本：否则旧配置没有回退、只剩 .verify 里的新内容
+	if err := fsutil.Backup(officialPath); err != nil {
+		_ = os.Remove(officialPath + ".verify")
+		return fmt.Errorf("备份现有 frps 配置失败，已保留原配置: %w", err)
 	}
 	return os.Rename(officialPath+".verify", officialPath)
 }
@@ -1820,10 +1870,8 @@ func writeConfigAtomically(path, content string) error {
 	}
 	// 23.5：写入前把当前版本留存为 .bak。临时文件写入本身已原子（CreateTemp+Rename）,
 	// 但 frpc verify 失败时上层需要回退目标,这里提供版本化备份。
-	if current, err := os.ReadFile(path); err == nil {
-		if err := os.WriteFile(path+".bak", current, 0o600); err != nil {
-			return err
-		}
+	if err := fsutil.Backup(path); err != nil {
+		return err
 	}
 	tmp, err := os.CreateTemp(dir, "frpc-*.toml")
 	if err != nil {

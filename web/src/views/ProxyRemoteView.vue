@@ -365,12 +365,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { NButton, NIcon, NPopconfirm, useMessage, type DataTableColumns } from 'naive-ui'
 import {
   CheckmarkCircleOutline, CopyOutline, InformationCircleOutline, LayersOutline, OpenOutline, PulseOutline, RefreshOutline, SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import EmptyState from '../components/EmptyState.vue'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import FonuCard from '../components/FonuCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -429,7 +430,6 @@ const settingsForm = ref({
 const confModal = ref(false)
 const confDomain = ref('')
 const confContent = ref('')
-let timer: number | undefined
 
 const server = computed(() => servers.value.find((item) => item.id === selectedId.value) ?? null)
 const agentStatusOk = computed(() => statusLoaded.value && agentStatus.value !== null)
@@ -486,6 +486,7 @@ async function load() {
 }
 
 // refreshAll：单个接口失败不再中断整轮，失败项汇总成一句可见提示（原先 loadErrorMsg 从未渲染）
+// 7 个接口彼此独立，并行发：此前串行 await 让每次刷新等于 7 个往返相加
 async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   const current = server.value
   if (!current) return
@@ -496,19 +497,21 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
       failures.push(`${label}${error instanceof Error ? `：${error.message}` : '失败'}`)
     }
   }
-  await track('规则列表', () => api.getFrpAgentRouteCandidates(current.id), (value) => { candidates.value = value })
-  await track('路由文件', () => api.getFrpAgentRoutes(current.id), (value) => { routeDetails.value = value })
-  await track('健康检查', () => api.getFrpAgentRouteHealth(current.id), (value) => { routeHealth.value = value })
-  await track('配置漂移', () => api.getFrpAgentRouteDrift(current.id), (value) => { routeDrift.value = value })
-  await track('证书列表', () => api.listCertificates(), (value) => { certificates.value = value })
-  await track('流量采集', () => api.listFrpProxiesTraffic(), (value) => {
-    proxyTraffic.value = value.items ?? {}
-    trafficErrors.value = value.errors ?? {}
-  })
-  await track('Agent 状态', () => api.getFrpAgentStatus(current.id), (value) => {
-    agentStatus.value = value
-    statusLoaded.value = true
-  })
+  await Promise.all([
+    track('规则列表', () => api.getFrpAgentRouteCandidates(current.id), (value) => { candidates.value = value }),
+    track('路由文件', () => api.getFrpAgentRoutes(current.id), (value) => { routeDetails.value = value }),
+    track('健康检查', () => api.getFrpAgentRouteHealth(current.id), (value) => { routeHealth.value = value }),
+    track('配置漂移', () => api.getFrpAgentRouteDrift(current.id), (value) => { routeDrift.value = value }),
+    track('证书列表', () => api.listCertificates(), (value) => { certificates.value = value }),
+    track('流量采集', () => api.listFrpProxiesTraffic(), (value) => {
+      proxyTraffic.value = value.items ?? {}
+      trafficErrors.value = value.errors ?? {}
+    }),
+    track('Agent 状态', () => api.getFrpAgentStatus(current.id), (value) => {
+      agentStatus.value = value
+      statusLoaded.value = true
+    }),
+  ])
   loadErrorMsg.value = failures.length ? `数据读取不完整 —— ${failures.join('；')}` : ''
   if (options.silent === false) manualRefreshing.value = false
 }
@@ -865,17 +868,14 @@ watch(selectedId, () => {
   void refreshAll({ silent: false })
 })
 
-onMounted(() => {
-  void load()
-  timer = window.setInterval(() => {
-    if (!server.value) return
-    if (document.visibilityState === 'hidden') return // 页面不可见时暂停轮询
-    if (busy.value) return                            // 有操作进行中不叠加轮询
-    void refreshAll()
-  }, 15000)
-})
+// 轮询走 useVisibilityPolling：标签页隐藏时暂停，回到前台补一次
+useVisibilityPolling(() => {
+  if (!server.value) return // 未选服务端时不轮询
+  if (busy.value) return    // 有操作进行中不叠加轮询
+  void refreshAll()
+}, 15000)
 
-onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
+onMounted(() => { void load() })
 </script>
 
 <style scoped>

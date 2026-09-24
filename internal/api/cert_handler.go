@@ -44,7 +44,10 @@ func (h *CertHandler) Apply(w http.ResponseWriter, r *http.Request) {
 		CA           string   `json:"ca"`
 		Email        string   `json:"email"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
 	domains := req.Domains
 	if len(domains) == 0 && strings.TrimSpace(req.Domain) != "" {
 		domains = []string{req.Domain}
@@ -141,7 +144,10 @@ func (h *CertHandler) Renew(w http.ResponseWriter, r *http.Request) {
 		Domain string `json:"domain"`
 		CA     string `json:"ca"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
 	record, err := h.svc.Renew(r.Context(), req.Domain, req.CA)
 	if err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error())

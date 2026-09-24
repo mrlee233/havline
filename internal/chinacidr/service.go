@@ -14,14 +14,15 @@ import (
 	"time"
 
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/fsutil"
 	"github.com/fonu/fonu/internal/nginx"
 	"github.com/fonu/fonu/internal/proxy"
 	"github.com/fonu/fonu/internal/settings"
 )
 
 const (
-	defaultV4URL       = "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt"
-	ghfastProxyPrefix  = "https://ghfast.top/"
+	defaultV4URL      = "https://raw.githubusercontent.com/17mon/china_ip_list/master/china_ip_list.txt"
+	ghfastProxyPrefix = "https://ghfast.top/"
 )
 
 // metowolf/iplist 已下线 CN/ipv6.txt；按优先级尝试可用源。
@@ -96,7 +97,7 @@ func (s *Service) Update(ctx context.Context) error {
 	}
 
 	tmpPath := s.cfg.ChinaCIDRTempPath()
-	if err := os.WriteFile(tmpPath, []byte(body), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(tmpPath, []byte(body), 0o644); err != nil {
 		return err
 	}
 

@@ -1,5 +1,7 @@
 # fonu-agent 能力扩展方案
 
+> **实施状态（2026-09-24）**：P0/P1/P2 已全部落地（agent 0.11.0）；P3 三项按本文约定不做。剩余为真机验收项，见 `docs/project-audit-2026-09-24.md`。
+
 > 本文盘点 VPS 侧 `fonu-agent` 现有的接口面与数据面，给出「能直接做」「需要新增 agent 端点」「不做」三类功能的详细设计。
 >
 > 依据：本仓库 `internal/agent/`、`internal/frp/agent_client.go`、`internal/frp/agent_installer.go`、`internal/frp/ssh_installer.go`、`internal/api/frpmulti_handler.go`、`web/src/views/AgentView.vue`、`web/src/views/ProxyRemoteView.vue`（均为读代码确认，非推测）。

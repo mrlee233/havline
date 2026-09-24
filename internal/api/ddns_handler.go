@@ -23,13 +23,13 @@ type ddnsRequest struct {
 	RecordNames []string `json:"record_names"`
 	Domains     []string `json:"domains"`
 	IPv4Enabled *bool    `json:"ipv4_enabled"`
-	IPv6Enabled *bool  `json:"ipv6_enabled"`
-	Enabled     *bool  `json:"enabled"`
-	CustomIPv4  string `json:"custom_ipv4"`
-	CustomIPv6  string `json:"custom_ipv6"`
-	APIToken    string `json:"api_token"`
-	APITokenID  string `json:"api_token_id"`
-	APISecret   string `json:"api_secret"`
+	IPv6Enabled *bool    `json:"ipv6_enabled"`
+	Enabled     *bool    `json:"enabled"`
+	CustomIPv4  string   `json:"custom_ipv4"`
+	CustomIPv6  string   `json:"custom_ipv6"`
+	APIToken    string   `json:"api_token"`
+	APITokenID  string   `json:"api_token_id"`
+	APISecret   string   `json:"api_secret"`
 }
 
 func (h *DDNSHandler) toInput(req ddnsRequest) ddns.SaveInput {
@@ -119,7 +119,10 @@ func (h *DDNSHandler) Test(w http.ResponseWriter, r *http.Request) {
 		APITokenID string `json:"api_token_id"`
 		APISecret  string `json:"api_secret"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
 	if err := h.svc.Test(r.Context(), ddns.TestInput{
 		ConfigID:   req.ConfigID,
 		Provider:   req.Provider,

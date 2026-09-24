@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/fsutil"
 )
 
 const maxCustomBackups = 10
@@ -141,21 +142,21 @@ func RestoreBackup(backupDir, backupName, targetPath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(targetPath, data, 0o644)
+	return fsutil.WriteFileAtomic(targetPath, data, 0o644)
 }
 
 func WriteGlobalCustom(cfg config.Config, content string) error {
 	if err := EnsureCustomDirs(cfg); err != nil {
 		return err
 	}
-	return os.WriteFile(cfg.NginxGlobalCustomPath(), []byte(content), 0o644)
+	return fsutil.WriteFileAtomic(cfg.NginxGlobalCustomPath(), []byte(content), 0o644)
 }
 
 func WriteRuleCustom(cfg config.Config, ruleID int64, content string) error {
 	if err := os.MkdirAll(cfg.NginxRulesDir(), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(cfg.NginxRuleCustomPath(ruleID), []byte(content), 0o644)
+	return fsutil.WriteFileAtomic(cfg.NginxRuleCustomPath(ruleID), []byte(content), 0o644)
 }
 
 func RemoveRuleCustom(cfg config.Config, ruleID int64) error {

@@ -1859,9 +1859,6 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 .detail-subgroup { margin-top: var(--fonu-space-3); padding-top: var(--fonu-space-3); border-top: 1px solid var(--fonu-border); }
 .detail-subgroup__title { margin-bottom: var(--fonu-space-2); font-size: 12px; font-weight: 600; color: var(--fonu-text-secondary); }
 .detail-muted { color: var(--fonu-text-secondary); font-size: 12px; }
-.detail-subgroup { margin-top: var(--fonu-space-3); padding-top: var(--fonu-space-3); border-top: 1px solid var(--fonu-border); }
-.detail-subgroup__title { margin-bottom: var(--fonu-space-2); font-size: 12px; font-weight: 600; color: var(--fonu-text-secondary); }
-.detail-muted { color: var(--fonu-text-secondary); font-size: 12px; }
 .diag-checks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .server-detail__location { display: flex; align-items: center; gap: 5px; }
 .detail-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }

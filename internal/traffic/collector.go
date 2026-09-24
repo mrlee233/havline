@@ -17,19 +17,19 @@ import (
 )
 
 const (
-	rateWindow       = 5 * time.Second
-	activeWindow     = 65 * time.Second
-	persistInterval  = 30 * time.Second
+	rateWindow        = 5 * time.Second
+	activeWindow      = 65 * time.Second
+	persistInterval   = 30 * time.Second
 	maxSamplesPerHost = 256
 )
 
 type RuleTraffic struct {
-	RuleID       int64   `json:"rule_id"`
-	UploadTotal  int64   `json:"upload_total"`
-	DownloadTotal int64  `json:"download_total"`
-	UploadRate   float64 `json:"upload_rate"`
-	DownloadRate float64 `json:"download_rate"`
-	Connections  int     `json:"connections"`
+	RuleID        int64   `json:"rule_id"`
+	UploadTotal   int64   `json:"upload_total"`
+	DownloadTotal int64   `json:"download_total"`
+	UploadRate    float64 `json:"upload_rate"`
+	DownloadRate  float64 `json:"download_rate"`
+	Connections   int     `json:"connections"`
 }
 
 type ClientConn struct {
@@ -176,6 +176,7 @@ func (c *Collector) ingestLine(line string, trackLive bool) {
 	}
 
 	now := time.Now()
+	hitIP := ""
 	c.mu.Lock()
 	st := c.ensureHost(host)
 	st.uploadTotal += up
@@ -189,13 +190,15 @@ func (c *Collector) ingestLine(line string, trackLive bool) {
 		}
 		if entry.ClientIP != "" && entry.ClientIP != "-" {
 			st.clients[entry.ClientIP] = now
-			if c.notify != nil {
-				c.notify.RecordAccessHit(context.Background(), entry.ClientIP)
-			}
+			// 锁内只记 IP：RecordAccessHit 会写库并判断通知，放在锁外，避免阻塞读侧
+			hitIP = entry.ClientIP
 		}
 		c.pruneHost(st, now)
 	}
 	c.mu.Unlock()
+	if hitIP != "" && c.notify != nil {
+		c.notify.RecordAccessHit(context.Background(), hitIP)
+	}
 }
 
 func (c *Collector) ensureHost(host string) *hostState {

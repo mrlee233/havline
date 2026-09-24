@@ -153,7 +153,7 @@ docker compose up -d --build
 | `FONU_NGINX_HTTP_PORT`  | `80`                      | 新建 HTTP 反代规则的默认监听端口           |
 | `FONU_NGINX_HTTPS_PORT` | `443`                     | 新建 HTTPS 反代规则的默认监听端口          |
 | `FONU_NGINX_BIN`        | `nginx`                   | Nginx 可执行文件路径（本地开发可指定）     |
-| `FONU_FRPC_BIN`         | `frpc`                    | frpc 可执行文件路径（Docker 镜像内置 0.71.0） |
+| `FONU_FRPC_BIN`         | `frpc`                    | frpc 可执行文件路径（镜像不预装，用「应用配置」按需下载或自行放置） |
 | `FONU_FRP_PID`          | `{DATA_DIR}/frp/frpc.pid` | frpc 进程 PID 文件路径                     |
 
 ## 注意事项

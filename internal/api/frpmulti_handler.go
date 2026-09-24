@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -606,7 +608,11 @@ func (h *FRPMultiHandler) InstallFRPSOnAgent(w http.ResponseWriter, r *http.Requ
 		Version string `json:"version"`
 		Proxy   string `json:"proxy"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	// 允许空请求体（走默认版本），但 JSON 语法错误要报 400
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
 	if body.Version == "" {
 		body.Version = "0.71.0"
 	}

@@ -42,7 +42,7 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 
 	var b strings.Builder
 	b.WriteString("# 由 Fonu 生成：与本服务端的 frpc 配置同源（bindPort/auth 与客户端一致）\n")
-	b.WriteString("# 格式：frp v0.52.0+ 的 TOML 配置（Docker 镜像内置 frp 0.71.0；INI 自 v0.52.0 起已被官方弃用）\n")
+	b.WriteString("# 格式：frp v0.52.0+ 的 TOML 配置（INI 自 v0.52.0 起已被官方弃用）\n")
 	b.WriteString("# 用法：保存为 VPS 上的 frps.toml，执行 ./frps -c frps.toml\n\n")
 	// TOML 规范：顶层标量键必须写在任何 [table] 段之前，否则会被归入上一个表
 	b.WriteString("bindAddr = \"0.0.0.0\"\n")

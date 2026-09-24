@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/fsutil"
 	"github.com/fonu/fonu/internal/proxy"
 )
 
@@ -112,7 +113,7 @@ func (m *Manager) Apply(ctx context.Context, rules []proxy.Rule, certs []CertSou
 	}
 
 	tmpPath := m.cfg.NginxConfigPath() + ".tmp"
-	if err := os.WriteFile(tmpPath, []byte(content), 0o644); err != nil {
+	if err := fsutil.WriteFileAtomic(tmpPath, []byte(content), 0o644); err != nil {
 		return ApplyResult{}, err
 	}
 
@@ -130,12 +131,10 @@ func (m *Manager) Apply(ctx context.Context, rules []proxy.Rule, certs []CertSou
 	}
 
 	currentPath := m.cfg.NginxConfigPath()
-	backupPath := currentPath + ".bak"
-	if _, err := os.Stat(currentPath); err == nil {
-		if err := copyFile(currentPath, backupPath); err != nil {
-			_ = os.Remove(tmpPath)
-			return ApplyResult{}, err
-		}
+	// 覆盖前留 .bak（fsutil.Backup 对文件不存在视为无需备份）
+	if err := fsutil.Backup(currentPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return ApplyResult{}, err
 	}
 
 	if err := os.Rename(tmpPath, currentPath); err != nil {

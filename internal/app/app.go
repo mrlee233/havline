@@ -123,9 +123,13 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		Addr:              cfg.ListenAddr,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
+		// 读超时放到 5 分钟：备份恢复要上传最大 64MB；不设 WriteTimeout，否则日志 SSE 会被中途切断
+		ReadTimeout: 5 * time.Minute,
+		IdleTimeout: 2 * time.Minute,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	frpMultiSvc.SetBaseContext(ctx)
 	intervalMinutes, _ := settingsStore.GetInt(ctx, settings.KeyDDNSCheckInterval)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 5

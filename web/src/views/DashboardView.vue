@@ -794,7 +794,12 @@ function recordRateSample() {
   rateHistory.value = rateHistory.value.filter((p) => p.at >= cutoff)
 }
 
+let trafficInFlight = false
+
 async function refreshTraffic() {
+  // 2 秒一轮且链路慢时会堆积并发请求：上一轮没回来就跳过这一轮
+  if (trafficInFlight) return
+  trafficInFlight = true
   try {
     const rows = asList(await api.getProxyTraffic())
     const next: Record<number, ProxyTraffic> = {}
@@ -805,6 +810,8 @@ async function refreshTraffic() {
     recordRateSample()
   } catch {
     // ignore polling errors
+  } finally {
+    trafficInFlight = false
   }
 }
 
