@@ -11,6 +11,9 @@ const (
 	EventNginxReloadFailure = "nginx_reload_failure"
 	EventResourceThreshold  = "resource_threshold"
 	EventTunnelDown         = "tunnel_down"
+	EventFrpsServerDown     = "frps_server_down"
+	EventAgentUnreachable   = "agent_unreachable"
+	EventRouteDrift         = "route_drift"
 
 	MaskedSecret = "********"
 
@@ -29,6 +32,9 @@ const (
 	DefaultMemoryThreshold           = 90
 	DefaultDiskThreshold             = 85
 	DefaultTunnelFailThreshold       = 3
+	DefaultFrpsFailThreshold         = 2
+	DefaultAgentFailThreshold        = 3
+	DefaultDriftCooldownHours        = 24
 	// DefaultResourceAlertCooldown 是资源类告警的静默期：持续高占用时每半小时提醒一次，
 	// 期间恢复正常会清掉冷却，再次超标可立即再报。
 	DefaultResourceAlertCooldown = 30 * 60 // seconds
@@ -113,6 +119,12 @@ type Config struct {
 	MemoryThreshold       int            `json:"memory_threshold"`
 	DiskThreshold         int            `json:"disk_threshold"`
 	TunnelFailThreshold   int            `json:"tunnel_fail_threshold"`
+	OnFrpsDown            bool           `json:"on_frps_down"`
+	OnAgentUnreachable    bool           `json:"on_agent_unreachable"`
+	OnRouteDrift          bool           `json:"on_route_drift"`
+	FrpsFailThreshold     int            `json:"frps_fail_threshold"`
+	AgentFailThreshold    int            `json:"agent_fail_threshold"`
+	DriftCooldownHours    int            `json:"drift_cooldown_hours"`
 }
 
 type RuntimeConfig struct {
@@ -148,6 +160,12 @@ type SaveInput struct {
 	MemoryThreshold       int
 	DiskThreshold         int
 	TunnelFailThreshold   int
+	OnFrpsDown            bool
+	OnAgentUnreachable    bool
+	OnRouteDrift          bool
+	FrpsFailThreshold     int
+	AgentFailThreshold    int
+	DriftCooldownHours    int
 }
 
 type TestInput struct {

@@ -139,26 +139,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	if chinaHours <= 0 {
 		chinaHours = 24
 	}
-	// 资源与隧道巡检：间隔比其它任务短，「连续 N 次不通」需要足够采样次数才能判定
-	monitorChecker := monitor.New(settingsStore, notifySvc, logger, func(ctx context.Context) ([]monitor.RouteStatus, error) {
-		servers, err := frpMultiSvc.ListServers(ctx)
-		if err != nil {
-			return nil, err
-		}
-		routes := make([]monitor.RouteStatus, 0, len(servers))
-		for _, server := range servers {
-			// 单台服务端探测失败不影响其它服务端：它本轮跳过，等下一轮
-			health, err := frpMultiSvc.RouteHealth(ctx, server.ID)
-			if err != nil {
-				logger.Warn("巡检跳过服务端", "module", "MONITOR", "server_id", server.ID, "error", err.Error())
-				continue
-			}
-			for _, item := range health {
-				routes = append(routes, monitor.RouteStatus{Domain: item.Domain, TunnelOK: item.TunnelOK, Detail: item.TunnelDetail})
-			}
-		}
-		return routes, nil
-	})
+	// 巡检间隔比其它任务短：「连续 N 次不通」需要足够采样次数才能判定
+	monitorChecker := monitor.New(settingsStore, notifySvc, logger, monitorSource{frp: frpMultiSvc, logger: logger})
 	sched := scheduler.New(
 		scheduler.Job{
 			Name:     "ddns",

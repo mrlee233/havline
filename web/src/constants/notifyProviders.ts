@@ -3,7 +3,8 @@ import type { NotifyType, WebhookProvider } from '../api/types'
 export const NOTIFY_TYPE_OPTIONS: { label: string; value: NotifyType }[] = [
   { label: '关闭', value: '' },
   { label: '邮件（SMTP）', value: 'email' },
-  { label: 'Webhook', value: 'webhook' },
+  // 企业微信 / 钉钉 / 飞书机器人都是「POST 一个 URL + JSON」，归在 Webhook 预设里，标签要说明白
+  { label: 'Webhook / IM 机器人', value: 'webhook' },
   { label: 'Telegram 机器人', value: 'telegram' },
 ]
 

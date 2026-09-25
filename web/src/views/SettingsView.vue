@@ -334,6 +334,24 @@
                         <n-input-number v-model:value="notifyTunnelFailThreshold" :min="1" :max="20" class="settings-field__input" />
                       </div>
                     </template>
+                    <template v-else-if="event.thresholdKey === 'frps_fail'">
+                      <div class="settings-field">
+                        <label class="settings-field__label">连续失败次数</label>
+                        <n-input-number v-model:value="notifyFrpsFailThreshold" :min="1" :max="20" class="settings-field__input" />
+                      </div>
+                    </template>
+                    <template v-else-if="event.thresholdKey === 'agent_fail'">
+                      <div class="settings-field">
+                        <label class="settings-field__label">连续失败次数</label>
+                        <n-input-number v-model:value="notifyAgentFailThreshold" :min="1" :max="20" class="settings-field__input" />
+                      </div>
+                    </template>
+                    <template v-else-if="event.thresholdKey === 'drift_cooldown'">
+                      <div class="settings-field">
+                        <label class="settings-field__label">提醒间隔（小时）</label>
+                        <n-input-number v-model:value="notifyDriftCooldownHours" :min="1" :max="168" class="settings-field__input" />
+                      </div>
+                    </template>
                   </div>
                 </template>
               </div>
@@ -716,8 +734,11 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { DEFAULT_PRIVATE_CIDRS, mergeIPList, stripDefaultIPList } from '../constants/ipPolicy'
 import {
+  DEFAULT_AGENT_FAIL_THRESHOLD,
   DEFAULT_CPU_THRESHOLD,
   DEFAULT_DISK_THRESHOLD,
+  DEFAULT_DRIFT_COOLDOWN_HOURS,
+  DEFAULT_FRPS_FAIL_THRESHOLD,
   DEFAULT_LOGIN_FAILURE_THRESHOLD,
   DEFAULT_LOGIN_FAILURE_WINDOW_SEC,
   DEFAULT_MEMORY_THRESHOLD,
@@ -767,6 +788,9 @@ const notifyEventFlags = reactive<Record<string, boolean>>({
   on_nginx_reload_failure: true,
   on_resource_threshold: false,
   on_tunnel_down: false,
+  on_frps_down: false,
+  on_agent_unreachable: false,
+  on_route_drift: false,
 })
 const notifyIPFrequentThreshold = ref(100)
 const notifyIPFrequentWindowSec = ref(60)
@@ -776,6 +800,9 @@ const notifyCPUThreshold = ref(DEFAULT_CPU_THRESHOLD)
 const notifyMemoryThreshold = ref(DEFAULT_MEMORY_THRESHOLD)
 const notifyDiskThreshold = ref(DEFAULT_DISK_THRESHOLD)
 const notifyTunnelFailThreshold = ref(DEFAULT_TUNNEL_FAIL_THRESHOLD)
+const notifyFrpsFailThreshold = ref(DEFAULT_FRPS_FAIL_THRESHOLD)
+const notifyAgentFailThreshold = ref(DEFAULT_AGENT_FAIL_THRESHOLD)
+const notifyDriftCooldownHours = ref(DEFAULT_DRIFT_COOLDOWN_HOURS)
 
 // API Token：明文只在创建响应里回一次，因此单独用一个 ref 暂存展示
 const apiTokens = ref<ApiToken[]>([])
@@ -1278,6 +1305,9 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_nginx_reload_failure = flagOn('notify_on_nginx_reload_failure')
     notifyEventFlags.on_resource_threshold = flagOptIn('notify_on_resource_threshold')
     notifyEventFlags.on_tunnel_down = flagOptIn('notify_on_tunnel_down')
+    notifyEventFlags.on_frps_down = flagOptIn('notify_on_frps_down')
+    notifyEventFlags.on_agent_unreachable = flagOptIn('notify_on_agent_unreachable')
+    notifyEventFlags.on_route_drift = flagOptIn('notify_on_route_drift')
   } else {
     const legacyDDNS = flagOn('notify_on_ddns_error')
     const legacyCert = flagOn('notify_on_cert_error')
@@ -1291,6 +1321,9 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_login_failure = false
     notifyEventFlags.on_resource_threshold = false
     notifyEventFlags.on_tunnel_down = false
+    notifyEventFlags.on_frps_down = false
+    notifyEventFlags.on_agent_unreachable = false
+    notifyEventFlags.on_route_drift = false
   }
   notifyIPFrequentThreshold.value = Number(settings.notify_ip_frequent_threshold || 100)
   notifyIPFrequentWindowSec.value = Number(settings.notify_ip_frequent_window_sec || 60)
@@ -1300,6 +1333,9 @@ function applyNotifySettings(settings: Record<string, string>) {
   notifyMemoryThreshold.value = Number(settings.notify_memory_threshold || DEFAULT_MEMORY_THRESHOLD)
   notifyDiskThreshold.value = Number(settings.notify_disk_threshold || DEFAULT_DISK_THRESHOLD)
   notifyTunnelFailThreshold.value = Number(settings.notify_tunnel_fail_threshold || DEFAULT_TUNNEL_FAIL_THRESHOLD)
+  notifyFrpsFailThreshold.value = Number(settings.notify_frps_fail_threshold || DEFAULT_FRPS_FAIL_THRESHOLD)
+  notifyAgentFailThreshold.value = Number(settings.notify_agent_fail_threshold || DEFAULT_AGENT_FAIL_THRESHOLD)
+  notifyDriftCooldownHours.value = Number(settings.notify_drift_cooldown_hours || DEFAULT_DRIFT_COOLDOWN_HOURS)
 }
 
 function buildNotifyEmailJSON(): string {
@@ -1407,6 +1443,12 @@ function buildSavePayload() {
     notify_on_nginx_reload_failure: notifyEventFlags.on_nginx_reload_failure ? '1' : '0',
     notify_on_resource_threshold: notifyEventFlags.on_resource_threshold ? '1' : '0',
     notify_on_tunnel_down: notifyEventFlags.on_tunnel_down ? '1' : '0',
+    notify_on_frps_down: notifyEventFlags.on_frps_down ? '1' : '0',
+    notify_on_agent_unreachable: notifyEventFlags.on_agent_unreachable ? '1' : '0',
+    notify_on_route_drift: notifyEventFlags.on_route_drift ? '1' : '0',
+    notify_frps_fail_threshold: String(notifyFrpsFailThreshold.value || DEFAULT_FRPS_FAIL_THRESHOLD),
+    notify_agent_fail_threshold: String(notifyAgentFailThreshold.value || DEFAULT_AGENT_FAIL_THRESHOLD),
+    notify_drift_cooldown_hours: String(notifyDriftCooldownHours.value || DEFAULT_DRIFT_COOLDOWN_HOURS),
     notify_cpu_threshold: String(notifyCPUThreshold.value || DEFAULT_CPU_THRESHOLD),
     notify_memory_threshold: String(notifyMemoryThreshold.value || DEFAULT_MEMORY_THRESHOLD),
     notify_disk_threshold: String(notifyDiskThreshold.value || DEFAULT_DISK_THRESHOLD),

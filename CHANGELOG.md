@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.10] - 2026-09-25
+
+### 新增
+
+- **告警事件新增三项巡检**（默认关闭，设置页「告警事件 → 系统」）：
+  - **公网服务端掉线**：服务端进程没在跑、或隧道连不上 frps 时通知，恢复时再通知一次；只对「用户要它运行」的服务端判定，手动停止的不报
+  - **公网 agent 不可达**：VPS 上的 fonu-agent 连续无响应（重启后没起来最常见），恢复时再通知一次；没配 agent 的服务端不参与判定
+  - **配置漂移**：VPS 上的 vhost 与 Fonu 记录不一致（被手工改过、或 agent 重装后没重部署）时通知，漂移清空时补一条恢复
+- 通知图标与分类补齐：📈 系统（资源占用）、🔌🛑📡 隧道（隧道 / 服务端 / agent）、🧭 配置（漂移）
+- 通知方式的 `Webhook` 改名为「Webhook / IM 机器人」：企业微信、钉钉、飞书机器人挂在 Webhook 预设下，原标签没说明白
+
+### 改进
+
+- 巡检改为 Source 接口（Routes / Servers / Agents / Drift），`internal/app/monitor_source.go` 负责把 frp 服务适配进来，`internal/monitor` 因此不依赖 frp 包
+- 「连续 N 次失败」抽成共用的 `failureTransition`（原 `tunnelTransition` 泛化）：三条新巡检与原有隧道巡检共用「刚好达标报一次、恢复报一次」；漂移不是连续失败型，单独用冷却（默认 24 小时，可配）
+- 避免误报的三条约定：服务端只在「用户要它运行」时判定；`ConnectionState` 为 `unknown` 按健康处理；没配 agent 的服务端不参与可达性判定
+- 开关关闭时连数据采集都跳过（关掉的功能不该有后台开销）；所有 `notify.Alert` 一律在锁外调用
+- 新增设置项：`notify_on_frps_down` / `notify_on_agent_unreachable` / `notify_on_route_drift`，以及 `notify_frps_fail_threshold`(2) / `notify_agent_fail_threshold`(3) / `notify_drift_cooldown_hours`(24)
+
+### 测试
+
+- `internal/monitor/monitor_test.go` 增加 `serverDown`（手动停止不报、进程未运行或连接断开要报、连接状态未知不误报）、`serverLabel`、`stateOr` 用例
+
+### 变更
+
+- 版本号提升到 1.2.10（版本单一来源仍是根目录 `VERSION`）；`web/package.json` 同步对齐
+- agent 无改动，`AgentVersion` 保持 **0.12.2**，本轮不需要在 VPS 上重新升级 Agent
+
 ## [v1.2.9] - 2026-09-24
 
 ### 新增

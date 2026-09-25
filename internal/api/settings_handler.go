@@ -74,6 +74,12 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		settings.KeyNotifyMemoryThreshold:       true,
 		settings.KeyNotifyDiskThreshold:         true,
 		settings.KeyNotifyTunnelFailThreshold:   true,
+		settings.KeyNotifyOnFrpsDown:            true,
+		settings.KeyNotifyOnAgentUnreachable:    true,
+		settings.KeyNotifyOnRouteDrift:          true,
+		settings.KeyNotifyFrpsFailThreshold:     true,
+		settings.KeyNotifyAgentFailThreshold:    true,
+		settings.KeyNotifyDriftCooldownHours:    true,
 		settings.KeyTrustedProxy:                true,
 		settings.KeyGlobalIPBlacklist:           true,
 		settings.KeyGlobalIPWhitelist:           true,
@@ -151,6 +157,12 @@ func isNotifySettingKey(key string) bool {
 		settings.KeyNotifyMemoryThreshold,
 		settings.KeyNotifyDiskThreshold,
 		settings.KeyNotifyTunnelFailThreshold,
+		settings.KeyNotifyOnFrpsDown,
+		settings.KeyNotifyOnAgentUnreachable,
+		settings.KeyNotifyOnRouteDrift,
+		settings.KeyNotifyFrpsFailThreshold,
+		settings.KeyNotifyAgentFailThreshold,
+		settings.KeyNotifyDriftCooldownHours,
 		settings.KeyNotifyWebhookURL:
 		return true
 	default:

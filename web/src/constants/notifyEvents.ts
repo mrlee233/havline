@@ -3,7 +3,7 @@ export interface NotifyEventOption {
   label: string
   hint?: string
   hasThreshold?: boolean
-  thresholdKey?: 'ip_frequent' | 'login_failure' | 'resource' | 'tunnel_fail'
+  thresholdKey?: 'ip_frequent' | 'login_failure' | 'resource' | 'tunnel_fail' | 'frps_fail' | 'agent_fail' | 'drift_cooldown'
 }
 
 export interface NotifyEventGroup {
@@ -85,6 +85,27 @@ export const NOTIFY_EVENT_GROUPS: NotifyEventGroup[] = [
         hasThreshold: true,
         thresholdKey: 'tunnel_fail',
       },
+      {
+        key: 'on_frps_down',
+        label: '公网服务端掉线',
+        hint: '服务端进程没在跑或隧道连不上 frps（手动停止的不报），恢复时再通知一次',
+        hasThreshold: true,
+        thresholdKey: 'frps_fail',
+      },
+      {
+        key: 'on_agent_unreachable',
+        label: '公网 agent 不可达',
+        hint: 'VPS 上的 fonu-agent 连续无响应（重启后没起来最常见），恢复时再通知一次',
+        hasThreshold: true,
+        thresholdKey: 'agent_fail',
+      },
+      {
+        key: 'on_route_drift',
+        label: '配置漂移',
+        hint: 'VPS 上的 vhost 与 Fonu 记录不一致（被手工改过或重装后未重部署），同一台按提醒间隔重复提醒',
+        hasThreshold: true,
+        thresholdKey: 'drift_cooldown',
+      },
     ],
   },
 ]
@@ -97,3 +118,6 @@ export const DEFAULT_CPU_THRESHOLD = 90
 export const DEFAULT_MEMORY_THRESHOLD = 90
 export const DEFAULT_DISK_THRESHOLD = 85
 export const DEFAULT_TUNNEL_FAIL_THRESHOLD = 3
+export const DEFAULT_FRPS_FAIL_THRESHOLD = 2
+export const DEFAULT_AGENT_FAIL_THRESHOLD = 3
+export const DEFAULT_DRIFT_COOLDOWN_HOURS = 24

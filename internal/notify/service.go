@@ -246,6 +246,12 @@ func (s *Service) enabledFor(cfg RuntimeConfig, event string) bool {
 		return cfg.OnResourceThreshold
 	case EventTunnelDown:
 		return cfg.OnTunnelDown
+	case EventFrpsServerDown:
+		return cfg.OnFrpsDown
+	case EventAgentUnreachable:
+		return cfg.OnAgentUnreachable
+	case EventRouteDrift:
+		return cfg.OnRouteDrift
 	default:
 		return true
 	}

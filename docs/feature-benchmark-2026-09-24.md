@@ -1,6 +1,6 @@
 # 同类项目对标与增补建议
 
-> 日期：2026-09-24　对象：Fonu 1.0.2（VERSION 1.2.9）
+> 日期：2026-09-24　对象：Fonu 1.0.2（VERSION 1.2.10）
 > 方法：检索 GitHub 上与本项目同域的开源项目（隧道/反代管理面板、自托管监控、Nginx 面板、DDNS 面板），逐项对照 Fonu 现状给出「可优化 / 可增补」。
 > 可信度：对标项目的能力来自其首页 / README 摘要与检索片段，**未逐个深读源码**；Fonu 现状来自本仓库代码与 2026-09-24 的全项目审查（`docs/project-audit-2026-09-24.md`）。
 
@@ -265,6 +265,20 @@
 1. **重启本机 `bin\fonu.exe`** 才能看到新接口与新 UI（新迁移在启动时自动执行）。
 2. **VPS 上点「升级 Agent」** 才会装上 0.12.2，公网反代页的版本历史才会出现（否则提示「需 ≥ 0.12.2」）。
 3. 已随本轮提交：`CHANGELOG.md` 新增 v1.2.9 段，`VERSION` 与 `web/package.json` 同步到 1.2.9。
+
+## 十、A 档告警落地（2026-09-25）
+
+> 承接 §三-P0-4 的阈值告警：把「隧道不通」这一族故障的三个常见成因补齐。**纯应用侧改动，agent 无改动**（`AgentVersion` 保持 0.12.2，无需在 VPS 上重新升级）。
+
+| 新事件 | 判定 | 默认 | 限流 |
+| --- | --- | --- | --- |
+| 公网服务端掉线 `frps_server_down` | `DesiredState` 为 running/starting 时，进程 stopped/error 或连接 disconnected/error | 关闭 · 连续 2 次 | 达标报一次 + 恢复报一次 |
+| 公网 agent 不可达 `agent_unreachable` | agent 地址与令牌都可用，但 `GET /api/v1/ping` 连续失败 | 关闭 · 连续 3 次 | 同上 |
+| 配置漂移 `route_drift` | `RouteDrift` 报告有 items（未部署 / 孤儿配置 / 未生效 / 内容不一致） | 关闭 · 24 小时 | 首次即报 + 每 24h 重复 + 清空报恢复 |
+
+**避免误报的三条约定**：① 服务端只在「用户要它运行」时判定，手动停掉的不报；② `ConnectionState=unknown` 按健康处理（状态源 `manager+log` 偶尔读不到不代表掉线）；③ 没配 agent 的服务端不参与可达性判定。
+
+**结构变化**：`internal/monitor` 的注入方式从「一个 routes 闭包」改成 `Source` 接口（Routes / Servers / Agents / Drift），frp 侧适配放在新文件 `internal/app/monitor_source.go`——monitor 依旧不依赖 frp 包，新增数据源只需扩接口。三条新检查与原有隧道巡检共用 `failureTransition`（原 `tunnelTransition` 泛化），漂移因不是「连续失败」型而单独用冷却；`notify.Alert` 一律在锁外调用。
 
 ---
 
