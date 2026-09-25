@@ -3,6 +3,7 @@ package frp
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -206,11 +207,34 @@ func renderAllowPorts(ports string) string {
 	return strings.Join(lines, "\n")
 }
 
+// frpsSecretLinePattern 匹配带着敏感值的 frps.toml 行
+var frpsSecretLinePattern = regexp.MustCompile(`(?i)^\s*(auth\.token|auth\.oidc\.clientsecret)\s*=`)
+
+// maskFRPSSecrets 把 frps.toml 里的敏感值换成掩码：保留键名与行结构，
+// 让用户在预览里仍能看清「配了哪些认证项」，但不下发明文密钥。
+// 只用于预览；下发路径（PushFRPSConfigToAgent）必须用未脱敏的内容。
+func maskFRPSSecrets(content string) string {
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		if !frpsSecretLinePattern.MatchString(line) {
+			continue
+		}
+		key := strings.TrimSpace(strings.SplitN(line, "=", 2)[0])
+		lines[i] = fmt.Sprintf("%s = %q", key, maskedToken)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // FRPSServerConfig 返回指定服务端的 frps.toml 同源配置（对外 API 入口）。
+// 这是**预览**入口：密钥一律脱敏（明文只在 PushFRPSConfigToAgent 的下发路径里出现）。
 func (s *Service) FRPSServerConfig(ctx context.Context, id int64) (string, error) {
 	server, err := s.store.GetServer(ctx, id)
 	if err != nil {
 		return "", err
 	}
-	return s.buildFRPSServerConfig(ctx, server)
+	content, err := s.buildFRPSServerConfig(ctx, server)
+	if err != nil {
+		return "", err
+	}
+	return maskFRPSSecrets(content), nil
 }

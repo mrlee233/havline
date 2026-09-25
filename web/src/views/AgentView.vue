@@ -336,11 +336,13 @@
             <p class="form-hint">
               由 Fonu 本地生成；点「下发 frps 配置」后写入 VPS 的
               <span class="mono">{{ agentStatus?.frps_config_path || '/etc/frp/frps.toml' }}</span>，重启 frps 后生效。
+              <br />
+              密钥类字段（如 <span class="mono">auth.token</span>）在这里显示为掩码，下发时仍使用真实值。
             </p>
             <pre class="code-block config-modal__code">{{ configContent || '# 暂无内容' }}</pre>
           </div>
           <div class="config-modal__footer">
-            <n-button size="small" :disabled="!configContent" @click="copyConfig">复制</n-button>
+            <n-button size="small" :disabled="!configContent" @click="copyConfig">复制（已脱敏）</n-button>
             <n-button size="small" type="primary" @click="configModal = false">关闭</n-button>
           </div>
         </div>
@@ -561,15 +563,14 @@
   <n-modal v-model:show="showServerLogs">
     <div class="frp-card-modal">
       <div class="proxy-modal__header">
-        <h3 class="modal-title">公网服务端运行日志 - {{ serverLogsTarget?.name ?? '' }}</h3>
+        <h3 class="modal-title">frps 服务日志 - {{ serverLogsTarget?.name ?? '' }}</h3>
         <n-button size="small" quaternary @click="showServerLogs = false">关闭</n-button>
       </div>
       <div class="proxy-modal__scroll">
     <div class="logs-toolbar">
-      <span class="table-muted">{{ serverLogsTarget?.server_addr }}:{{ serverLogsTarget?.server_port }} · frpc-server-{{ serverLogsTarget?.id }}.log</span>
-      <n-button size="small" :loading="serverLogsLoading" @click="loadServerLogs">刷新</n-button>
+      <span class="table-muted">VPS 上的 frps 服务日志（journalctl，最近 20 行、新的在上）· {{ serverLogsTarget?.server_addr }}:{{ serverLogsTarget?.server_port }}</span>
     </div>
-      <pre class="logs-box">{{ serverLogLines.length ? serverLogLines.join('\n') : '暂无该服务端的运行日志' }}</pre>
+      <pre class="logs-box">{{ agentStatus?.frps_log_tail || '暂无 frps 日志：可能是 VPS 上 frps 未启动，或 agent 版本低于 0.12.3' }}</pre>
       </div>
       <div class="modal-footer"><n-button @click="showServerLogs = false">关闭</n-button></div>
     </div>

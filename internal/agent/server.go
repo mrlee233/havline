@@ -41,7 +41,9 @@ import (
 // nginx 配置注释（改为只在 PUT 响应里回一次）。
 // 0.12.1：frps 启停失败如实回报（不再无条件写「已启动」）；HTTP 服务补 ReadTimeout/IdleTimeout。
 // 0.12.2：新增域名 vhost 的版本列表 / 对比 / 回滚端点；写配置前留版本，校验失败时恢复上一个可用版本。
-const AgentVersion = "0.12.2"
+// 0.12.3：frps 日志尾巴改为最近 20 行、最新在前，并用 short-iso 时间戳（默认格式不带年份、分不清哪一天）。
+// 0.12.4：日志行重写成「2026-09-22 18:43:34 进程: 消息」，去掉 T 分隔、时区偏移与每行重复的主机名。
+const AgentVersion = "0.12.4"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -234,7 +236,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		"frps_unit_exec":   strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
 		"frps_enabled":     exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
 		"frps_version":     strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
-		"frps_log_tail":    strings.TrimSpace(journalTail("frps", 6)),
+		"frps_log_tail":    strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
 		"dashboard_addr":   strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
 		"routes":           s.routeNames(),
 		"checked_at":       time.Now().UTC().Format(time.RFC3339),
@@ -535,12 +537,65 @@ func frpsVersion(binary string) string {
 	return string(output)
 }
 
-func journalTail(unit string, lines int) string {
-	output, err := exec.Command("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "--no-pager").CombinedOutput()
+// frpsLogTailLines 服务端详情里展示的 frps 日志行数
+const frpsLogTailLines = 20
+
+// journalLinePattern 匹配 short-iso 的日志首段：时间戳 + 主机名 + 其余（进程与消息）
+var journalLinePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})(?:[+-]\d{2}:?\d{2}|Z)\s+\S+\s+(.*)$`)
+
+// formatJournalLine 把 journalctl 的行重写成「2026-09-22 18:43:34 进程: 消息」。
+// short-iso 的 T 分隔与 +08:00 偏移看着费力，主机名在单机视图里每行都一样（纯噪声），
+// 认不出来格式的行原样返回，不丢内容。
+func formatJournalLine(line string) string {
+	matched := journalLinePattern.FindStringSubmatch(line)
+	if matched == nil {
+		return line
+	}
+	return matched[1] + " " + matched[2] + " " + matched[3]
+}
+
+// formatJournalLog 逐行重写整段日志
+func formatJournalLog(text string) string {
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	rows := strings.Split(strings.TrimRight(text, "\n"), "\n")
+	for i, row := range rows {
+		rows[i] = formatJournalLine(row)
+	}
+	return strings.Join(rows, "\n")
+}
+
+// journalTailDesc 取 unit 的最近 lines 行系统日志，按「最新在前」返回。
+// 用 short-iso 时间戳：journalctl 默认格式只有 "Sep 25 13:20:04"，跨天排查时分不清是哪一天。
+func journalTailDesc(unit string, lines int) string {
+	if lines <= 0 {
+		return ""
+	}
+	output, err := exec.Command("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "-o", "short-iso", "--no-pager").CombinedOutput()
 	if err != nil {
 		return ""
 	}
-	return string(output)
+	if strings.TrimSpace(string(output)) == "" {
+		return ""
+	}
+	rows := strings.Split(strings.TrimRight(string(output), "\n"), "\n")
+	// journalctl 输出是「旧 → 新」，倒过来让最先看到的是最新一条
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+	for i, row := range rows {
+		rows[i] = formatJournalLine(row)
+	}
+	return strings.Join(rows, "\n")
+}
+
+func journalTail(unit string, lines int) string {
+	output, err := exec.Command("journalctl", "-u", unit, "-n", strconv.Itoa(lines), "-o", "short-iso", "--no-pager").CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return formatJournalLog(string(output))
 }
 
 // nginxBinaryPath 解析实际可用的 nginx 可执行文件：优先传入名称（PATH/绝对路径），

@@ -921,7 +921,10 @@ function closeProxyDetail() {
 
 async function loadProxyLogs(proxyID: number) {
   proxyLogsLoading.value = true
-  try { proxyLogLines.value = asList(await api.getFrpProxyLogs(proxyID)) }
+  try {
+    // 日志文件按时间升序返回，倒过来让最新一条在最上面，与「FRP 日志」页签的展示一致
+    proxyLogLines.value = asList(await api.getFrpProxyLogs(proxyID)).reverse()
+  }
   catch (error) { message.error(error instanceof Error ? error.message : '读取规则日志失败') }
   finally { proxyLogsLoading.value = false }
 }

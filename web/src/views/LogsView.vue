@@ -413,6 +413,31 @@ const frpLevelText: Record<string, string> = { I: '信息', W: '警告', E: '错
 // 工具条的级别选项值是 INFO / WARN / ERROR，而 frpc 的级别是单字母 I/W/E/D，需转换后再比较
 const frpLevelAlias: Record<string, string> = { INFO: 'I', WARN: 'W', ERROR: 'E' }
 
+// frpc 的「来源」是 Go 源码文件行号（如 client/control.go:174），对用户没有意义；
+// 这里按文件前缀映射成中文模块名，认不出来的（例如回落到的组件名）原样保留。
+const FRP_SOURCE_LABELS: { prefix: string; label: string }[] = [
+  { prefix: 'client/control.go', label: '连接' },
+  { prefix: 'client/service.go', label: '登录' },
+  { prefix: 'client/proxy.go', label: '连接' },
+  { prefix: 'client/', label: '客户端' },
+  { prefix: 'proxy/proxy_manager.go', label: '代理' },
+  { prefix: 'proxy/', label: '代理' },
+  { prefix: 'sub/root.go', label: '服务' },
+  { prefix: 'sub/', label: '服务' },
+  { prefix: 'config/', label: '配置' },
+  { prefix: 'health/', label: '健康检查' },
+  { prefix: 'server/', label: '服务端' },
+  { prefix: 'pkg/', label: '组件' },
+]
+
+function frpSourceLabel(source: string): string {
+  const file = source.split(':')[0] ?? ''
+  for (const item of FRP_SOURCE_LABELS) {
+    if (file === item.prefix || file.startsWith(item.prefix)) return item.label
+  }
+  return file || source
+}
+
 // frpc 行有两种形态：
 //   2026-09-23 15:20:31.123 [I] [service.go:295] login to server success
 //   [web] 2026-09-20 19:38:51.771 [I] [client/control.go:174] [trace-id] [web-http] start proxy success
@@ -426,7 +451,7 @@ function parseFrpLogLine(line: string): FrpLogEntry {
   return {
     time: matched[2],
     level: matched[3].toUpperCase(),
-    source: matched[4] || component,
+    source: frpSourceLabel(matched[4] || component),
     message: matched[5] ?? '',
   }
 }
