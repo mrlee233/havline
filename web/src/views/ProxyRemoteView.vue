@@ -422,7 +422,7 @@ import StatusBadge from '../components/StatusBadge.vue'
 import { api } from '../api/client'
 import type {
   CertificateRecord, FrpAgentRouteDetail, FrpAgentRouteHealth, FrpAgentStatus, FrpProxy, FrpProxyTraffic,
-  FrpRouteDriftReport, FrpServer, NginxConfigVersionEntry,
+  FrpRouteDriftReport, FrpRouteUptime, FrpServer, NginxConfigVersionEntry,
 } from '../api/types'
 import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../utils/format'
 import { copyText } from '../utils/clipboard'
@@ -447,6 +447,7 @@ const trafficErrors = ref<Record<string, string>>({})
 const agentStatus = ref<FrpAgentStatus | null>(null)
 const statusLoaded = ref(false)
 const routeDrift = ref<FrpRouteDriftReport | null>(null)
+const routeUptime = ref<FrpRouteUptime[]>([])
 const certificates = ref<CertificateRecord[]>([])
 const redeploying = ref(false)
 const settingsModal = ref(false)
@@ -552,6 +553,7 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
     track('路由文件', () => api.getFrpAgentRoutes(current.id), (value) => { routeDetails.value = value }),
     track('健康检查', () => api.getFrpAgentRouteHealth(current.id), (value) => { routeHealth.value = value }),
     track('配置漂移', () => api.getFrpAgentRouteDrift(current.id), (value) => { routeDrift.value = value }),
+    track('可用率', () => api.getFrpRouteUptime(), (value) => { routeUptime.value = value.items ?? [] }),
     track('证书列表', () => api.listCertificates(), (value) => { certificates.value = value }),
     track('流量采集', () => api.listFrpProxiesTraffic(), (value) => {
       proxyTraffic.value = value.items ?? {}
@@ -611,18 +613,29 @@ function certSummary(domain: string) {
   return `Fonu 证书库：有（剩余 ${record.days_left} 天）`
 }
 
-// 健康四段（按域名）：DNS / 证书 / 隧道 / 服务
+// 健康四段（按域名）：DNS / 证书 / 隧道 / 服务。
+// unknown 表示这一段判不出来（frps 管理接口未配或不可用），UI 必须与「失败」区分开，
+// 否则用户会看到一条红色的「隧道」却怎么查都没问题。
 function healthOf(domain: string) {
   const health = routeHealth.value.find((item) => item.domain === domain)
+  const tunnelUnknown = health?.tunnel_known === false
   return [
-    { label: 'DNS', ok: health?.dns_ok ?? false, detail: health?.dns_detail || (health?.dns_ok ? '已指向服务端' : '未指向服务端或未检测') },
+    { label: 'DNS', ok: health?.dns_ok ?? false, unknown: false, detail: health?.dns_detail || (health?.dns_ok ? '已指向服务端' : '未指向服务端或未检测') },
     {
       label: '证书',
       ok: health?.cert_ok ?? false,
+      unknown: false,
       detail: `${health?.cert_detail || (health?.cert_ok ? '证书已覆盖该域名' : '未发现该域名的证书')}｜${certSummary(domain)}`,
     },
-    { label: '隧道', ok: health?.tunnel_ok ?? false, detail: health?.tunnel_detail || (health?.tunnel_ok ? '已注册到 frps' : 'frps 未发现该规则的隧道') },
-    { label: '服务', ok: health?.service_ok ?? false, detail: health?.service_ok ? '内网服务可达' : '内网服务不可达' },
+    {
+      label: '隧道',
+      ok: health?.tunnel_ok ?? false,
+      unknown: tunnelUnknown,
+      detail: tunnelUnknown
+        ? `无法判定：${health?.tunnel_detail || 'frps 管理接口未配置或不可用'}（不代表隧道不通）`
+        : health?.tunnel_detail || (health?.tunnel_ok ? '已注册到 frps' : 'frps 未发现该规则的隧道'),
+    },
+    { label: '服务', ok: health?.service_ok ?? false, unknown: false, detail: health?.service_ok ? '内网服务可达' : '内网服务不可达' },
   ]
 }
 
@@ -670,10 +683,34 @@ async function redeployAll() {
   }
 }
 
+// 可用率：由后台巡检落库的状态变更推导；没有记录时返回 undefined（UI 要写「暂无数据」）
+function uptimeOf(candidate: FrpProxy) {
+  const domain = domainsOf(candidate)[0]
+  if (!domain) return undefined
+  return routeUptime.value.find((item) => item.domain === domain)
+}
+
+function uptimeDetail(stat: FrpRouteUptime) {
+  const parts = [
+    `可用率 ${stat.uptime_pct.toFixed(1)}%`,
+    `不可用 ${stat.down_minutes} 分钟`,
+    `无法判定 ${stat.unknown_minutes} 分钟`,
+    `观测 ${stat.covered_minutes} 分钟`,
+  ]
+  if (stat.incidents.length > 0) {
+    const list = stat.incidents
+      .map((item) => `${formatDate(item.from)}${item.to ? ` → ${formatDate(item.to)}` : ' → 至今'}（${item.reason || '未知环节'}，${item.minutes} 分钟）`)
+      .join('；')
+    parts.push(`不可用区间：${list}`)
+  }
+  return parts.join('｜')
+}
+
 function isHealthy(candidate: FrpProxy) {
   const domains = domainsOf(candidate)
   if (!domains.length) return false
-  return domains.every((domain) => healthOf(domain).every((item) => item.ok))
+  // 判不出来的那一段不能算作「不健康」：否则 dashboard 一挂，整页规则都会变红
+  return domains.every((domain) => healthOf(domain).every((item) => item.ok || item.unknown))
 }
 
 // 域名快捷操作：复制 / 新窗口打开（http 规则走 http，https 规则走 https）
@@ -741,7 +778,18 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     title: '健康（DNS · 证书 · 隧道 · 服务）', key: 'health', width: 260,
     render: (row) => h('div', { class: 'cell-health' }, domainsOf(row).flatMap((domain) =>
       healthOf(domain).map((item) => h('span', { title: item.detail },
-        [h(StatusBadge, { kind: item.ok ? 'success' : 'error', text: item.label })])))),
+        [h(StatusBadge, { kind: item.unknown ? 'warning' : item.ok ? 'success' : 'error', text: item.label })])))),
+  },
+  {
+    title: '可用率 24h', key: 'uptime', width: 120, align: 'right',
+    render: (row) => {
+      const stat = uptimeOf(row)
+      // 没有巡检记录时明说「暂无数据」：直接显示 100% 会让人以为一直没问题
+      if (!stat) return h('span', { class: 'mono cell-muted' }, '暂无数据')
+      const kind = stat.state === 'down' ? 'error' : stat.state === 'up' ? 'success' : 'warning'
+      return h('span', { class: 'mono', title: uptimeDetail(stat) },
+        [h(StatusBadge, { kind, text: `${stat.uptime_pct.toFixed(1)}%` })])
+    },
   },
   {
     title: '连接', key: 'conns', width: 80, align: 'right',

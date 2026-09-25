@@ -870,12 +870,14 @@ func (s *Service) InstallAgentNginx(ctx context.Context, serverID int64) (map[st
 // 健康判定与规则页一致：四段（DNS/证书/隧道/内网服务）全通过才算健康；
 // 一个域名可同时命中多段失败，因此各段计数之和可能大于 Routes-Healthy。
 type RouteHealthSummary struct {
-	Servers       int      `json:"servers"`
-	Routes        int      `json:"routes"`
-	Healthy       int      `json:"healthy"`
-	DNSFailed     int      `json:"dns_failed"`
-	CertMissing   int      `json:"cert_missing"`
-	TunnelDown    int      `json:"tunnel_down"`
+	Servers     int `json:"servers"`
+	Routes      int `json:"routes"`
+	Healthy     int `json:"healthy"`
+	DNSFailed   int `json:"dns_failed"`
+	CertMissing int `json:"cert_missing"`
+	TunnelDown  int `json:"tunnel_down"`
+	// TunnelUnknown 是「frps 管理接口不可用、隧道状态判不出来」的条数
+	TunnelUnknown int      `json:"tunnel_unknown"`
 	ServiceDown   int      `json:"service_down"`
 	FailedServers []string `json:"failed_servers,omitempty"`
 }
@@ -911,7 +913,11 @@ func summarizeRouteHealth(servers int, failedServers []string, items []RouteHeal
 		if !item.CertOK {
 			summary.CertMissing++
 		}
-		if !item.TunnelOK {
+		switch {
+		case !item.TunnelKnown:
+			// frps 管理接口不可用时隧道状态判不出来，不能计入「不通」
+			summary.TunnelUnknown++
+		case !item.TunnelOK:
 			summary.TunnelDown++
 		}
 		if !item.ServiceOK {
@@ -926,13 +932,16 @@ func summarizeRouteHealth(servers int, failedServers []string, items []RouteHeal
 
 // RouteHealthCandidate 公网反代规则的四段健康状态（DNS/证书/隧道/内网服务）。
 type RouteHealthCandidate struct {
-	ProxyID      int64  `json:"proxy_id"`
-	Domain       string `json:"domain"`
-	DNSOK        bool   `json:"dns_ok"`
-	DNSDetail    string `json:"dns_detail,omitempty"`
-	CertOK       bool   `json:"cert_ok"`
-	CertDetail   string `json:"cert_detail,omitempty"`
-	TunnelOK     bool   `json:"tunnel_ok"`
+	ProxyID    int64  `json:"proxy_id"`
+	Domain     string `json:"domain"`
+	DNSOK      bool   `json:"dns_ok"`
+	DNSDetail  string `json:"dns_detail,omitempty"`
+	CertOK     bool   `json:"cert_ok"`
+	CertDetail string `json:"cert_detail,omitempty"`
+	TunnelOK   bool   `json:"tunnel_ok"`
+	// TunnelKnown 表示「隧道状态是判得出来的」：frps 管理接口没配或连不上时 TunnelOK 恒为 false，
+	// 但那是「无法判定」而不是「不通」——告警与汇总都必须按它区分，否则会误报。
+	TunnelKnown  bool   `json:"tunnel_known"`
 	TunnelName   string `json:"tunnel_name,omitempty"`
 	TunnelDetail string `json:"tunnel_detail,omitempty"`
 	ServiceOK    bool   `json:"service_ok"`
@@ -1067,6 +1076,8 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 			// frp 会自动给代理名加 "<user>." 前缀（如 admin.ssssss），两种形态都接受。
 			item.TunnelName = proxy.Name
 			if dashboardReady {
+				// dashboard 可用：这一次的隧道状态是「判得出来」的，不管结论是通还是不通
+				item.TunnelKnown = true
 				// 优先按域名索引匹配（V2 API 返回 spec.http.customDomains，代理名含 user 前缀不可靠），
 				// 再回退代理名（裸名或 user.前缀名）
 				switch {
@@ -1088,8 +1099,7 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 				}
 				if item.TunnelOK {
 					item.TunnelDetail = "frps 已注册: " + item.TunnelName
-				} else {
-					// 诊断透出：dashboard 实际返回的代理名列表（供前端悬停排查）
+				} else { // 诊断透出：dashboard 实际返回的代理名列表（供前端悬停排查）
 					names := make([]string, 0, len(tunnelNames))
 					for name := range tunnelNames {
 						if !strings.HasPrefix(name, "domain:") {

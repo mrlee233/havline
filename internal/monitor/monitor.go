@@ -14,16 +14,47 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fonu/fonu/internal/metrics"
 	"github.com/fonu/fonu/internal/notify"
 	"github.com/fonu/fonu/internal/settings"
 	"github.com/fonu/fonu/internal/sysinfo"
 )
 
-// RouteStatus 是巡检关心的隧道状态。
+// RouteStatus 是巡检关心的隧道与健康状态。
 type RouteStatus struct {
+	ServerID int64
 	Domain   string
-	TunnelOK bool
+	// Known 表示这次的隧道状态是判得出来的（frps 管理接口可用）。
+	// 判不出来时既不能计入连续失败，也不能当成恢复。
+	Known     bool
+	TunnelOK  bool
+	DNSOK     bool
+	ServiceOK bool
+	Detail    string
+
+	// 健康结论取值，与 frp 侧的 RouteHealthUp/Down/Unknown 保持一致，
+	// 由 app 侧适配时显式翻译一次。
+}
+
+const (
+	HealthUp      = "up"
+	HealthDown    = "down"
+	HealthUnknown = "unknown"
+)
+
+// HealthSample 是一条规则本轮的健康结论，交给落库层（monitor 不关心它写哪张表）。
+type HealthSample struct {
+	ServerID int64
+	Domain   string
+	State    string
+	Reason   string
 	Detail   string
+}
+
+// HealthRecorder 持久化健康结论，由 frp 服务实现。
+type HealthRecorder interface {
+	RecordRouteHealth(ctx context.Context, samples []HealthSample) error
+	PruneRouteHealth(ctx context.Context) error
 }
 
 // ServerStatus 是巡检关心的公网服务端状态：只有 DesiredState 表示「用户要它运行」时才判定掉线。
@@ -52,12 +83,25 @@ type DriftStatus struct {
 	Items []string
 }
 
-// Source 提供巡检需要的外部状态；由 app 侧把 frp 服务适配过来，monitor 因此不依赖 frp 包。
+// TrafficRate 某个域名的当前速率（字节/秒）
+type TrafficRate struct {
+	Upload   float64
+	Download float64
+}
+
+// Source 提供巡检需要的外部状态；由 app 侧把 frp 服务与流量采集器适配过来。
 type Source interface {
 	Routes(ctx context.Context) ([]RouteStatus, error)
 	Servers(ctx context.Context) ([]ServerStatus, error)
 	Agents(ctx context.Context) ([]AgentStatus, error)
 	Drift(ctx context.Context) ([]DriftStatus, error)
+	Traffic(ctx context.Context, domains []string) (map[string]TrafficRate, error)
+}
+
+// MetricsRecorder 落库指标历史；*metrics.Store 直接实现它。
+type MetricsRecorder interface {
+	Record(ctx context.Context, samples []metrics.Sample) error
+	Prune(ctx context.Context) (int64, error)
 }
 
 // Checker 每轮都重新读设置项：改阈值或开关不需要重启。
@@ -66,16 +110,20 @@ type Checker struct {
 	notify   *notify.Service
 	logger   *slog.Logger
 	source   Source
+	health   HealthRecorder
+	metrics  MetricsRecorder
 
-	mu             sync.Mutex
-	cpuPrev        sysinfo.CPUSample
-	resourceAlerts map[string]time.Time
-	failures       map[string]int
-	driftAlerted   map[int64]bool
-	driftNotified  map[int64]time.Time
+	mu               sync.Mutex
+	cpuPrev          sysinfo.CPUSample
+	resourceAlerts   map[string]time.Time
+	failures         map[string]int
+	driftAlerted     map[int64]bool
+	driftNotified    map[int64]time.Time
+	lastHealthPrune  time.Time
+	lastMetricsPrune time.Time
 }
 
-func New(settingsStore *settings.Store, notifySvc *notify.Service, logger *slog.Logger, source Source) *Checker {
+func New(settingsStore *settings.Store, notifySvc *notify.Service, logger *slog.Logger, source Source, health HealthRecorder, metricsRecorder MetricsRecorder) *Checker {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -84,6 +132,8 @@ func New(settingsStore *settings.Store, notifySvc *notify.Service, logger *slog.
 		notify:         notifySvc,
 		logger:         logger,
 		source:         source,
+		health:         health,
+		metrics:        metricsRecorder,
 		resourceAlerts: map[string]time.Time{},
 		failures:       map[string]int{},
 		driftAlerted:   map[int64]bool{},
@@ -96,26 +146,85 @@ func (c *Checker) Run(ctx context.Context) {
 	if c == nil || c.settings == nil {
 		return
 	}
-	c.checkResources(ctx)
+	c.runHostChecks(ctx)
 	c.checkRoutes(ctx)
 	c.checkServers(ctx)
 	c.checkAgents(ctx)
 	c.checkDrift(ctx)
 }
 
-func (c *Checker) checkResources(ctx context.Context) {
-	// 开关关闭时连采集都省掉（关掉的功能不该有后台开销）
-	if enabled, _ := c.settings.GetBool(ctx, settings.KeyNotifyOnResourceThreshold); !enabled {
+// runHostChecks 一次采样同时喂给「资源阈值告警」与「指标历史」。
+// CPU 占用率靠两次采样的差值得出，采两次会互相干扰，所以采样点只留这一个。
+func (c *Checker) runHostChecks(ctx context.Context) {
+	alertEnabled, _ := c.settings.GetBool(ctx, settings.KeyNotifyOnResourceThreshold)
+	// 指标历史默认开启：没配置过时按开处理（存了 "0"/"false" 才关）
+	recordEnabled := c.metricsHistoryEnabled(ctx)
+	// 两件事都关着就连采样都省掉（关掉的功能不该有后台开销）
+	if !alertEnabled && !recordEnabled {
 		return
 	}
-	cpuLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyCPUThreshold)
-	memoryLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyMemoryThreshold)
-	diskLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyDiskThreshold)
 
 	c.mu.Lock()
 	stats, sample := sysinfo.Read(c.cpuPrev)
 	c.cpuPrev = sample
 	c.mu.Unlock()
+
+	if alertEnabled {
+		c.checkResourceLimits(ctx, stats)
+	}
+	if recordEnabled {
+		c.recordHostMetrics(ctx, stats)
+	}
+}
+
+// metricsHistoryEnabled 读指标历史开关：未配置按开启处理（只有显式存了 0/false 才关）
+func (c *Checker) metricsHistoryEnabled(ctx context.Context) bool {
+	if c.metrics == nil {
+		return false
+	}
+	raw, err := c.settings.Get(ctx, settings.KeyMetricsHistoryEnabled)
+	if err != nil {
+		return true
+	}
+	return raw != "0" && !strings.EqualFold(raw, "false")
+}
+
+// recordHostMetrics 记本机序列；采样间隔就是巡检轮次（2 分钟），行量很小
+func (c *Checker) recordHostMetrics(ctx context.Context, stats sysinfo.Stats) {
+	samples := []metrics.Sample{
+		{Scope: metrics.ScopeHost, Metric: metrics.MetricCPU, Value: stats.CPUPercent},
+		{Scope: metrics.ScopeHost, Metric: metrics.MetricMemUsed, Value: float64(stats.MemUsedBytes)},
+		{Scope: metrics.ScopeHost, Metric: metrics.MetricMemTotal, Value: float64(stats.MemTotalBytes)},
+		{Scope: metrics.ScopeHost, Metric: metrics.MetricDiskUsed, Value: float64(stats.DiskUsedBytes)},
+		{Scope: metrics.ScopeHost, Metric: metrics.MetricDiskTotal, Value: float64(stats.DiskTotalBytes)},
+	}
+	if err := c.metrics.Record(ctx, samples); err != nil {
+		c.logger.Warn("记录指标历史失败", "module", "MONITOR", "error", err.Error())
+	}
+	c.pruneMetricsIfDue(ctx)
+}
+
+// pruneMetricsIfDue 每天清理一次超期样本
+func (c *Checker) pruneMetricsIfDue(ctx context.Context) {
+	c.mu.Lock()
+	due := c.lastMetricsPrune.IsZero() || time.Since(c.lastMetricsPrune) >= 24*time.Hour
+	if due {
+		c.lastMetricsPrune = time.Now()
+	}
+	c.mu.Unlock()
+	if !due {
+		return
+	}
+	if _, err := c.metrics.Prune(ctx); err != nil {
+		c.logger.Warn("清理指标历史失败", "module", "MONITOR", "error", err.Error())
+	}
+}
+
+// checkResourceLimits 只做阈值判定：采样已由 runHostChecks 统一完成
+func (c *Checker) checkResourceLimits(ctx context.Context, stats sysinfo.Stats) {
+	cpuLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyCPUThreshold)
+	memoryLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyMemoryThreshold)
+	diskLimit, _ := c.settings.GetInt(ctx, settings.KeyNotifyDiskThreshold)
 
 	limits := []struct {
 		metric string
@@ -164,11 +273,14 @@ func (c *Checker) checkRoutes(ctx context.Context) {
 	if c.source == nil {
 		return
 	}
-	if enabled, _ := c.settings.GetBool(ctx, settings.KeyNotifyOnTunnelDown); !enabled {
-		return
+	recordHealth, _ := c.settings.GetBool(ctx, settings.KeyRouteHealthEnabled)
+	if c.health == nil {
+		recordHealth = false
 	}
-	limit, _ := c.settings.GetInt(ctx, settings.KeyNotifyTunnelFailThreshold)
-	if limit <= 0 {
+	alertEnabled, _ := c.settings.GetBool(ctx, settings.KeyNotifyOnTunnelDown)
+	recordMetrics := c.metricsHistoryEnabled(ctx)
+	// 三件事都关着就别去探测：RouteHealth 是这一轮里最贵的调用
+	if !recordHealth && !alertEnabled && !recordMetrics {
 		return
 	}
 
@@ -177,8 +289,46 @@ func (c *Checker) checkRoutes(ctx context.Context) {
 		c.logger.Warn("巡检隧道状态失败", "module", "MONITOR", "error", err.Error())
 		return
 	}
+
+	// 落库先于告警：判不出来的那一档也要记（unknown 与 down 必须区分）
+	if recordHealth {
+		samples := make([]HealthSample, 0, len(routes))
+		for _, route := range routes {
+			if strings.TrimSpace(route.Domain) == "" {
+				continue
+			}
+			state, reason := healthStateOf(route)
+			samples = append(samples, HealthSample{
+				ServerID: route.ServerID,
+				Domain:   route.Domain,
+				State:    state,
+				Reason:   reason,
+				Detail:   route.Detail,
+			})
+		}
+		if err := c.health.RecordRouteHealth(ctx, samples); err != nil {
+			c.logger.Warn("记录规则健康状态失败", "module", "MONITOR", "error", err.Error())
+		}
+		c.pruneHealthIfDue(ctx)
+	}
+
+	// 流量序列用同一轮的规则列表落库，不再单独探测一轮
+	if recordMetrics {
+		c.recordRouteTraffic(ctx, routes)
+	}
+
+	if !alertEnabled {
+		return
+	}
+	limit, _ := c.settings.GetInt(ctx, settings.KeyNotifyTunnelFailThreshold)
+	if limit <= 0 {
+		return
+	}
 	for _, route := range routes {
 		if strings.TrimSpace(route.Domain) == "" {
+			continue
+		}
+		if !route.Known {
 			continue
 		}
 		_, event := c.track("route:"+route.Domain, route.TunnelOK, limit)
@@ -190,6 +340,79 @@ func (c *Checker) checkRoutes(ctx context.Context) {
 			c.notify.Alert(ctx, notify.EventTunnelDown, "隧道已恢复",
 				fmt.Sprintf("%s 已重新在 frps 上注册", route.Domain))
 		}
+	}
+}
+
+// healthStateOf 把一段状态翻成与 frp 侧一致的结论 + 失败环节
+func healthStateOf(route RouteStatus) (string, string) {
+	if !route.Known {
+		return HealthUnknown, "dashboard"
+	}
+	switch {
+	case !route.DNSOK:
+		return HealthDown, "dns"
+	case !route.TunnelOK:
+		return HealthDown, "tunnel"
+	case !route.ServiceOK:
+		return HealthDown, "service"
+	default:
+		return HealthUp, ""
+	}
+}
+
+// recordRouteTraffic 记每条规则的上下行速率（scope 按服务端与域名区分）
+func (c *Checker) recordRouteTraffic(ctx context.Context, routes []RouteStatus) {
+	if c.source == nil || c.metrics == nil {
+		return
+	}
+	domains := make([]string, 0, len(routes))
+	for _, route := range routes {
+		if domain := strings.TrimSpace(route.Domain); domain != "" {
+			domains = append(domains, domain)
+		}
+	}
+	if len(domains) == 0 {
+		return
+	}
+	rates, err := c.source.Traffic(ctx, domains)
+	if err != nil {
+		c.logger.Warn("读取流量快照失败", "module", "MONITOR", "error", err.Error())
+		return
+	}
+	samples := make([]metrics.Sample, 0, len(routes)*2)
+	for _, route := range routes {
+		domain := strings.ToLower(strings.TrimSpace(route.Domain))
+		rate, ok := rates[domain]
+		if !ok {
+			continue
+		}
+		scope := fmt.Sprintf("route:%d:%s", route.ServerID, domain)
+		samples = append(samples,
+			metrics.Sample{Scope: scope, Metric: metrics.MetricTrafficIn, Value: rate.Upload},
+			metrics.Sample{Scope: scope, Metric: metrics.MetricTrafficOut, Value: rate.Download},
+		)
+	}
+	if len(samples) == 0 {
+		return
+	}
+	if err := c.metrics.Record(ctx, samples); err != nil {
+		c.logger.Warn("记录流量历史失败", "module", "MONITOR", "error", err.Error())
+	}
+}
+
+// pruneHealthIfDue 每天清理一次超期记录：不在每轮都删，省一次写事务
+func (c *Checker) pruneHealthIfDue(ctx context.Context) {
+	c.mu.Lock()
+	due := c.lastHealthPrune.IsZero() || time.Since(c.lastHealthPrune) >= 24*time.Hour
+	if due {
+		c.lastHealthPrune = time.Now()
+	}
+	c.mu.Unlock()
+	if !due {
+		return
+	}
+	if err := c.health.PruneRouteHealth(ctx); err != nil {
+		c.logger.Warn("清理健康记录失败", "module", "MONITOR", "error", err.Error())
 	}
 }
 

@@ -252,6 +252,8 @@ func (s *Service) enabledFor(cfg RuntimeConfig, event string) bool {
 		return cfg.OnAgentUnreachable
 	case EventRouteDrift:
 		return cfg.OnRouteDrift
+	case EventBackupFailure:
+		return cfg.OnBackupFailure
 	default:
 		return true
 	}

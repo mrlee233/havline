@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/fonu/fonu/internal/notify"
 	"github.com/fonu/fonu/internal/service"
@@ -29,6 +30,11 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	notify.SanitizeSettings(values)
+	// 状态页访问码只回掩码：既不下发明文也不下发哈希
+	if values[settings.KeyStatusPageCodeHash] != "" {
+		values[settings.KeyStatusPageCode] = MaskedStatusPageCode
+	}
+	delete(values, settings.KeyStatusPageCodeHash)
 	writeJSON(w, http.StatusOK, values)
 }
 
@@ -80,6 +86,13 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		settings.KeyNotifyFrpsFailThreshold:     true,
 		settings.KeyNotifyAgentFailThreshold:    true,
 		settings.KeyNotifyDriftCooldownHours:    true,
+		settings.KeyBackupAutoEnabled:           true,
+		settings.KeyRouteHealthEnabled:          true,
+		settings.KeyStatusPageEnabled:           true,
+		settings.KeyMetricsHistoryEnabled:       true,
+		settings.KeyStatusPageCode:              true,
+		settings.KeyBackupKeepCount:             true,
+		settings.KeyNotifyOnBackupFailure:       true,
 		settings.KeyTrustedProxy:                true,
 		settings.KeyGlobalIPBlacklist:           true,
 		settings.KeyGlobalIPWhitelist:           true,
@@ -97,6 +110,19 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filtered[key] = value
+	}
+	// 状态页访问码走「掩码往返」：客户端提交明文，这里落 SHA-256；
+	// 空串 = 清除访问码，掩码值 = 保持不变。哈希字段不接受客户端直接写入。
+	if code, ok := filtered[settings.KeyStatusPageCode]; ok {
+		delete(filtered, settings.KeyStatusPageCode)
+		trimmed := strings.TrimSpace(code)
+		switch {
+		case trimmed == MaskedStatusPageCode:
+		case trimmed == "":
+			filtered[settings.KeyStatusPageCodeHash] = ""
+		default:
+			filtered[settings.KeyStatusPageCodeHash] = hashStatusPageCode(trimmed)
+		}
 	}
 	if h.notify != nil && h.notify.Store() != nil {
 		if in, ok := notify.ParseSaveInputFromMap(filtered); ok {
@@ -127,6 +153,11 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	notify.SanitizeSettings(values)
+	// 状态页访问码只回掩码：既不下发明文也不下发哈希
+	if values[settings.KeyStatusPageCodeHash] != "" {
+		values[settings.KeyStatusPageCode] = MaskedStatusPageCode
+	}
+	delete(values, settings.KeyStatusPageCodeHash)
 	writeJSON(w, http.StatusOK, values)
 }
 
@@ -163,6 +194,7 @@ func isNotifySettingKey(key string) bool {
 		settings.KeyNotifyFrpsFailThreshold,
 		settings.KeyNotifyAgentFailThreshold,
 		settings.KeyNotifyDriftCooldownHours,
+		settings.KeyNotifyOnBackupFailure,
 		settings.KeyNotifyWebhookURL:
 		return true
 	default:
@@ -197,6 +229,13 @@ func (h *SettingsHandler) validateSetting(key, value string) error {
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 10 || n > 3600 {
 				return fmt.Errorf("统计窗口需在 10–3600 秒之间")
+			}
+		}
+	case settings.KeyBackupKeepCount:
+		if value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil || n < 1 || n > 60 {
+				return fmt.Errorf("备份保留份数需在 1–60 之间")
 			}
 		}
 	case settings.KeyNotifyLoginFailureThreshold:

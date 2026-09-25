@@ -106,6 +106,66 @@
             </div>
           </n-upload>
         </div>
+        <div class="backup-auto">
+          <div class="form-switch-row">
+            <div class="form-switch-row__text">
+              <div class="form-switch-row__label">自动备份</div>
+              <div class="form-switch-row__hint">
+                每天自动备份一份到服务器，超过保留份数后自动清理最旧的（重启不会重复备份）
+              </div>
+            </div>
+            <n-switch v-model:value="backupAutoEnabled" />
+          </div>
+          <div class="backup-auto__actions">
+            <div class="settings-field backup-auto__keep">
+              <label class="settings-field__label">保留份数</label>
+              <n-input-number v-model:value="backupKeepCount" :min="1" :max="60" class="settings-field__input" />
+            </div>
+            <n-button
+              size="small"
+              :loading="backupBusy === 'create'"
+              :disabled="backupBusy !== null"
+              @click="createBackupArchive"
+            >
+              立即备份
+            </n-button>
+          </div>
+        </div>
+
+        <div class="backup-list">
+          <div v-for="archive in backupArchives" :key="archive.name" class="backup-row">
+            <div class="backup-row__main">
+              <span class="mono">{{ formatDate(archive.mod_time) }}</span>
+              <span class="backup-row__size">{{ formatBytes(archive.size) }}</span>
+            </div>
+            <div class="backup-row__actions">
+              <n-button
+                size="tiny"
+                quaternary
+                :loading="backupBusy === `download:${archive.name}`"
+                :disabled="backupBusy !== null"
+                @click="downloadBackupArchive(archive)"
+              >
+                下载
+              </n-button>
+              <n-popconfirm @positive-click="restoreBackupArchive(archive)">
+                <template #trigger>
+                  <n-button size="tiny" quaternary type="warning" :disabled="backupBusy !== null">恢复</n-button>
+                </template>
+                恢复会覆盖当前的数据库、证书与 Nginx 配置，确定继续？
+              </n-popconfirm>
+              <n-popconfirm @positive-click="deleteBackupArchive(archive)">
+                <template #trigger>
+                  <n-button size="tiny" quaternary type="error" :disabled="backupBusy !== null">删除</n-button>
+                </template>
+                删除这份备份？
+              </n-popconfirm>
+            </div>
+          </div>
+          <p v-if="backupError" class="field-hint field-hint--error">{{ backupError }}</p>
+          <p v-else-if="backupArchives.length === 0" class="field-hint">还没有留在服务器上的备份。</p>
+        </div>
+
         <p class="field-hint data-note">恢复配置将覆盖当前数据，操作前请确保已备份。</p>
       </FonuCard>
         </div>
@@ -676,6 +736,34 @@
         </div>
         <p v-else-if="!tokenError" class="field-hint">还没有令牌。</p>
       </FonuCard>
+
+      <FonuCard title="公开状态页" subtitle="给外部看的只读页面（默认关闭）">
+        <p class="field-hint">
+          开启后 <code>/status</code> 任何人都能访问，只展示域名与 24 小时可用率——不含内网地址、端口与证书路径。
+          建议设一个访问码，它会让页面需要带码才能打开。
+        </p>
+        <div class="form-switch-row">
+          <div class="form-switch-row__text">
+            <div class="form-switch-row__label">开启状态页</div>
+            <div class="form-switch-row__hint">关闭时接口一律返回 404，且匿名访问按 IP 限流</div>
+          </div>
+          <n-switch v-model:value="statusPageEnabled" />
+        </div>
+        <div class="settings-field status-page-field">
+          <ConfiguredSecretField
+            v-model="statusPageCode"
+            label="访问码"
+            :configured="statusPageConfigured"
+            placeholder="留空表示不需要访问码"
+          />
+        </div>
+        <div class="status-page-actions">
+          <n-button size="small" :disabled="!statusPageEnabled" @click="openStatusPage">
+            打开状态页
+          </n-button>
+          <span class="field-hint">访问码只存 SHA-256，忘了只能重设。</span>
+        </div>
+      </FonuCard>
         </div>
       </n-tab-pane>
     </n-tabs>
@@ -715,6 +803,7 @@ import {
 import { api } from '../api/client'
 import type {
   ApiToken,
+  BackupArchive,
   ChinaCIDRStatus,
   GlobalNginxView,
   NginxConfigVersionEntry,
@@ -761,6 +850,9 @@ import { formatBytes, formatDate, formatRelativeTime } from '../utils/format'
 import type { StatusKind } from '../utils/status'
 
 const message = useMessage()
+
+// 与后端 backup.DefaultKeepCount 一致：设置项没填时两边都用 7
+const DEFAULT_BACKUP_KEEP_COUNT = 7
 const { setThemeMode } = useTheme()
 const saving = ref(false)
 const loading = ref(false)
@@ -768,6 +860,18 @@ const pageError = ref('')
 const changingPassword = ref(false)
 const exporting = ref(false)
 const restoring = ref(false)
+
+// 备份：开关与保留份数走设置项（随「保存设置」提交），备份列表单独读
+const backupAutoEnabled = ref(true)
+const backupKeepCount = ref(DEFAULT_BACKUP_KEEP_COUNT)
+const backupArchives = ref<BackupArchive[]>([])
+const backupBusy = ref<string | null>(null)
+const backupError = ref('')
+
+// 公开状态页：开关与访问码走设置项（访问码按「掩码往返」处理）
+const statusPageEnabled = ref(false)
+const statusPageCode = ref('')
+const statusPageConfigured = ref(false)
 
 const form = reactive({
   theme: 'system',
@@ -791,6 +895,7 @@ const notifyEventFlags = reactive<Record<string, boolean>>({
   on_frps_down: false,
   on_agent_unreachable: false,
   on_route_drift: false,
+  on_backup_failure: true,
 })
 const notifyIPFrequentThreshold = ref(100)
 const notifyIPFrequentWindowSec = ref(60)
@@ -996,6 +1101,12 @@ function applySettingsToForm(settings: Record<string, string>) {
   ddnsInterval.value = Number(settings.ddns_check_interval_minutes ?? 5)
   certThreshold.value = Number(settings.cert_renew_threshold_days ?? 30)
   logRetention.value = Number(settings.log_retention_days ?? 30)
+  // 未配置时按默认值处理：自动备份是默认开的
+  backupAutoEnabled.value = settings.backup_auto_enabled !== '0'
+  backupKeepCount.value = Number(settings.backup_keep_count || DEFAULT_BACKUP_KEEP_COUNT)
+  statusPageEnabled.value = settings.status_page_enabled === '1'
+  statusPageCode.value = settings.status_page_code ?? ''
+  statusPageConfigured.value = statusPageCode.value === MASKED_SECRET
   acmeEmail.value = settings.acme_email ?? ''
   zerosslHasKey.value = Boolean(settings.zerossl_api_key?.trim())
   zerosslApiKey.value = ''
@@ -1308,6 +1419,7 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_frps_down = flagOptIn('notify_on_frps_down')
     notifyEventFlags.on_agent_unreachable = flagOptIn('notify_on_agent_unreachable')
     notifyEventFlags.on_route_drift = flagOptIn('notify_on_route_drift')
+    notifyEventFlags.on_backup_failure = flagOn('notify_on_backup_failure')
   } else {
     const legacyDDNS = flagOn('notify_on_ddns_error')
     const legacyCert = flagOn('notify_on_cert_error')
@@ -1324,6 +1436,7 @@ function applyNotifySettings(settings: Record<string, string>) {
     notifyEventFlags.on_frps_down = false
     notifyEventFlags.on_agent_unreachable = false
     notifyEventFlags.on_route_drift = false
+    notifyEventFlags.on_backup_failure = true
   }
   notifyIPFrequentThreshold.value = Number(settings.notify_ip_frequent_threshold || 100)
   notifyIPFrequentWindowSec.value = Number(settings.notify_ip_frequent_window_sec || 60)
@@ -1446,9 +1559,14 @@ function buildSavePayload() {
     notify_on_frps_down: notifyEventFlags.on_frps_down ? '1' : '0',
     notify_on_agent_unreachable: notifyEventFlags.on_agent_unreachable ? '1' : '0',
     notify_on_route_drift: notifyEventFlags.on_route_drift ? '1' : '0',
+    notify_on_backup_failure: notifyEventFlags.on_backup_failure ? '1' : '0',
     notify_frps_fail_threshold: String(notifyFrpsFailThreshold.value || DEFAULT_FRPS_FAIL_THRESHOLD),
     notify_agent_fail_threshold: String(notifyAgentFailThreshold.value || DEFAULT_AGENT_FAIL_THRESHOLD),
     notify_drift_cooldown_hours: String(notifyDriftCooldownHours.value || DEFAULT_DRIFT_COOLDOWN_HOURS),
+    backup_auto_enabled: backupAutoEnabled.value ? '1' : '0',
+    backup_keep_count: String(backupKeepCount.value || DEFAULT_BACKUP_KEEP_COUNT),
+    status_page_enabled: statusPageEnabled.value ? '1' : '0',
+    status_page_code: statusPageCode.value.trim(),
     notify_cpu_threshold: String(notifyCPUThreshold.value || DEFAULT_CPU_THRESHOLD),
     notify_memory_threshold: String(notifyMemoryThreshold.value || DEFAULT_MEMORY_THRESHOLD),
     notify_disk_threshold: String(notifyDiskThreshold.value || DEFAULT_DISK_THRESHOLD),
@@ -1526,6 +1644,63 @@ async function changePassword() {
   }
 }
 
+async function createBackupArchive() {
+  if (backupBusy.value) return
+  backupBusy.value = 'create'
+  try {
+    await api.createBackupArchive()
+    await loadBackupArchives()
+    message.success('已创建一份备份')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '备份失败')
+  } finally { backupBusy.value = null }
+}
+
+async function loadBackupArchives() {
+  try {
+    const result = await api.listBackupArchives()
+    backupArchives.value = result.archives ?? []
+    backupError.value = ''
+  } catch (error) {
+    backupError.value = error instanceof Error ? error.message : '读取备份列表失败'
+  }
+}
+
+async function downloadBackupArchive(archive: BackupArchive) {
+  backupBusy.value = `download:${archive.name}`
+  try {
+    await api.downloadBackupArchive(archive.name)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '下载失败')
+  } finally { backupBusy.value = null }
+}
+
+async function restoreBackupArchive(archive: BackupArchive) {
+  backupBusy.value = `restore:${archive.name}`
+  try {
+    const result = await api.restoreBackupArchive(archive.name)
+    message.success(result.message || '备份已恢复，建议重启 Fonu')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '恢复失败')
+  } finally { backupBusy.value = null }
+}
+
+async function deleteBackupArchive(archive: BackupArchive) {
+  backupBusy.value = `delete:${archive.name}`
+  try {
+    await api.deleteBackupArchive(archive.name)
+    await loadBackupArchives()
+    message.success('已删除该备份')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '删除失败')
+  } finally { backupBusy.value = null }
+}
+
+// 存了访问码时会先要求输入，所以这里只开页面、不带参数
+function openStatusPage() {
+  window.open('/status', '_blank', 'noopener')
+}
+
 async function exportBackup() {
   exporting.value = true
   try {
@@ -1554,6 +1729,7 @@ async function onRestoreFile({ file }: { file: UploadFileInfo }) {
 onMounted(() => {
   void load()
   void loadApiTokens()
+  void loadBackupArchives()
 })
 </script>
 
@@ -1693,6 +1869,27 @@ onMounted(() => {
 .config-versions__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
 .config-versions__hint { font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
 .config-versions__error { margin: 8px 0 0; font-size: 12px; color: var(--fonu-error); line-height: 1.6; }
+
+/* 自动备份：开关 + 保留份数 + 备份列表 */
+.backup-auto {
+  display: grid; gap: var(--fonu-space-3);
+  margin-top: var(--fonu-space-4); padding-top: var(--fonu-space-4);
+  border-top: 1px solid var(--fonu-border);
+}
+.backup-auto__actions { display: flex; align-items: end; gap: var(--fonu-space-3); }
+.backup-auto__keep { max-width: 160px; }
+.backup-list { display: grid; gap: 6px; margin-top: var(--fonu-space-3); }
+.backup-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3);
+  padding: 6px var(--fonu-space-3); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm);
+}
+.backup-row__main { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.backup-row__size { font-size: 12px; color: var(--fonu-text-muted); }
+.backup-row__actions { display: flex; align-items: center; gap: 4px; flex: none; }
+
+/* 公开状态页：访问码 + 打开链接 */
+.status-page-field { margin-top: var(--fonu-space-3); }
+.status-page-actions { display: flex; align-items: center; gap: var(--fonu-space-3); margin-top: var(--fonu-space-3); flex-wrap: wrap; }
 
 /* API Token：创建区一行放四项，列表一行一项 */
 /* 必须带上 .settings-fields 提高优先级：那条纵向 flex 规则在样式表里位置更靠后，

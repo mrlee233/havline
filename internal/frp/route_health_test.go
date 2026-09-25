@@ -4,16 +4,19 @@ import "testing"
 
 func TestSummarizeRouteHealth(t *testing.T) {
 	items := []RouteHealthCandidate{
-		{DNSOK: true, CertOK: true, TunnelOK: true, ServiceOK: true},
-		{DNSOK: true, CertOK: false, TunnelOK: true, ServiceOK: false},
-		{DNSOK: false, CertOK: true, TunnelOK: false, ServiceOK: true},
+		{DNSOK: true, CertOK: true, TunnelOK: true, TunnelKnown: true, ServiceOK: true},
+		{DNSOK: true, CertOK: false, TunnelOK: true, TunnelKnown: true, ServiceOK: false},
+		{DNSOK: false, CertOK: true, TunnelOK: false, TunnelKnown: true, ServiceOK: true},
+		// frps 管理接口不可用：隧道状态判不出来，既不算通也不是不通
+		{DNSOK: true, CertOK: true, ServiceOK: true},
 	}
 	summary := summarizeRouteHealth(2, []string{"vps-b"}, items)
 
-	if summary.Servers != 2 || summary.Routes != 3 || summary.Healthy != 1 {
+	if summary.Servers != 2 || summary.Routes != 4 || summary.Healthy != 1 {
 		t.Fatalf("unexpected summary counts: %+v", summary)
 	}
-	if summary.DNSFailed != 1 || summary.CertMissing != 1 || summary.TunnelDown != 1 || summary.ServiceDown != 1 {
+	if summary.DNSFailed != 1 || summary.CertMissing != 1 || summary.TunnelDown != 1 ||
+		summary.TunnelUnknown != 1 || summary.ServiceDown != 1 {
 		t.Fatalf("unexpected segment counts: %+v", summary)
 	}
 	if len(summary.FailedServers) != 1 || summary.FailedServers[0] != "vps-b" {

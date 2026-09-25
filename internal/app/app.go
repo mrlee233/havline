@@ -23,6 +23,7 @@ import (
 	"github.com/fonu/fonu/internal/discovery"
 	"github.com/fonu/fonu/internal/frp"
 	"github.com/fonu/fonu/internal/logstore"
+	"github.com/fonu/fonu/internal/metrics"
 	"github.com/fonu/fonu/internal/monitor"
 	"github.com/fonu/fonu/internal/nginx"
 	"github.com/fonu/fonu/internal/notify"
@@ -93,6 +94,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	ddnsSvc := ddns.NewService(ddnsStore, settingsStore, secretBox, logger, notifySvc)
 	acmeSvc := acme.NewService(cfg, certStore, ddnsSvc, settingsStore, proxySvc, logger, notifySvc)
 	backupSvc := backup.New(cfg.DataDir)
+	// 指标历史：与巡检同生命周期，采样跟随巡检轮次
+	metricsStore := metrics.NewStore(conn)
 	discoverySvc := discovery.New()
 	// 新增：多服务端 FRP 模块（接管原网关模式）
 	frpMultiSvc := frp.NewService(cfg, frp.NewStore(conn), secretBox, logger, certStore)
@@ -114,6 +117,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		Notify:    notifySvc,
 		ChinaCIDR: chinaCIDRSvc,
 		Backup:    backupSvc,
+		Metrics:   metricsStore,
 		Discovery: discoverySvc,
 		FRPMulti:  frpMultiSvc,
 		Traffic:   trafficCollector,
@@ -140,7 +144,9 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		chinaHours = 24
 	}
 	// 巡检间隔比其它任务短：「连续 N 次不通」需要足够采样次数才能判定
-	monitorChecker := monitor.New(settingsStore, notifySvc, logger, monitorSource{frp: frpMultiSvc, logger: logger})
+	monitorChecker := monitor.New(settingsStore, notifySvc, logger, monitorSource{frp: frpMultiSvc, logger: logger, traffic: trafficCollector}, healthRecorder{frp: frpMultiSvc}, metricsStore)
+	// 自动备份：启动时会先跑一轮，靠「最新备份是否在 24h 内」避免频繁重启重复备份
+	backupRunner := backup.NewAutoRunner(backupSvc, settingsStore, notifySvc, logger)
 	sched := scheduler.New(
 		scheduler.Job{
 			Name:     "ddns",
@@ -161,6 +167,11 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 			Name:     "monitor",
 			Interval: 2 * time.Minute,
 			Run:      monitorChecker.Run,
+		},
+		scheduler.Job{
+			Name:     "backup",
+			Interval: backup.AutoInterval,
+			Run:      backupRunner.Run,
 		},
 	)
 	sched.Start(ctx)

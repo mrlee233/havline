@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fonu/fonu/internal/frp"
 )
@@ -437,6 +438,23 @@ func (h *FRPMultiHandler) AgentRouteConf(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"proxy_id": proxyID, "domain": domain, "content": content})
+}
+
+// RouteUptime 返回每条反代规则在最近窗口内的可用率与不可用区间。
+// 数据来自后台巡检落库的「状态变更」序列，不做现场探测。
+func (h *FRPMultiHandler) RouteUptime(w http.ResponseWriter, r *http.Request) {
+	hours := 24
+	if raw := strings.TrimSpace(r.URL.Query().Get("hours")); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 24*7 {
+			hours = parsed
+		}
+	}
+	stats, err := h.svc.RouteUptime(r.Context(), time.Duration(hours)*time.Hour)
+	if err != nil {
+		writeError(r, w, http.StatusInternalServerError, "读取可用率失败", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"hours": hours, "items": stats})
 }
 
 // AgentRouteVersions 返回规则首个域名在 VPS 上的当前 vhost 与历史版本，供差异对比与回滚。

@@ -96,6 +96,8 @@ func eventMetaFor(event string) eventMeta {
 		return eventMeta{"📡", "隧道"}
 	case EventRouteDrift:
 		return eventMeta{"🧭", "配置"}
+	case EventBackupFailure:
+		return eventMeta{"💾", "系统"}
 	case "test":
 		return eventMeta{"🔔", "系统"}
 	default:

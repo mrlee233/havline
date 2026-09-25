@@ -7,13 +7,15 @@ import (
 
 	"github.com/fonu/fonu/internal/frp"
 	"github.com/fonu/fonu/internal/monitor"
+	"github.com/fonu/fonu/internal/traffic"
 )
 
 // monitorSource 把 frp 服务适配成 monitor.Source：monitor 只关心「状态快照」，
 // 怎么从 frp / agent 取是这里的事，两边因此互不依赖。
 type monitorSource struct {
-	frp    *frp.Service
-	logger *slog.Logger
+	frp     *frp.Service
+	logger  *slog.Logger
+	traffic *traffic.Collector
 }
 
 func (s monitorSource) Routes(ctx context.Context) ([]monitor.RouteStatus, error) {
@@ -30,7 +32,15 @@ func (s monitorSource) Routes(ctx context.Context) ([]monitor.RouteStatus, error
 			continue
 		}
 		for _, item := range health {
-			routes = append(routes, monitor.RouteStatus{Domain: item.Domain, TunnelOK: item.TunnelOK, Detail: item.TunnelDetail})
+			routes = append(routes, monitor.RouteStatus{
+				ServerID:  server.ID,
+				Domain:    item.Domain,
+				TunnelOK:  item.TunnelOK,
+				DNSOK:     item.DNSOK,
+				ServiceOK: item.ServiceOK,
+				Known:     item.TunnelKnown,
+				Detail:    item.TunnelDetail,
+			})
 		}
 	}
 	return routes, nil
@@ -98,6 +108,19 @@ func (s monitorSource) Drift(ctx context.Context) ([]monitor.DriftStatus, error)
 	return out, nil
 }
 
+// Traffic 返回若干域名的当前上下行速率：流量采集器内部按 host:port 累计，这里按域名合并。
+func (s monitorSource) Traffic(ctx context.Context, domains []string) (map[string]monitor.TrafficRate, error) {
+	if s.traffic == nil {
+		return nil, nil
+	}
+	snapshot := s.traffic.SnapshotByHost(domains)
+	rates := make(map[string]monitor.TrafficRate, len(snapshot))
+	for host, item := range snapshot {
+		rates[host] = monitor.TrafficRate{Upload: item.UploadRate, Download: item.DownloadRate}
+	}
+	return rates, nil
+}
+
 func (s monitorSource) enabledServers(ctx context.Context) ([]frp.Server, error) {
 	servers, err := s.frp.ListServers(ctx)
 	if err != nil {
@@ -126,5 +149,42 @@ func driftKindText(kind string) string {
 		return "内容不一致"
 	default:
 		return kind
+	}
+}
+
+// healthRecorder 把 monitor 的健康结论翻成 frp 侧样本并落库（
+// 两侧的状态字面量由 healthStateValue 显式翻译，改动一侧会在这里编译期报错）。
+type healthRecorder struct {
+	frp *frp.Service
+}
+
+func (r healthRecorder) RecordRouteHealth(ctx context.Context, samples []monitor.HealthSample) error {
+	converted := make([]frp.RouteHealthSample, 0, len(samples))
+	for _, sample := range samples {
+		converted = append(converted, frp.RouteHealthSample{
+			ServerID: sample.ServerID,
+			Domain:   sample.Domain,
+			State:    healthStateValue(sample.State),
+			Reason:   sample.Reason,
+			Detail:   sample.Detail,
+		})
+	}
+	_, err := r.frp.RecordRouteHealth(ctx, converted)
+	return err
+}
+
+func (r healthRecorder) PruneRouteHealth(ctx context.Context) error {
+	_, err := r.frp.PruneRouteHealth(ctx)
+	return err
+}
+
+func healthStateValue(state string) string {
+	switch state {
+	case monitor.HealthUp:
+		return frp.RouteHealthUp
+	case monitor.HealthDown:
+		return frp.RouteHealthDown
+	default:
+		return frp.RouteHealthUnknown
 	}
 }

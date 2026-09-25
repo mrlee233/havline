@@ -280,6 +280,18 @@
 
 **结构变化**：`internal/monitor` 的注入方式从「一个 routes 闭包」改成 `Source` 接口（Routes / Servers / Agents / Drift），frp 侧适配放在新文件 `internal/app/monitor_source.go`——monitor 依旧不依赖 frp 包，新增数据源只需扩接口。三条新检查与原有隧道巡检共用 `failureTransition`（原 `tunnelTransition` 泛化），漂移因不是「连续失败」型而单独用冷却；`notify.Alert` 一律在锁外调用。
 
+## 十一、P1 实施状态（2026-09-25）
+
+| 项 | 状态 | 落点与关键决定 |
+| --- | --- | --- |
+| 7 定时自动备份 + 保留策略 | ✅ | `internal/backup`：导出改 `writeArchive` 逐个检查 tar→gzip→文件的 `Close()`（修审查报告 §二）；`AutoRunner` 按「最新备份是否在 24h 内」判定，重启不重复备份；导出后回读校验 |
+| 6 健康检查持续化 + 只读状态页 | ✅ | 先修 `tunnel_known`（判不了 ≠ 不通，修掉了新告警的误报根因）；`route_health_events` 只存状态变更（up/down/unknown），可用率与不可用区间由它推导；公开状态页默认关闭、访问码存 SHA-256、按 IP 限流、只暴露域名与可用率 |
+| 5 指标历史与趋势图 | ✅ | 纵向点表 `(scope, metric, value, at)`，**不上降采样表**（每 2 分钟采样行量极小，查询时按桶取平均）；本机资源 + 每规则上下行速率（`SnapshotByHost` 与端点聚合共用 `aggregateHostKeys`）；仪表盘趋势卡 1h/24h/7d |
+| 8 一键迁移包 | ⬜ 未做 | 建议缩范围：先只做「导出加密包 + 只允许导入到空实例」 |
+| 9 Docker 容器统计 | ⬜ 未做 | 要动 agent（递增 `AgentVersion` + 重编 + 用户升级），建议排在「本机 SMART + UPS」之后 |
+
+**本轮教训（记一下免得重犯）**：`vue-tsc` 不校验模板标签闭合，模板结构错误只有 `npx vite build` 会拦（本轮搬卡片时标签失衡就是它报的 `Element is missing end tag`）——前端改动两个都要跑。
+
 ---
 
 > 说明：本文件是**建议清单**，未改动任何代码；实施时按本仓库既有约定（每步验证 `go build/vet/test` + `vue-tsc/vite build`、agent 行为变更递增 `AgentVersion`、提交同批更新 `CHANGELOG` 与 `VERSION`）。

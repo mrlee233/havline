@@ -349,6 +349,18 @@ export const api = {
     request<import('./types').FrpAgentRouteHealth[]>(`/api/frpmulti/servers/${serverId}/agent/routes/health`),
   getFrpRouteHealthSummary: () =>
     request<import('./types').FrpRouteHealthSummary>('/api/frpmulti/routes/summary'),
+  getFrpRouteUptime: (hours = 24) =>
+    request<{ hours: number; items: import('./types').FrpRouteUptime[] }>(`/api/frpmulti/routes/uptime?hours=${hours}`),
+
+  // 指标历史：窗口内的序列已按桶取平均，拿到就能直接画
+  getMetricsHistory: (hours = 24, buckets = 48) =>
+    request<import('./types').MetricsHistory>(`/api/metrics/history?hours=${hours}&buckets=${buckets}`),
+
+  // 匿名状态页：未开启或访问码不对时后端回 404
+  getStatusPage: (code?: string) =>
+    request<import('./types').StatusPagePayload>(
+      `/api/status-page${code ? `?code=${encodeURIComponent(code)}` : ''}`,
+    ),
   removeFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'DELETE' }),
   pushFrpConfigToAgent: (id: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-config`, { method: 'POST' }),
   frpsServerAction: (id: number, action: 'start' | 'stop' | 'restart') =>
@@ -395,6 +407,28 @@ export const api = {
     const link = document.createElement('a')
     link.href = url
     link.download = `fonu-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`
+    link.click()
+    URL.revokeObjectURL(url)
+  },
+
+  listBackupArchives: () =>
+    request<{ archives: import('./types').BackupArchive[]; keep: number }>('/api/backup/archives'),
+  createBackupArchive: () =>
+    request<{ name: string; removed: number }>('/api/backup/archives', { method: 'POST' }),
+  restoreBackupArchive: (name: string) =>
+    request<{ message: string }>(`/api/backup/archives/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
+  deleteBackupArchive: (name: string) =>
+    request<{ ok: boolean }>(`/api/backup/archives/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+  async downloadBackupArchive(name: string) {
+    const response = await fetch(`/api/backup/archives/${encodeURIComponent(name)}`, { credentials: 'include' })
+    if (!response.ok) {
+      throw new Error('下载备份失败')
+    }
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
     link.click()
     URL.revokeObjectURL(url)
   },

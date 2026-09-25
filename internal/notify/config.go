@@ -14,6 +14,7 @@ const (
 	EventFrpsServerDown     = "frps_server_down"
 	EventAgentUnreachable   = "agent_unreachable"
 	EventRouteDrift         = "route_drift"
+	EventBackupFailure      = "backup_failure"
 
 	MaskedSecret = "********"
 
@@ -125,6 +126,7 @@ type Config struct {
 	FrpsFailThreshold     int            `json:"frps_fail_threshold"`
 	AgentFailThreshold    int            `json:"agent_fail_threshold"`
 	DriftCooldownHours    int            `json:"drift_cooldown_hours"`
+	OnBackupFailure       bool           `json:"on_backup_failure"`
 }
 
 type RuntimeConfig struct {
@@ -166,6 +168,7 @@ type SaveInput struct {
 	FrpsFailThreshold     int
 	AgentFailThreshold    int
 	DriftCooldownHours    int
+	OnBackupFailure       bool
 }
 
 type TestInput struct {

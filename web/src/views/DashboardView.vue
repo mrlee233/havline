@@ -60,8 +60,10 @@
           <template #value>{{ serviceHealth.value }}</template>
           <p class="stat-desc">{{ serviceHealth.desc }}</p>
           <div class="stat-foot">
-            <div class="stat-foot__line">Fonu / Nginx / DDNS / 证书</div>
-            <div class="stat-foot__muted">上次检查 {{ formatRelativeTime(status?.started_at) || '刚刚' }}</div>
+            <div class="stat-foot__line">Fonu · Nginx · DDNS · 证书</div>
+            <div class="stat-foot__muted">
+              运行 {{ formatUptime(status?.uptime_seconds ?? 0) }} · 上次检查 {{ formatRelativeTime(status?.started_at) || '刚刚' }}
+            </div>
           </div>
         </StatCard>
 
@@ -138,33 +140,34 @@
           </div>
         </FonuCard>
 
-        <FonuCard class="panel health-panel">
+        <FonuCard class="panel trend-card">
           <div class="panel__head">
             <div class="panel-title">
-              <n-icon :component="PulseOutline" class="panel-title__icon panel-title__icon--teal" />
-              <span>运行状态</span>
+              <n-icon :component="StatsChartOutline" class="panel-title__icon panel-title__icon--teal" />
+              <span>资源与流量趋势</span>
             </div>
-            <router-link :to="{ name: 'settings' }" class="card-link">
-              查看详情
-              <n-icon :component="ChevronForwardOutline" />
-            </router-link>
+            <div class="trend-range">
+              <n-button
+                v-for="item in METRICS_RANGES"
+                :key="item.hours"
+                size="tiny"
+                quaternary
+                :type="trendHours === item.hours ? 'primary' : 'default'"
+                @click="trendHours = item.hours"
+              >
+                {{ item.label }}
+              </n-button>
+            </div>
           </div>
-          <div class="panel__body health-list">
-            <div v-for="item in healthItems" :key="item.name" class="health-item">
-              <div class="health-item__icon" :class="`health-item__icon--${item.tone}`">
-                <n-icon :component="item.icon" />
-              </div>
-              <div class="health-item__main">
-                <span class="health-item__name">{{ item.name }}</span>
-                <span class="health-item__meta">{{ item.desc }}</span>
-                <span class="health-item__detail">{{ item.meta }}</span>
-              </div>
-              <StatusBadge :value="item.status" :text="item.label" />
-            </div>
+          <div class="panel__body">
+            <MetricsTrendPanel :hours="trendHours" />
           </div>
         </FonuCard>
 
-        <FonuCard class="panel">
+      </div>
+
+      <div class="ops-row">
+        <FonuCard class="panel perf-panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="FlashOutline" class="panel-title__icon panel-title__icon--amber" />
@@ -201,9 +204,7 @@
             </div>
           </div>
         </FonuCard>
-      </div>
 
-      <div class="ops-row">
         <FonuCard class="panel">
           <div class="panel__head">
             <div class="panel-title">
@@ -352,6 +353,7 @@ import {
   PulseOutline,
   ServerOutline,
   ShieldCheckmarkOutline,
+  StatsChartOutline,
   SwapVerticalOutline,
   WifiOutline,
 } from '@vicons/ionicons5'
@@ -379,6 +381,11 @@ import FonuCard from '../components/FonuCard.vue'
 import LoadError from '../components/LoadError.vue'
 import MiniBarChart from '../components/MiniBarChart.vue'
 import MiniTrafficChart from '../components/MiniTrafficChart.vue'
+import MetricsTrendPanel from '../components/MetricsTrendPanel.vue'
+import { METRICS_RANGES } from '../constants/metrics'
+
+// 「资源与流量趋势」的时间档：切换即让子组件按新窗口重新取数
+const trendHours = ref(24)
 import StatCard from '../components/StatCard.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import {
@@ -582,6 +589,7 @@ const remoteHealthMeta = computed(() => {
   if (summary.dns_failed) issues.push(`DNS ${summary.dns_failed}`)
   if (summary.cert_missing) issues.push(`证书 ${summary.cert_missing}`)
   if (summary.tunnel_down) issues.push(`隧道 ${summary.tunnel_down}`)
+  if (summary.tunnel_unknown) issues.push(`隧道无法判定 ${summary.tunnel_unknown}`)
   if (summary.service_down) issues.push(`服务 ${summary.service_down}`)
   const parts = [`${summary.healthy}/${summary.routes} 条健康`]
   if (issues.length > 0) parts.push(issues.join(' · '))
@@ -1392,7 +1400,7 @@ html.dark .hero-art {
 
 .ops-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--fonu-space-4);
   margin-bottom: var(--fonu-space-4);
 }
@@ -1404,6 +1412,9 @@ html.dark .hero-art {
   margin-bottom: var(--fonu-space-4);
   align-items: stretch;
 }
+
+/* 趋势卡片占两列：这样「性能」才能跟「系统资源」等一起排到下一行的四列里 */
+.trend-card { grid-column: span 2; }
 
 .metrics-row > .fonu-card {
   height: 100%;
@@ -1445,6 +1456,9 @@ html.dark .hero-art {
 .panel-title__icon--teal {
   color: #14b8a6;
 }
+
+/* 趋势卡片表头里的时间档切换（对齐「实时流量」的 range-tag 位置） */
+.trend-range { display: flex; gap: 2px; }
 
 .range-tag {
   background: var(--fonu-bg) !important;

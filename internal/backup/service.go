@@ -26,43 +26,58 @@ func New(dataDir string) *Service {
 	return &Service{dataDir: dataDir}
 }
 
+// backupTimeFmt 归档文件名里的时间戳；List / Path 都按同一套格式校验
+const backupTimeFmt = "20060102-150405"
+
+// Export 导出一份归档并返回路径；文件留在 <DataDir>/backups 下，由调用方决定下载后删除还是长期保留。
 func (s *Service) Export(ctx context.Context) (string, error) {
-	tmpDir := filepath.Join(s.dataDir, "backups")
-	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+	if err := os.MkdirAll(s.backupsDir(), 0o755); err != nil {
 		return "", err
 	}
-	name := fmt.Sprintf("fonu-backup-%s.tar.gz", time.Now().Format("20060102-His"))
-	outPath := filepath.Join(tmpDir, name)
-	file, err := os.Create(outPath)
+	// CreateTemp 保证同一秒内多次导出不会覆盖已有备份（文件名带随机后缀）
+	file, err := os.CreateTemp(s.backupsDir(), fmt.Sprintf("fonu-backup-%s-*.tar.gz", time.Now().Format(backupTimeFmt)))
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
-
-	gw := gzip.NewWriter(file)
-	tw := tar.NewWriter(gw)
-
-	entries := []string{
-		"fonu.db",
-		"certs",
-		"nginx",
-	}
-	for _, entry := range entries {
-		if err := addToArchive(ctx, tw, s.dataDir, entry); err != nil {
-			_ = tw.Close()
-			_ = gw.Close()
-			_ = os.Remove(outPath)
-			return "", err
-		}
-	}
-
-	if err := tw.Close(); err != nil {
-		return "", err
-	}
-	if err := gw.Close(); err != nil {
+	outPath := file.Name()
+	if err := s.writeArchive(ctx, file, outPath); err != nil {
 		return "", err
 	}
 	return outPath, nil
+}
+
+// writeArchive 写归档，逐层检查关闭错误。
+//
+// Close 的错误必须往上抛：tar/gzip 的尾部与文件系统的 flush 都发生在 Close，
+// 忽略它就会出现「备份文件不完整、函数却返回成功」——这是最坏的一种假成功。
+// 任一步失败都删掉半成品，不留一个看起来能用的备份。
+func (s *Service) writeArchive(ctx context.Context, file *os.File, outPath string) error {
+	discard := func() {
+		_ = file.Close()
+		_ = os.Remove(outPath)
+	}
+
+	gw := gzip.NewWriter(file)
+	tw := tar.NewWriter(gw)
+	for _, entry := range []string{"fonu.db", "certs", "nginx"} {
+		if err := addToArchive(ctx, tw, s.dataDir, entry); err != nil {
+			discard()
+			return err
+		}
+	}
+	if err := tw.Close(); err != nil {
+		discard()
+		return err
+	}
+	if err := gw.Close(); err != nil {
+		discard()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		_ = os.Remove(outPath)
+		return err
+	}
+	return nil
 }
 
 func (s *Service) Restore(ctx context.Context, archivePath string) error {

@@ -12,6 +12,7 @@ import (
 	"github.com/fonu/fonu/internal/ddns"
 	"github.com/fonu/fonu/internal/discovery"
 	"github.com/fonu/fonu/internal/frp"
+	"github.com/fonu/fonu/internal/metrics"
 	"github.com/fonu/fonu/internal/notify"
 	"github.com/fonu/fonu/internal/service"
 	"github.com/fonu/fonu/internal/settings"
@@ -19,19 +20,20 @@ import (
 )
 
 type Deps struct {
-	Config     config.Config
-	Logger     *slog.Logger
-	Auth       *auth.Service
-	Proxy      *service.ProxyService
-	DDNS       *ddns.Service
-	ACME       *acme.Service
-	Settings   *settings.Store
-	ChinaCIDR  *chinacidr.Service
-	Backup     *backup.Service
-	Discovery  *discovery.Service
-	FRPMulti    *frp.Service
-	Traffic    *traffic.Collector
-	Notify     *notify.Service
-	StaticFS   fs.FS
-	StartedAt  string
+	Config    config.Config
+	Logger    *slog.Logger
+	Auth      *auth.Service
+	Proxy     *service.ProxyService
+	DDNS      *ddns.Service
+	ACME      *acme.Service
+	Settings  *settings.Store
+	ChinaCIDR *chinacidr.Service
+	Backup    *backup.Service
+	Metrics   *metrics.Store
+	Discovery *discovery.Service
+	FRPMulti  *frp.Service
+	Traffic   *traffic.Collector
+	Notify    *notify.Service
+	StaticFS  fs.FS
+	StartedAt string
 }

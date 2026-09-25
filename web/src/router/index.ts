@@ -11,12 +11,15 @@ import SettingsView from '../views/SettingsView.vue'
 import FrpView from '../views/FrpView.vue'
 import AgentView from '../views/AgentView.vue'
 import ProxyRemoteView from '../views/ProxyRemoteView.vue'
+import StatusPageView from '../views/StatusPageView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/setup', redirect: '/login' },
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
+    // 公开状态页：挂到公网给别人看的，不经过登录守卫
+    { path: '/status', name: 'status', component: StatusPageView, meta: { public: true } },
     {
       path: '/',
       component: AppLayout,
@@ -83,6 +86,8 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  // 公开页（状态页）不登录也能打开，也不必为它去问一次登录状态
+  if (to.meta.public && to.name !== 'login') return true
   const status = await api.authStatus()
   if (to.meta.requiresAuth && !status.authenticated) return { name: 'login' }
   if (to.name === 'login' && status.authenticated) return { name: 'dashboard' }

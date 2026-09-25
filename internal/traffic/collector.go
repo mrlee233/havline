@@ -228,6 +228,15 @@ func (c *Collector) pruneHost(st *hostState, now time.Time) {
 }
 
 func (c *Collector) aggregateEndpoints(endpoints []proxy.Endpoint, now time.Time) (uploadTotal, downloadTotal int64, uploadRate, downloadRate float64, connections int) {
+	keys := make([]string, 0, len(endpoints))
+	for _, ep := range endpoints {
+		keys = append(keys, EndpointKey(ep.Hostname, ep.Port))
+	}
+	return c.aggregateHostKeys(keys, now)
+}
+
+// aggregateHostKeys 汇总若干 host:port 条目的总量、速率与活跃连接数
+func (c *Collector) aggregateHostKeys(keys []string, now time.Time) (uploadTotal, downloadTotal int64, uploadRate, downloadRate float64, connections int) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -235,8 +244,7 @@ func (c *Collector) aggregateEndpoints(endpoints []proxy.Endpoint, now time.Time
 	var oldest time.Time
 	clientSet := map[string]time.Time{}
 
-	for _, ep := range endpoints {
-		key := EndpointKey(ep.Hostname, ep.Port)
+	for _, key := range keys {
 		st, ok := c.hosts[key]
 		if !ok {
 			continue
@@ -293,6 +301,51 @@ func (c *Collector) SnapshotForRules(rules []proxy.Rule) []RuleTraffic {
 			DownloadRate:  downRate,
 			Connections:   conns,
 		})
+	}
+	return out
+}
+
+// HostTraffic 单个域名的当前速率与总量（指标历史按域名落点）
+type HostTraffic struct {
+	Hostname      string  `json:"hostname"`
+	UploadTotal   int64   `json:"upload_total"`
+	DownloadTotal int64   `json:"download_total"`
+	UploadRate    float64 `json:"upload_rate"`
+	DownloadRate  float64 `json:"download_rate"`
+	Connections   int     `json:"connections"`
+}
+
+// SnapshotByHost 按域名汇总当前速率：内部键是 host:port，
+// 同一域名的多个端口会合并，与 aggregateEndpoints 的算法保持一致。
+func (c *Collector) SnapshotByHost(hostnames []string) map[string]HostTraffic {
+	now := time.Now()
+	out := map[string]HostTraffic{}
+	for _, host := range hostnames {
+		host = strings.ToLower(strings.TrimSpace(host))
+		if host == "" {
+			continue
+		}
+		prefix := host + ":"
+		c.mu.RLock()
+		keys := make([]string, 0, 2)
+		for key := range c.hosts {
+			if strings.HasPrefix(key, prefix) {
+				keys = append(keys, key)
+			}
+		}
+		c.mu.RUnlock()
+		if len(keys) == 0 {
+			continue
+		}
+		up, down, upRate, downRate, conns := c.aggregateHostKeys(keys, now)
+		out[host] = HostTraffic{
+			Hostname:      host,
+			UploadTotal:   up,
+			DownloadTotal: down,
+			UploadRate:    upRate,
+			DownloadRate:  downRate,
+			Connections:   conns,
+		}
 	}
 	return out
 }

@@ -720,6 +720,8 @@ export interface FrpAgentRouteHealth {
   cert_ok: boolean
   cert_detail?: string
   tunnel_ok: boolean
+  /** 隧道状态是否判得出来：frps 管理接口不可用时 tunnel_ok 恒为 false，但那不代表隧道不通 */
+  tunnel_known?: boolean
   tunnel_name?: string
   tunnel_detail?: string
   service_ok: boolean
@@ -732,6 +734,8 @@ export interface FrpRouteHealthSummary {
   dns_failed: number
   cert_missing: number
   tunnel_down: number
+  /** frps 管理接口不可用、隧道状态判不出来的条数 */
+  tunnel_unknown?: number
   service_down: number
   failed_servers?: string[]
 }
@@ -939,4 +943,69 @@ export interface ApiToken {
 
 export interface CreatedApiToken extends ApiToken {
   token: string
+}
+
+// 留在服务器上的备份（自动备份 + 手动「立即备份」）
+export interface BackupArchive {
+  name: string
+  size: number
+  mod_time: string
+}
+
+// 规则可用率：由后台巡检落库的状态变更推导，不是页面现算
+// （不可用区间与判不出来的时长分开给，unknown 不计入可用率分母）
+export interface FrpRouteUptimeIncident {
+  from: string
+  to?: string
+  reason?: string
+  detail?: string
+  minutes: number
+}
+
+export interface FrpRouteUptime {
+  server_id: number
+  domain: string
+  state: string
+  uptime_pct: number
+  down_minutes: number
+  unknown_minutes: number
+  covered_minutes: number
+  incidents: FrpRouteUptimeIncident[]
+}
+
+// 指标历史：scope=host 是本机，scope=route:<serverID>:<domain> 是单条规则的流量
+export interface MetricsPoint {
+  at: string
+  value: number
+}
+
+export interface MetricsSeries {
+  scope: string
+  metric: string
+  points: MetricsPoint[]
+}
+
+export interface MetricsHistory {
+  hours: number
+  buckets: number
+  series: MetricsSeries[]
+}
+
+// 公开状态页（匿名只读）：只有域名与可用率，不含内网地址/端口/证书路径
+export interface StatusPageRoute {
+  domain: string
+  state: string
+  uptime_pct: number
+  down_minutes: number
+  unknown_minutes: number
+}
+
+export interface StatusPagePayload {
+  title: string
+  code_required: boolean
+  checked_at: string
+  up: number
+  down: number
+  unknown: number
+  routes: StatusPageRoute[]
 }

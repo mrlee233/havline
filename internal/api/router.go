@@ -13,25 +13,29 @@ import (
 func NewRouter(deps Deps) http.Handler {
 	logsHandler := NewLogsHandler(deps.Config)
 	r := &Router{
-		authHandler:      NewAuthHandler(deps.Auth, deps.Notify),
-		proxyHandler:     NewProxyHandler(deps.Config, deps.Proxy, logsHandler, deps.Traffic),
-		nginxHandler:     NewNginxHandler(deps.Proxy),
-		statusHandler:    NewStatusHandler(deps.Config, deps.Proxy, deps.DDNS, deps.ACME, deps.StartedAt, deps.Config.NginxPIDFile),
-		ddnsHandler:      NewDDNSHandler(deps.DDNS),
-		certHandler:      NewCertHandler(deps.ACME),
-		settingsHandler:  NewSettingsHandler(deps.Settings, deps.Proxy, deps.Notify),
-		chinaCIDRHandler: NewChinaCIDRHandler(deps.ChinaCIDR),
-		logsHandler:      logsHandler,
-		backupHandler:    NewBackupHandler(deps.Backup),
-		discoveryHandler: NewDiscoveryHandler(deps.Discovery),
-		frpmultiHandler:  NewFRPMultiHandler(deps.FRPMulti),
-		authSvc:          deps.Auth,
-		staticFS:         deps.StaticFS,
+		authHandler:       NewAuthHandler(deps.Auth, deps.Notify),
+		proxyHandler:      NewProxyHandler(deps.Config, deps.Proxy, logsHandler, deps.Traffic),
+		nginxHandler:      NewNginxHandler(deps.Proxy),
+		statusHandler:     NewStatusHandler(deps.Config, deps.Proxy, deps.DDNS, deps.ACME, deps.StartedAt, deps.Config.NginxPIDFile),
+		ddnsHandler:       NewDDNSHandler(deps.DDNS),
+		certHandler:       NewCertHandler(deps.ACME),
+		settingsHandler:   NewSettingsHandler(deps.Settings, deps.Proxy, deps.Notify),
+		chinaCIDRHandler:  NewChinaCIDRHandler(deps.ChinaCIDR),
+		logsHandler:       logsHandler,
+		backupHandler:     NewBackupHandler(deps.Backup, deps.Settings),
+		statusPageHandler: NewStatusPageHandler(deps.Settings, deps.FRPMulti),
+		metricsHandler:    NewMetricsHandler(deps.Metrics),
+		discoveryHandler:  NewDiscoveryHandler(deps.Discovery),
+		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti),
+		authSvc:           deps.Auth,
+		staticFS:          deps.StaticFS,
 	}
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/version", Version(deps.Config))
+	// 唯一一个匿名只读接口：默认关闭、可设访问码、按 IP 限流
+	mux.HandleFunc("GET /api/status-page", r.statusPageHandler.Get)
 	mux.HandleFunc("GET /api/auth/status", r.authHandler.Status)
 	mux.HandleFunc("POST /api/auth/login", r.authHandler.Login)
 	mux.HandleFunc("POST /api/auth/logout", r.authHandler.Logout)
@@ -88,9 +92,15 @@ func NewRouter(deps Deps) http.Handler {
 	protect("GET /api/logs/access", r.logsHandler.Access)
 	protect("GET /api/logs/error", r.logsHandler.Error)
 	protect("GET /api/logs/system", r.logsHandler.System)
+	protect("GET /api/metrics/history", r.metricsHandler.History)
 	protect("GET /api/logs/stream", r.logsHandler.Stream)
 	protect("GET /api/backup/export", r.backupHandler.Export)
 	protect("POST /api/backup/restore", r.backupHandler.Restore)
+	protect("GET /api/backup/archives", r.backupHandler.ListArchives)
+	protect("POST /api/backup/archives", r.backupHandler.CreateArchive)
+	protect("GET /api/backup/archives/{name}", r.backupHandler.DownloadArchive)
+	protect("POST /api/backup/archives/{name}/restore", r.backupHandler.RestoreArchive)
+	protect("DELETE /api/backup/archives/{name}", r.backupHandler.DeleteArchive)
 	protect("GET /api/discovery/scan", r.discoveryHandler.Scan)
 	if deps.FRPMulti != nil {
 		frpHandler := r.frpmultiHandler
@@ -122,6 +132,7 @@ func NewRouter(deps Deps) http.Handler {
 		protect("GET /api/frpmulti/servers/{id}/agent/routes", frpHandler.AgentRoutes)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/health", frpHandler.AgentRouteHealth)
 		protect("GET /api/frpmulti/routes/summary", frpHandler.AgentRouteHealthSummary)
+		protect("GET /api/frpmulti/routes/uptime", frpHandler.RouteUptime)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/drift", frpHandler.AgentRouteDrift)
 		protect("POST /api/frpmulti/servers/{id}/agent/routes/redeploy", frpHandler.AgentRedeployRoutes)
 		protect("GET /api/frpmulti/servers/{id}/agent/metrics", frpHandler.AgentMetrics)
@@ -165,20 +176,22 @@ func NewRouter(deps Deps) http.Handler {
 }
 
 type Router struct {
-	authHandler      *AuthHandler
-	proxyHandler     *ProxyHandler
-	nginxHandler     *NginxHandler
-	statusHandler    *StatusHandler
-	ddnsHandler      *DDNSHandler
-	certHandler      *CertHandler
-	settingsHandler  *SettingsHandler
-	chinaCIDRHandler *ChinaCIDRHandler
-	logsHandler      *LogsHandler
-	backupHandler    *BackupHandler
-	discoveryHandler *DiscoveryHandler
-	frpmultiHandler  *FRPMultiHandler
-	authSvc          *auth.Service
-	staticFS         fs.FS
+	authHandler       *AuthHandler
+	proxyHandler      *ProxyHandler
+	nginxHandler      *NginxHandler
+	statusHandler     *StatusHandler
+	ddnsHandler       *DDNSHandler
+	certHandler       *CertHandler
+	settingsHandler   *SettingsHandler
+	chinaCIDRHandler  *ChinaCIDRHandler
+	logsHandler       *LogsHandler
+	backupHandler     *BackupHandler
+	statusPageHandler *StatusPageHandler
+	metricsHandler    *MetricsHandler
+	discoveryHandler  *DiscoveryHandler
+	frpmultiHandler   *FRPMultiHandler
+	authSvc           *auth.Service
+	staticFS          fs.FS
 }
 
 func (r *Router) spaHandler() http.Handler {

@@ -99,6 +99,8 @@ func (s *Store) load(ctx context.Context, decrypt bool) (Config, runtimeSecrets,
 		cfg.OnFrpsDown = flag(s.settings, ctx, settings.KeyNotifyOnFrpsDown, false)
 		cfg.OnAgentUnreachable = flag(s.settings, ctx, settings.KeyNotifyOnAgentUnreachable, false)
 		cfg.OnRouteDrift = flag(s.settings, ctx, settings.KeyNotifyOnRouteDrift, false)
+		// 备份失败属于「你以为有备份其实没有」，默认开启
+		cfg.OnBackupFailure = flag(s.settings, ctx, settings.KeyNotifyOnBackupFailure, true)
 	} else {
 		legacyDDNS := flag(s.settings, ctx, settings.KeyNotifyOnDDNSError, true)
 		legacyCert := flag(s.settings, ctx, settings.KeyNotifyOnCertError, true)
@@ -202,6 +204,7 @@ func hasNotifyEventSettings(ctx context.Context, store *settings.Store) bool {
 		settings.KeyNotifyOnFrpsDown,
 		settings.KeyNotifyOnAgentUnreachable,
 		settings.KeyNotifyOnRouteDrift,
+		settings.KeyNotifyOnBackupFailure,
 	}
 	for _, key := range keys {
 		raw, err := store.Get(ctx, key)
@@ -269,6 +272,9 @@ func (s *Store) Save(ctx context.Context, in SaveInput) error {
 		return err
 	}
 	if err := s.settings.SetBool(ctx, settings.KeyNotifyOnRouteDrift, in.OnRouteDrift); err != nil {
+		return err
+	}
+	if err := s.settings.SetBool(ctx, settings.KeyNotifyOnBackupFailure, in.OnBackupFailure); err != nil {
 		return err
 	}
 	if err := s.settings.SetInt(ctx, settings.KeyNotifyFrpsFailThreshold, clampThreshold(in.FrpsFailThreshold, DefaultFrpsFailThreshold)); err != nil {
@@ -523,6 +529,7 @@ func ParseSaveInputFromMap(values map[string]string) (SaveInput, bool) {
 	in.OnFrpsDown = values[settings.KeyNotifyOnFrpsDown] == "1" || strings.EqualFold(values[settings.KeyNotifyOnFrpsDown], "true")
 	in.OnAgentUnreachable = values[settings.KeyNotifyOnAgentUnreachable] == "1" || strings.EqualFold(values[settings.KeyNotifyOnAgentUnreachable], "true")
 	in.OnRouteDrift = values[settings.KeyNotifyOnRouteDrift] == "1" || strings.EqualFold(values[settings.KeyNotifyOnRouteDrift], "true")
+	in.OnBackupFailure = values[settings.KeyNotifyOnBackupFailure] == "1" || strings.EqualFold(values[settings.KeyNotifyOnBackupFailure], "true")
 	in.FrpsFailThreshold = intSettingFromMap(values, settings.KeyNotifyFrpsFailThreshold, DefaultFrpsFailThreshold)
 	in.AgentFailThreshold = intSettingFromMap(values, settings.KeyNotifyAgentFailThreshold, DefaultAgentFailThreshold)
 	in.DriftCooldownHours = intSettingFromMap(values, settings.KeyNotifyDriftCooldownHours, DefaultDriftCooldownHours)

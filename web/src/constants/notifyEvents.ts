@@ -72,6 +72,11 @@ export const NOTIFY_EVENT_GROUPS: NotifyEventGroup[] = [
         hint: '保存反代或证书后 Nginx 未能成功重载',
       },
       {
+        key: 'on_backup_failure',
+        label: '自动备份失败',
+        hint: '定时备份导出或校验失败——没有备份这件事，往往到需要它的那天才发现',
+      },
+      {
         key: 'on_resource_threshold',
         label: '资源占用过高',
         hint: 'CPU / 内存 / 磁盘持续超过阈值，同一项每 30 分钟最多提醒一次',
