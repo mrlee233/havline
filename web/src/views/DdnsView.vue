@@ -518,6 +518,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import TaskProviderForm, { type ProviderForm } from '../components/TaskProviderForm.vue'
 import { formatDate, formatRelativeTime } from '../utils/format'
+import { shouldShowFrpHint } from '../utils/frp'
 import { statusLabel } from '../utils/status'
 
 const DRAFT_KEY = '__draft__'
@@ -929,8 +930,8 @@ async function init() {
   refreshPublicIP()
   refreshLiveDNS()
   try {
-    const frp = await api.getFRP()
-    frpEnabled.value = frp.enabled
+    const status = await api.getFrpStatus()
+    frpEnabled.value = shouldShowFrpHint(status)
   } catch {
     frpEnabled.value = false
   }
