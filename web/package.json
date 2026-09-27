@@ -1,7 +1,7 @@
 {
   "name": "fonu-web",
   "private": true,
-  "version": "1.2.18",
+  "version": "1.2.19",
   "packageManager": "npm@10.9.4",
   "type": "module",
   "scripts": {

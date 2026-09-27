@@ -22,7 +22,10 @@ services:
       - "18080:80"
       - "9443:443"
     volumes:
-      - fonu-data:/data
+      # 数据目录：默认用命名卷 fonu-data（由 Docker 管理，位置随 Docker 数据根）。
+      # 想落到指定目录就在同层 .env 里设 FONU_DATA_PATH=/vol1/docker/fonu-data ——
+      # 以 / 或 . 开头的写法会被 compose 当成 bind mount，其余字符串仍是命名卷。
+      - ${FONU_DATA_PATH:-fonu-data}:/data
     environment:
       FONU_DATA_DIR: /data
       FONU_LISTEN: :6893

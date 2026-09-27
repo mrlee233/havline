@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.19] - 2026-09-27
+
+### 新增
+
+- **数据目录可选（默认行为不变）**：三个 compose 的挂载改为 `${FONU_DATA_PATH:-fonu-data}:/data`——默认仍是命名卷 `fonu-data`，**老用户升级后不受影响**；在同层 `.env` 里写 `FONU_DATA_PATH=/vol1/docker/fonu-data` 即可让数据落到指定宿主机目录（以 `/` 或 `.` 开头的写法会被 compose 当成 bind mount，其余字符串仍是命名卷）
+- **新增 `docs/container-deploy-and-data.md`（容器部署与数据指南）**：三个编排文件的分工与选择、干净机器单文件部署、数据目录（默认卷 / 指定目录 / 从卷迁移）、备份与恢复的三条注意、升级与回滚、环境变量速查、常见问题（401 加速器、`FONU_SESSION_SECRET` 报错、`fonu Pulling` 超时、换目录后「数据没了」、仪表盘三张卡为空）、与原生安装之间的迁移
+
+### 变更
+
+- 版本号提升到 1.2.19；`web/package.json` 同步对齐
+- 本轮不涉及 Go 代码（只改 compose 与文档），因此安装包未重出，`dist/` 里 1.2.17 的包仍可用；`AgentVersion` 仍为 0.12.7
+
 ## [v1.2.18] - 2026-09-27
 
 ### 修复
