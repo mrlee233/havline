@@ -3,6 +3,7 @@ bin/
 web/node_modules/
 web/dist/
 cmd/fonu/web/dist/
+dist/
 *.db
 /data/
 .DS_Store
@@ -10,6 +11,8 @@ cmd/fonu/web/dist/
 # scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪
 scripts/*
 !scripts/agent-install.sh
+!scripts/build-linux.ps1
+!scripts/fonu-install.sh
 # 本地压缩包与导出产物不入库（如 web/src.rar）
 *.rar
 *.zip

@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.13] - 2026-09-27
+
+### 新增
+
+- **Linux 原生安装包**：`scripts/build-linux.ps1` 一条命令产出 `fonu-<版本>-linux-{amd64,arm64}.tar.gz`（内含二进制、migrations、systemd 安装脚本、前端运行时资源与 sha256 校验文件，无需 Docker/WSL，依赖纯 Go 的 modernc.org/sqlite）；`scripts/fonu-install.sh` 负责目标机安装与卸载：装到 `/opt/fonu`、数据在 `/var/lib/fonu`、环境变量在 `/etc/fonu/fonu.env`（首次生成随机会话密钥，重装保留）并注册 `fonu.service`
+- **`--reset-admin`**：忘了管理员口令时清空 `admins`/`sessions` 后重启，启动流程会重新生成随机口令；装完也会直接打印初始口令（以前只提示访问地址，用户找不到口令）
+- **Cloudflare Tunnel 融合方案文档** `docs/cloudflared-integration-plan.md`：同类项目对比、两种托管模型、可复用面盘点、参考实现分析（含用户自有项目 cf-tunnel-manager）与 IP 优选可行性边界
+- 设置页「ACME 证书」新增 **DNS 解析器（高级）**设置项
+
+### 修复
+
+- **证书申请：DNS-01 传播检查用错解析器**：lego 默认读系统 `/etc/resolv.conf`，容器里那是 Docker 的 `127.0.0.11`，它不返回权威 NS，于是报 `could not determine authoritative nameservers`。现在显式传入 `dns01.AddRecursiveNameservers`（默认 `223.5.5.5:53,1.1.1.1:53,8.8.8.8:53`，可用 `acme_dns_resolvers` 覆盖，填 `system` 回到系统解析器；配置无效时报明确错误而不是静默降级）
+- **Buypass 下线**：该 CA 已于 2025-10-15 停止签发、2026-04-15 终止 ACME 服务，已从可选 CA 列表移除；历史记录仍可展示，直接提交会被拦下并给出中文原因（不再让用户面对一个看不懂的 ACME 报错）
+- **ZeroSSL 报错信息不全**：返回 422 时把 ZeroSSL 的 `error.type` / `error.code` 带进错误；非 JSON 响应退回压平截断的正文，便于定位
+- **密钥泄露**：ZeroSSL EAB 请求失败时，`url.Error` 里带 `access_key` 的完整 URL 会被写进任务日志与 `<数据目录>/logs/app.log`；现在只保留底层错误原因
+
+### 测试
+
+- `internal/acme`：递归解析器列表解析（分隔符/自动补 53/上限 8 条/默认值可用）；ZeroSSL EAB 四条（成功、422 带错误类型、非 JSON 退回正文、网络错误不泄露密钥）
+
+### 变更
+
+- 版本号提升到 1.2.13；`web/package.json` 同步对齐
+- 本轮不含 agent 行为变更，`AgentVersion` 仍为 0.12.4
+
 ## [v1.2.12] - 2026-09-25
 
 ### 修复

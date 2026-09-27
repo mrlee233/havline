@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-acme/lego/v4/certcrypto"
 	legocert "github.com/go-acme/lego/v4/certificate"
+	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 
@@ -47,12 +48,12 @@ type Service struct {
 
 func NewService(cfg config.Config, store *certstore.Store, ddnsSvc *ddns.Service, settings *settings.Store, proxySvc *service.ProxyService, logger *slog.Logger, notifySvc *notify.Service) *Service {
 	return &Service{
-		cfg:      cfg,
-		store:    store,
-		ddnsSvc:  ddnsSvc,
-		settings: settings,
-		proxySvc: proxySvc,
-		logger:   logger.With("module", "ACME"),
+		cfg:           cfg,
+		store:         store,
+		ddnsSvc:       ddnsSvc,
+		settings:      settings,
+		proxySvc:      proxySvc,
+		logger:        logger.With("module", "ACME"),
 		notify:        notifySvc,
 		jobs:          NewJobManager(),
 		expiryAlerted: map[string]string{},
@@ -388,6 +389,9 @@ func (s *Service) resolveCA(ctx context.Context, ca string) (string, error) {
 	if err := ValidateCA(ca); err != nil {
 		return "", err
 	}
+	if reason := CAUnavailableReason(ca); reason != "" {
+		return "", fmt.Errorf("%s", reason)
+	}
 	return ca, nil
 }
 
@@ -446,7 +450,19 @@ func (s *Service) obtain(ctx context.Context, job *Job, ca, email, provider stri
 		return certstore.Record{}, fmt.Errorf("初始化 DNS Provider 失败：%w", err)
 	}
 	dnsProvider = wrapDNSProvider(dnsProvider, job)
-	if err := client.Challenge.SetDNS01Provider(dnsProvider); err != nil {
+	// DNS-01 的传播检查由 lego 自己做，它默认读系统 /etc/resolv.conf；
+	// 容器里那通常是 Docker 的 127.0.0.11，它不返回权威 NS，于是报
+	// 「[zone=example.com.] could not determine authoritative nameservers」。
+	// 所以显式指定可靠递归解析器（设置项可改；设为 system 则显式回到系统解析器）。
+	resolvers, err := s.acmeDNSResolvers(ctx)
+	if err != nil {
+		return certstore.Record{}, err
+	}
+	var challengeOpts []dns01.ChallengeOption
+	if len(resolvers) > 0 {
+		challengeOpts = append(challengeOpts, dns01.AddRecursiveNameservers(resolvers))
+	}
+	if err := client.Challenge.SetDNS01Provider(dnsProvider, challengeOpts...); err != nil {
 		return certstore.Record{}, err
 	}
 
@@ -503,6 +519,49 @@ func (s *Service) resolveACMEEmail(ctx context.Context, email string) (string, e
 		s.logger.Warn("save acme email failed", "error", err.Error())
 	}
 	return email, nil
+}
+
+// defaultACMEDNSResolvers 默认递归解析器（阿里/Cloudflare/Google）。
+// 容器里的系统解析器常只指向 127.0.0.11，无法用于 DNS-01 的权威 NS 查询；
+// 设置项写 system 则回到系统解析器，写其它值则按逗号/空格分隔逐条使用。
+const defaultACMEDNSResolvers = "223.5.5.5:53,1.1.1.1:53,8.8.8.8:53"
+
+// acmeDNSResolvers 返回本次申请要用的解析器；空 slice 表示交给 lego 读系统解析器。
+func (s *Service) acmeDNSResolvers(ctx context.Context) ([]string, error) {
+	raw, err := s.settings.Get(ctx, settings.KeyACMEDNSResolvers)
+	if err != nil || strings.TrimSpace(raw) == "" {
+		raw = defaultACMEDNSResolvers
+	}
+	if strings.EqualFold(strings.TrimSpace(raw), "system") {
+		return nil, nil
+	}
+	resolvers := parseResolverList(raw)
+	if len(resolvers) == 0 {
+		return nil, fmt.Errorf("DNS 解析器配置无效（%q）：请填 host 或 host:port，多个用逗号分隔；留空用默认值，填 system 用系统解析器", raw)
+	}
+	return resolvers, nil
+}
+
+// parseResolverList 解析解析器列表：逗号/空格/换行分隔，未写端口时补 53，最多取前 8 个。
+func parseResolverList(raw string) []string {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ' ' || r == '\t' || r == '\n' || r == ';'
+	})
+	out := make([]string, 0, len(fields))
+	for _, item := range fields {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		if !strings.Contains(item, ":") {
+			item += ":53"
+		}
+		out = append(out, item)
+		if len(out) >= 8 {
+			break
+		}
+	}
+	return out
 }
 
 func validateACMEEmail(email string) error {

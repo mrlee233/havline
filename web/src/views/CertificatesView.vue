@@ -216,8 +216,8 @@
           <p v-if="applyCA === 'zerossl' && !zerosslApiKey" class="ca-hint ca-hint--warn">
             使用 ZeroSSL 需在「设置」中配置 API Key
           </p>
-          <p v-if="applyCA === 'buypass'" class="ca-hint">
-            Buypass 不支持通配符，单张证书最多 5 个域名
+          <p v-if="applyCA === 'buypass'" class="ca-hint ca-hint--warn">
+            Buypass 已于 2025-10-15 停止签发证书，请改选 Let's Encrypt 或 ZeroSSL
           </p>
         </div>
       </n-form-item>

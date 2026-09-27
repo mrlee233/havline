@@ -8,15 +8,17 @@ import (
 )
 
 const (
-	KeyTheme                       = "theme"
-	KeyTimezone                    = "timezone"
-	KeyLogRetentionDays            = "log_retention_days"
-	KeyDDNSCheckInterval           = "ddns_check_interval_minutes"
-	KeyCertRenewThreshold          = "cert_renew_threshold_days"
-	KeyRootDomain                  = "root_domain"
-	KeyACMEEmail                   = "acme_email"
-	KeyACMECA                      = "acme_ca"
-	KeyZeroSSLAPIKey               = "zerossl_api_key"
+	KeyTheme              = "theme"
+	KeyTimezone           = "timezone"
+	KeyLogRetentionDays   = "log_retention_days"
+	KeyDDNSCheckInterval  = "ddns_check_interval_minutes"
+	KeyCertRenewThreshold = "cert_renew_threshold_days"
+	KeyRootDomain         = "root_domain"
+	KeyACMEEmail          = "acme_email"
+	KeyACMECA             = "acme_ca"
+	KeyZeroSSLAPIKey      = "zerossl_api_key"
+	// KeyACMEDNSResolvers DNS-01 传播检查用的递归解析器（逗号分隔；system = 用系统解析器）
+	KeyACMEDNSResolvers            = "acme_dns_resolvers"
 	KeyNotifyWebhookURL            = "notify_webhook_url"
 	KeyNotifyType                  = "notify_type"
 	KeyNotifyEmailJSON             = "notify_email_json"

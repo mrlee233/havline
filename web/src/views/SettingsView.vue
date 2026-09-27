@@ -69,7 +69,7 @@
           <div class="settings-field">
             <div class="settings-field__label">ACME 邮箱</div>
             <n-input v-model:value="acmeEmail" placeholder="admin@example.com" />
-            <p class="field-hint">用于 Let's Encrypt / ZeroSSL / Buypass 账户注册</p>
+            <p class="field-hint">用于 Let's Encrypt / ZeroSSL 账户注册</p>
           </div>
           <ConfiguredSecretField
             v-model="zerosslApiKey"
@@ -78,6 +78,16 @@
             placeholder="申请 ZeroSSL 证书时填写"
           />
           <p class="field-hint zerossl-key-hint">申请 ZeroSSL 证书时必填，可在 ZeroSSL 控制台获取</p>
+          <div class="settings-field">
+            <div class="settings-field__label">DNS 解析器（高级）</div>
+            <n-input v-model:value="acmeResolvers" placeholder="223.5.5.5:53, 1.1.1.1:53" />
+            <p class="field-hint">
+              DNS-01 验证时用它查域名的权威 NS 记录。容器里的系统解析器通常指向 Docker 的
+              127.0.0.11，不返回 NS，于是报「could not determine authoritative nameservers」；
+              所以默认用公共解析器。留空 = 用默认值；填 system = 回到系统解析器；
+              多个用逗号分隔，不写端口默认 53。
+            </p>
+          </div>
         </div>
       </FonuCard>
 
@@ -1015,6 +1025,7 @@ const ddnsInterval = ref(5)
 const certThreshold = ref(30)
 const logRetention = ref(30)
 const acmeEmail = ref('')
+const acmeResolvers = ref('')
 const zerosslApiKey = ref('')
 const zerosslHasKey = ref(false)
 const trustedProxyEnabled = ref(false)
@@ -1108,6 +1119,7 @@ function applySettingsToForm(settings: Record<string, string>) {
   statusPageCode.value = settings.status_page_code ?? ''
   statusPageConfigured.value = statusPageCode.value === MASKED_SECRET
   acmeEmail.value = settings.acme_email ?? ''
+  acmeResolvers.value = settings.acme_dns_resolvers ?? ''
   zerosslHasKey.value = Boolean(settings.zerossl_api_key?.trim())
   zerosslApiKey.value = ''
   chinaCIDRHours.value = Number(settings.china_cidr_update_interval_hours ?? 24)
@@ -1579,6 +1591,7 @@ function buildSavePayload() {
     cert_renew_threshold_days: String(certThreshold.value),
     log_retention_days: String(logRetention.value),
     acme_email: acmeEmail.value.trim(),
+    acme_dns_resolvers: acmeResolvers.value.trim(),
     trusted_proxy_json: buildTrustedProxyJSON(),
     global_ip_blacklist: buildGlobalIPListJSON(globalIPBlacklistText.value),
     global_ip_whitelist: buildGlobalWhitelistJSON(),

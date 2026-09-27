@@ -14,6 +14,18 @@ const (
 	CABuypass            = "buypass"
 )
 
+// caRetired 记录已停止签发的 CA：仍然认识这些值（历史证书记录里可能存着，用于展示与清理），
+// 但不允许再用来申请——否则用户只会看到一个难懂的 ACME 报错而不是「这家 CA 不干了」。
+// 否则用户只会看到一个难懂的 ACME 报错。
+var caRetired = map[string]string{
+	CABuypass: "Buypass 已于 2025-10-15 停止签发证书（ACME 服务 2026-04-15 终止），请改用 Let's Encrypt 或 ZeroSSL",
+}
+
+// CAUnavailableReason 返回该 CA 已停用的原因；可用的 CA 返回空字符串。
+func CAUnavailableReason(ca string) string {
+	return caRetired[NormalizeCA(ca)]
+}
+
 const (
 	zeroSSLDirectoryURL = "https://acme.zerossl.com/v2/DV90"
 	buypassDirectoryURL = "https://api.buypass.com/acme/directory"
@@ -86,4 +98,3 @@ func ValidateCADomains(ca string, domains []string) error {
 	}
 	return nil
 }
-
