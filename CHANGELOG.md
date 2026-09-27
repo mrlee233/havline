@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.15] - 2026-09-27
+
+### 新增
+
+- **仪表盘「实时流量」支持切换数据源（本机 / 公网）**：本机读 Fonu 管理的本机 Nginx 访问日志；公网读 frps 侧逐规则的 `today_traffic_in/out` 与 `cur_conns`（速率由后端两次采样算出，口径与「公网反代」页的当前上传/下载一致）。切换时会清空 5 分钟曲线，避免两个来源的采样混在一张图里；还没有穿透规则时「公网」按钮禁用并给出说明
+
+### 改进
+
+- **容器交付：升级改为在部署机（NAS）上直接构建**（不再需要 save / 传文件 / load 镜像包）
+  - `Dockerfile`：加 `# syntax=docker/dockerfile:1` + 四处 `RUN --mount=type=cache`（npm 与 Go 模块/编译缓存跨次构建复用，重复构建从几分钟降到几十秒）
+  - 三个 compose 统一 `name: fonu`（否则改了目录名/项目名后 compose 会把它当成新项目，`fonu-data` 变成新空卷，现象就是「数据丢了」）与 `image: fonu:${FONU_VERSION:-local}`（镜像 tag 随版本走，便于回滚）；`.host.yml` 补上原本缺失的 `image:`
+  - 新增 `scripts/upgrade.sh`：一条命令完成「拉代码 → 构建 → 重建 → 健康检查」，支持 `--no-pull`、`--rollback <tag>`（不重新构建）与 `COMPOSE_FILE=`（host 网络那仃）
+
+### 变更
+
+- 版本号提升到 1.2.15；`web/package.json` 同步对齐
+- 本轮不含 agent 行为变更，`AgentVersion` 仍为 0.12.7
+
 ## [v1.2.14] - 2026-09-27
 
 ### 新增

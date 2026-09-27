@@ -1,5 +1,6 @@
 # 飞牛 NAS 等已占用 80/443 的环境：使用 host 网络 + 高位默认反代端口
 # 本地项目：直接用源码构建镜像，不从 Docker Hub 拉取
+name: fonu
 services:
   fonu:
     build:
@@ -9,6 +10,7 @@ services:
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: fonu:${FONU_VERSION:-local}
     container_name: fonu
     restart: unless-stopped
     network_mode: host

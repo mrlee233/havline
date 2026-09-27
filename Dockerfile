@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# ↑ 为了能用 RUN --mount=type=cache：把 Go 模块/编译缓存与 npm 缓存跨次构建复用，
+#   在部署机（NAS）上重复构建通常从「几分钟」降到「几十秒」。
+
 ARG TARGETARCH
 # 版本单一来源：根目录 VERSION 文件，本地改版本号只需改此文件
 ARG VERSION_FILE=VERSION
@@ -18,7 +22,7 @@ COPY ${VERSION_FILE} /VERSION
 FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS web-builder
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY web/ ./
 COPY --from=version /VERSION /src/web/.version
 RUN VITE_APP_VERSION=$(tr -d ' \t\n\r' < /src/web/.version) npm run build
@@ -29,14 +33,14 @@ ARG GOPROXY
 ENV GOPROXY=${GOPROXY}
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 COPY --from=version /VERSION ./VERSION
 # 先交叉编译 fonu-agent 到 embed 目录（替换仓库中的占位文件），主程序构建时自动内嵌
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o internal/frp/agentbin/fonu-agent-linux-amd64 ./cmd/fonu-agent \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o internal/frp/agentbin/fonu-agent-linux-amd64 ./cmd/fonu-agent \
     && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o internal/frp/agentbin/fonu-agent-linux-arm64 ./cmd/fonu-agent
 COPY --from=web-builder /src/web/dist ./cmd/fonu/web/dist
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/fonu/fonu/internal/version.Version=$(cat /src/VERSION | tr -d ' \t\n\r')" \
     -o /fonu ./cmd/fonu
 

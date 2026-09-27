@@ -1,4 +1,10 @@
-# 本地项目：用源码构建镜像（镜像名 fonu:local，便于导出 / 备份）
+# 固定项目名：不改的话，改了目录名/项目名后 compose 会把它当成新项目，
+# fonu-data 会变成新空卷（看起来像「数据丢了」）。
+name: fonu
+
+# 本地项目：用源码构建镜像（镜像名随 VERSION 变，便于回滚；也便于导出 / 备份）
+# 升级：docker compose up -d --build（或在部署机跑 scripts/upgrade.sh）
+# 回滚：FONU_VERSION=上一个版本号 docker compose up -d（镜像 tag 还在本地）
 services:
   fonu:
     build:
@@ -8,7 +14,7 @@ services:
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
-    image: fonu:local
+    image: fonu:${FONU_VERSION:-local}
     container_name: fonu
     restart: unless-stopped
     ports:

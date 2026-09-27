@@ -106,7 +106,23 @@
               <n-icon :component="SwapVerticalOutline" class="panel-title__icon panel-title__icon--teal" />
               <span>实时流量</span>
             </div>
-            <n-tag size="small" :bordered="false" class="range-tag">最近 5 分钟</n-tag>
+            <div class="traffic-source">
+              <n-button
+                size="tiny"
+                :quaternary="trafficSource !== 'local'"
+                :type="trafficSource === 'local' ? 'primary' : 'default'"
+                @click="switchTrafficSource('local')"
+              >本机</n-button>
+              <n-button
+                size="tiny"
+                :quaternary="trafficSource !== 'public'"
+                :type="trafficSource === 'public' ? 'primary' : 'default'"
+                :disabled="!hasPublicTrafficSource"
+                :title="hasPublicTrafficSource ? '公网（VPS 反代）侧流量，速率由 frps 两次采样得出' : '还没有穿透规则，公网侧暂无可显示的流量'"
+                @click="switchTrafficSource('public')"
+              >公网</n-button>
+              <n-tag size="small" :bordered="false" class="range-tag">最近 5 分钟</n-tag>
+            </div>
           </div>
           <div class="panel__body traffic-panel__body">
             <div class="traffic-rates">
@@ -427,6 +443,33 @@ const RATE_HISTORY_MS = 5 * 60 * 1000
 let trafficTimer: ReturnType<typeof setInterval> | null = null
 let statusTimer: ReturnType<typeof setInterval> | null = null
 
+// 实时流量的数据源：本机（Fonu 管理的本机 Nginx 访问日志）或公网（frps 侧的逐规则计数）
+type TrafficSource = 'local' | 'public'
+type TrafficRow = { name: string; uploadRate: number; downloadRate: number }
+const trafficSource = ref<TrafficSource>('local')
+// 公网侧：只取需要的两个速率字段，避免引额外类型；键为 frp 规则 ID
+const publicTraffic = ref<Record<number, { traffic_in_rate: number; traffic_out_rate: number }>>({})
+const frpProxyNames = ref<Record<number, string>>({})
+// 公网源是否可选：得先有穿透规则（有规则才有名字）
+const hasPublicTrafficSource = computed(() => Object.keys(frpProxyNames.value).length > 0)
+
+// activeTrafficRows 把两个源归一成同一形状，后面的汇总、Top 与采样都只认它
+const activeTrafficRows = computed<TrafficRow[]>(() => {
+  if (trafficSource.value === 'public') {
+    return Object.entries(publicTraffic.value).map(([key, item]) => ({
+      name: frpProxyNames.value[Number(key)] ?? `规则 #${key}`,
+      uploadRate: item.traffic_in_rate,
+      downloadRate: item.traffic_out_rate,
+    }))
+  }
+  return Object.entries(trafficByRule.value).map(([key, stats]) => {
+    const id = Number(key)
+    const rule = proxyRules.value.find((item) => item.id === id)
+    const name = rule ? rule.name?.trim() || rule.domain || `规则 #${id}` : `规则 #${id}`
+    return { name, uploadRate: stats.upload_rate, downloadRate: stats.download_rate }
+  })
+})
+
 function timeGreeting(hour: number): string {
   if (hour >= 5 && hour < 12) return '上午好'
   if (hour >= 12 && hour < 18) return '下午好'
@@ -600,9 +643,9 @@ const remoteHealthMeta = computed(() => {
 const trafficTotals = computed(() => {
   let uploadRate = 0
   let downloadRate = 0
-  for (const stats of Object.values(trafficByRule.value)) {
-    uploadRate += stats.upload_rate
-    downloadRate += stats.download_rate
+  for (const row of activeTrafficRows.value) {
+    uploadRate += row.uploadRate
+    downloadRate += row.downloadRate
   }
   return { uploadRate, downloadRate }
 })
@@ -628,19 +671,13 @@ const trafficChart = computed(() => {
   return { labels, upload, download }
 })
 
-// 当前流量 Top 5：直接复用已有的逐规则流量轮询，无需额外接口
+// 当前流量 Top 5：直接复用已有轮询的数据，不额外请求接口
 const trafficTop = computed(() =>
-  Object.entries(trafficByRule.value)
-    .map(([key, stats]) => {
-      const id = Number(key)
-      const rule = proxyRules.value.find((item) => item.id === id)
-      const name = rule ? rule.name?.trim() || rule.domain || `规则 #${id}` : `规则 #${id}`
-      return { name, rate: stats.upload_rate + stats.download_rate }
-    })
-    .filter((row) => row.rate > 0)
-    .sort((a, b) => b.rate - a.rate)
+  activeTrafficRows.value
+    .filter((row) => row.uploadRate + row.downloadRate > 0)
+    .sort((a, b) => b.uploadRate + b.downloadRate - (a.uploadRate + a.downloadRate))
     .slice(0, 5)
-    .map((row) => ({ name: row.name, rate: formatRate(row.rate) })),
+    .map((row) => ({ name: row.name, rate: formatRate(row.uploadRate + row.downloadRate) })),
 )
 
 const calendarHourLabels = Array.from({ length: 12 }, (_, i) =>
@@ -808,18 +845,56 @@ async function refreshTraffic() {
   // 2 秒一轮且链路慢时会堆积并发请求：上一轮没回来就跳过这一轮
   if (trafficInFlight) return
   trafficInFlight = true
+  // 首次轮询时顺手把公网规则名拉回来：用于判断「公网」源是否可选 + Top 展示
+  void ensureFrpProxyNames()
   try {
-    const rows = asList(await api.getProxyTraffic())
-    const next: Record<number, ProxyTraffic> = {}
-    for (const row of rows) {
-      next[row.rule_id] = row
+    if (trafficSource.value === 'public') {
+      // 公网侧：frps 返回的是累计计数，速率由后端基于两次采样算好（间隔需 ≥2 秒）
+      const payload = await api.listFrpProxiesTraffic()
+      const next: Record<number, { traffic_in_rate: number; traffic_out_rate: number }> = {}
+      for (const [key, value] of Object.entries(payload.items ?? {})) {
+        next[Number(key)] = {
+          traffic_in_rate: value.traffic_in_rate,
+          traffic_out_rate: value.traffic_out_rate,
+        }
+      }
+      publicTraffic.value = next
+    } else {
+      const rows = asList(await api.getProxyTraffic())
+      const next: Record<number, ProxyTraffic> = {}
+      for (const row of rows) {
+        next[row.rule_id] = row
+      }
+      trafficByRule.value = next
     }
-    trafficByRule.value = next
     recordRateSample()
   } catch {
     // ignore polling errors
   } finally {
     trafficInFlight = false
+  }
+}
+
+// 切换数据源：先清空 5 分钟曲线，避免把两个来源的采样混在一张图里
+function switchTrafficSource(next: TrafficSource) {
+  if (trafficSource.value === next) return
+  trafficSource.value = next
+  rateHistory.value = []
+  void refreshTraffic()
+}
+
+// 公网侧只需要规则名做 Top 展示；只拉一次，失败不阻断流量轮询
+async function ensureFrpProxyNames() {
+  if (Object.keys(frpProxyNames.value).length > 0) return
+  try {
+    const proxies = asList(await api.listFrpProxies())
+    const names: Record<number, string> = {}
+    for (const item of proxies) {
+      names[item.id] = item.name?.trim() || item.custom_domains?.[0] || `规则 #${item.id}`
+    }
+    frpProxyNames.value = names
+  } catch {
+    // 静默：名称拿不到时 Top 里会退化成「规则 #id」
   }
 }
 
@@ -1457,6 +1532,8 @@ html.dark .hero-art {
   color: #14b8a6;
 }
 
+/* 实时流量卡片的来源切换（本机 / 公网） */
+.traffic-source { display: flex; align-items: center; gap: 6px; }
 /* 趋势卡片表头里的时间档切换（对齐「实时流量」的 range-tag 位置） */
 .trend-range { display: flex; gap: 2px; }
 

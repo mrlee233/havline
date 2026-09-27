@@ -13,6 +13,7 @@ scripts/*
 !scripts/agent-install.sh
 !scripts/build-linux.ps1
 !scripts/fonu-install.sh
+!scripts/upgrade.sh
 # 本地压缩包与导出产物不入库（如 web/src.rar）
 *.rar
 *.zip
