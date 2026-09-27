@@ -55,6 +55,8 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		settings.KeyACMECA:                      true,
 		settings.KeyZeroSSLAPIKey:               true,
 		settings.KeyACMEDNSResolvers:            true,
+		settings.KeyLiteSSLEABKid:               true,
+		settings.KeyLiteSSLEABHMAC:              true,
 		settings.KeyNotifyWebhookURL:            true,
 		settings.KeyNotifyType:                  true,
 		settings.KeyNotifyEmailJSON:             true,

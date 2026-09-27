@@ -474,6 +474,10 @@ func SanitizeSettings(values map[string]string) {
 	if values[settings.KeyZeroSSLAPIKey] != "" {
 		values[settings.KeyZeroSSLAPIKey] = MaskedSecret
 	}
+	// LiteSSL 的 EAB HMAC 同理：属于证书申请凭据，只回掩码（EAB Kid 不是秘密，照常回显）
+	if values[settings.KeyLiteSSLEABHMAC] != "" {
+		values[settings.KeyLiteSSLEABHMAC] = MaskedSecret
+	}
 }
 
 func ParseSaveInputFromMap(values map[string]string) (SaveInput, bool) {

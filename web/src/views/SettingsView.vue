@@ -69,7 +69,7 @@
           <div class="settings-field">
             <div class="settings-field__label">ACME 邮箱</div>
             <n-input v-model:value="acmeEmail" placeholder="admin@example.com" />
-            <p class="field-hint">用于 Let's Encrypt / ZeroSSL 账户注册</p>
+            <p class="field-hint">用于 Let's Encrypt / ZeroSSL / LiteSSL 账户注册</p>
           </div>
           <ConfiguredSecretField
             v-model="zerosslApiKey"
@@ -88,6 +88,20 @@
               多个用逗号分隔，不写端口默认 53。
             </p>
           </div>
+          <div class="settings-field">
+            <div class="settings-field__label">LiteSSL EAB Kid</div>
+            <n-input v-model:value="litesslEabKid" placeholder="FreeSSL → 证书自动化 → EAB 管理 里创建后粘贴" />
+            <p class="field-hint">
+              只在用 LiteSSL 申请时必填。LiteSSL 的目录要求 EAB（externalAccountRequired），
+              凭据在 FreeSSL 平台的「证书自动化 → EAB 管理」创建；EAB Kid 不是密钥，可回显。
+            </p>
+          </div>
+          <ConfiguredSecretField
+            v-model="litesslEabHmac"
+            label="LiteSSL EAB HMAC"
+            :configured="litesslEabHmacConfigured"
+            placeholder="用 LiteSSL 申请证书时填写"
+          />
         </div>
       </FonuCard>
 
@@ -1026,6 +1040,10 @@ const certThreshold = ref(30)
 const logRetention = ref(30)
 const acmeEmail = ref('')
 const acmeResolvers = ref('')
+// LiteSSL 的 EAB 凭据：kid 不是秘密（可回显），hmac 是秘密（只回掩码、重输才提交）
+const litesslEabKid = ref('')
+const litesslEabHmac = ref('')
+const litesslEabHmacConfigured = ref(false)
 const zerosslApiKey = ref('')
 const zerosslHasKey = ref(false)
 const trustedProxyEnabled = ref(false)
@@ -1120,6 +1138,9 @@ function applySettingsToForm(settings: Record<string, string>) {
   statusPageConfigured.value = statusPageCode.value === MASKED_SECRET
   acmeEmail.value = settings.acme_email ?? ''
   acmeResolvers.value = settings.acme_dns_resolvers ?? ''
+  litesslEabKid.value = settings.litessl_eab_kid ?? ''
+  litesslEabHmacConfigured.value = Boolean(settings.litessl_eab_hmac?.trim())
+  litesslEabHmac.value = ''
   zerosslHasKey.value = Boolean(settings.zerossl_api_key?.trim())
   zerosslApiKey.value = ''
   chinaCIDRHours.value = Number(settings.china_cidr_update_interval_hours ?? 24)
@@ -1592,6 +1613,7 @@ function buildSavePayload() {
     log_retention_days: String(logRetention.value),
     acme_email: acmeEmail.value.trim(),
     acme_dns_resolvers: acmeResolvers.value.trim(),
+    litessl_eab_kid: litesslEabKid.value.trim(),
     trusted_proxy_json: buildTrustedProxyJSON(),
     global_ip_blacklist: buildGlobalIPListJSON(globalIPBlacklistText.value),
     global_ip_whitelist: buildGlobalWhitelistJSON(),
@@ -1603,6 +1625,10 @@ function buildSavePayload() {
   const zerosslKey = zerosslApiKey.value.trim()
   if (zerosslKey) {
     payload.zerossl_api_key = zerosslKey
+  }
+  const litesslHmac = litesslEabHmac.value.trim()
+  if (litesslHmac) {
+    payload.litessl_eab_hmac = litesslHmac
   }
   return payload
 }

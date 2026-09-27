@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.14] - 2026-09-27
+
+### 新增
+
+- **证书颁发机构：LiteSSL 替换 Buypass**。LiteSSL（亚数 TrustAsia 的公益免费 DV 证书，90 天，官方支持单域名 / 通配符 / 多域名）已接入，ACME 目录 `https://acme.litessl.com/acme/v2/directory`。该目录里 `meta.externalAccountRequired = true`，所以**强制 EAB**：在 FreeSSL 平台「证书自动化 → EAB 管理」创建后，把 Kid 与 HMAC 填进设置即可（不需要像 ZeroSSL 那样用 API Key 去换取）。EAB HMAC 只回掩码。
+  Buypass 保留常量与展示元数据（历史证书记录仍能正常显示），但不再可选，直接提交会被拦下并提示替代项。域名若有 CAA 记录，需允许 `trustasia.com`。
+
+### 修复
+
+- **frps 安装一直报 HTTP 404**：frp 官方的校验文件名始终是 `frp_sha256_checksums.txt`（不带版本号，v0.52.3 / v0.58.1 / v0.62.1 / v0.71.0 实测均如此），而代码拼的是 `frp_<版本>_sha256sums.txt`——任何版本、任何网络环境下都装不上。现改为按候选名依次尝试（旧名保留兜底），失败信息里列出尝试过的文件名。
+  **同一条 bug 也在本机下载 frpc 的路径上，一并修复**；SHA-256 校验逻辑本身一行未改。
+- **Nginx 探测两处（均在 agent）**：
+  - `nginxPath()` 探测不到时不再回落到配置里的裸名字 `nginx`：那会让「未安装」被误判为「配置校验未通过（nginx -t 执行失败）」，且「VPS 未安装 Nginx」告警与一键安装按钮**永远不会出现**。
+  - vhost 目录探测不再要求被加载文件以 `.conf` 结尾：Debian/Ubuntu 的 `sites-enabled/default` 不带后缀、而 `nginx.conf` 里是 `include .../sites-enabled/*`，过滤掉它之后只剩主配置目录可试，报「在 1 个被加载目录中均无法放置完整 server 配置」；现在失败信息会带上最后一次的具体原因与常见显式指定目录。
+- **前端申请证书弹窗的颁发机构卡片**改为前端可控清单：原先硬编码为 Let's Encrypt / ZeroSSL / Buypass，后端 `/api/certs/options` 的结果不参与渲染，导致后端增删 CA 时弹窗不变（本次 LiteSSL 替换就是这幺被发现的）。现在卡片为 Let's Encrypt / ZeroSSL / LiteSSL。
+
+### 测试
+
+- `internal/frp`：校验文件候选名顺序、sha256sum 格式解析（含 `*` 前缀与不存在的文件负例）
+- `internal/acme`：LiteSSL 目录地址 / 展示名 / 别名归一化、通配符与多域名不被拦、Buypass 停用提示里含替代项
+
+### 变更
+
+- `AgentVersion` 0.12.4 → **0.12.7**（0.12.5 修 frps 校验文件名；0.12.6 修 nginxPath；0.12.7 修 vhost 目录探测），双架构内嵌二进制已重编；**VPS 上需点一次「升级 Agent」**
+- 版本号提升到 1.2.14；`web/package.json` 同步对齐
+
 ## [v1.2.13] - 2026-09-27
 
 ### 新增

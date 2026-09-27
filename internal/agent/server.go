@@ -43,7 +43,12 @@ import (
 // 0.12.2：新增域名 vhost 的版本列表 / 对比 / 回滚端点；写配置前留版本，校验失败时恢复上一个可用版本。
 // 0.12.3：frps 日志尾巴改为最近 20 行、最新在前，并用 short-iso 时间戳（默认格式不带年份、分不清哪一天）。
 // 0.12.4：日志行重写成「2026-09-22 18:43:34 进程: 消息」，去掉 T 分隔、时区偏移与每行重复的主机名。
-const AgentVersion = "0.12.4"
+// 0.12.5：修正 frps 官方校验文件名（frp 一直叫 frp_sha256_checksums.txt，原代码拼的是 frp_<版本>_sha256sums.txt，导致首次安装报 HTTP 404）。
+// 0.12.6：nginxPath 探测不到时返回空串（原来回落到配置里的裸名字 "nginx"），
+// 修掉「VPS 未安装 Nginx」告警与一键安装按钮永远不出现、以及把它误报成「配置校验未通过」的问题。
+// 0.12.7：vhost 目录探测不再要求被加载文件带 .conf 后缀（Debian 的 sites-enabled/default 不带），
+// 并在失败信息里带上最后一次的具体原因与常见的显式指定目录。
+const AgentVersion = "0.12.7"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -259,6 +264,25 @@ var frpsDownloadProxies = map[string]struct{}{
 
 const frpsReleaseBaseURL = "https://github.com/fatedier/frp/releases/download/"
 
+// fetchChecksumForCandidates 依次尝试官方校验文件名的候选。
+// frp 的校验文件一直叫 frp_sha256_checksums.txt（不带版本号），旧名字保留兜底，
+// 避开上游改名后整个安装流程直接 404。
+func fetchChecksumForCandidates(releaseURL, version, asset string) (string, error) {
+	candidates := []string{
+		"frp_sha256_checksums.txt",
+		"frp_" + version + "_sha256sums.txt",
+	}
+	var lastErr error
+	for _, name := range candidates {
+		sum, err := fetchChecksumFor(releaseURL+name, asset)
+		if err == nil {
+			return sum, nil
+		}
+		lastErr = err
+	}
+	return "", fmt.Errorf("%v（已尝试：%s）", lastErr, strings.Join(candidates, "、"))
+}
+
 // installFRPS 下载指定版本的 frp release、安装 frps 二进制并注册 systemd 服务（幂等，重复调用=升级）。
 func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 	var req frpsInstallRequest
@@ -292,7 +316,7 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 先取官方校验文件，再下载安装包并按 SHA-256 校验：避免装上来路不明的 frps 可执行文件
-	wantSum, err := fetchChecksumFor(releaseURL+"frp_"+version+"_sha256sums.txt", asset)
+	wantSum, err := fetchChecksumForCandidates(releaseURL, version, asset)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "获取 frps 官方校验信息失败: " + err.Error()})
 		return
@@ -646,9 +670,11 @@ func detectNginxConfDir(binary string) (string, error) {
 		line = strings.TrimSpace(line)
 		if value, found := strings.CutPrefix(line, "# configuration file "); found {
 			p := strings.TrimSuffix(strings.TrimSpace(value), ":")
-			if strings.HasSuffix(p, ".conf") {
-				loadedDirs[filepath.Dir(p)] = true
-			}
+			// 不要求 .conf 后缀：Debian/Ubuntu 的 sites-enabled/default 本身不带后缀，
+			// 而 nginx.conf 里是 include /etc/nginx/sites-enabled/*（也无后缀限制）；
+			// 只认 .conf 会把这个真正该放 vhost 的目录漏掉，只剩主配置目录可试，
+			// 而主配置目录里的新文件并不被 include（表现为「均无法放置完整 server 配置」）。
+			loadedDirs[filepath.Dir(p)] = true
 		}
 	}
 	delete(loadedDirs, ".")
@@ -667,13 +693,16 @@ func detectNginxConfDir(binary string) (string, error) {
 		}
 		return dirs[i] < dirs[j]
 	})
+	var lastReason string
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
+			lastReason = fmt.Sprintf("%s: %v", dir, err)
 			continue
 		}
 		probe := filepath.Join(dir, "fonu-probe.conf")
 		probeBody := "# Managed by fonu-agent. Do not edit.\nserver {\n    listen 127.0.0.1:1;\n    server_name fonu-probe.invalid;\n}\n"
 		if err := atomicWrite(probe, []byte(probeBody), 0o644); err != nil {
+			lastReason = fmt.Sprintf("%s: %v", dir, err)
 			continue
 		}
 		// 两级验证：-t 仅验证语法，不保证文件被 include 加载（主配置目录等无 include 的目录也能通过）。
@@ -685,6 +714,7 @@ func detectNginxConfDir(binary string) (string, error) {
 				return dir, nil
 			}
 			// -t 通过但 -T 不含探针：该目录不被 include 加载，删除探针换下一个
+			lastReason = fmt.Sprintf("%s: 目录未被 include 加载（nginx -T 输出中无探针文件）", dir)
 			_ = os.Remove(probe)
 			continue
 		}
@@ -692,13 +722,19 @@ func detectNginxConfDir(binary string) (string, error) {
 		// 若 -t 失败信息指向历史残留的 fonu-*.conf，也一并清理（仅限 Agent 生成的文件）。
 		_ = os.Remove(probe)
 		if tOut, tErr := exec.Command(nginx, "-t").CombinedOutput(); tErr != nil {
+			lastReason = fmt.Sprintf("%s: nginx -t 失败：%s", dir, tailText(string(tOut), 300))
 			cleanupLegacyFonuConf(string(tOut))
 			if err := runCommand(nginx, "-t"); err == nil {
 				continue // 清理残留后配置恢复可用，换下一个目录
 			}
+		} else {
+			lastReason = fmt.Sprintf("%s: 探针写入后 nginx -t 未通过", dir)
 		}
 	}
-	return "", fmt.Errorf("在 %d 个被加载目录中均无法放置完整 server 配置（已尝试: %s）；可用 FONU_AGENT_NGINX_CONF_DIR 显式指定", len(dirs), strings.Join(dirs, ", "))
+	if lastReason == "" {
+		lastReason = "没有可尝试的目录"
+	}
+	return "", fmt.Errorf("在 %d 个被加载目录中均无法放置完整 server 配置（已尝试: %s）；最后一次失败原因：%s；也可用 FONU_AGENT_NGINX_CONF_DIR 显式指定（Debian/Ubuntu 通常是 /etc/nginx/conf.d 或 /etc/nginx/sites-enabled）", len(dirs), strings.Join(dirs, ", "), lastReason)
 }
 
 // dirHasVhostConf 判断目录下是否已有含 server_name 的 .conf（HTTP vhost 语义）。
@@ -1178,11 +1214,18 @@ func (s *Server) validateNginx() error {
 }
 
 func (s *Server) reloadNginx() error {
-	return runCommand(s.nginxPath(), "-s", "reload")
+	nginx := s.nginxPath()
+	if nginx == "" {
+		return errors.New("未找到 nginx 可执行文件：请先在「公网反代」页安装 Nginx，或用 FONU_AGENT_NGINX_BIN 指定路径")
+	}
+	return runCommand(nginx, "-s", "reload")
 }
 
-// nginxPath 返回可用的 nginx 绝对路径：配置的路径可用则用之；否则探测常见安装位置
+// nginxPath 返回**可用的** nginx 可执行路径：配置的路径确实可用才用它，否则探测常见安装位置
 // （宝塔的 nginx 不在 systemd PATH 里，直接用名字会 exec 失败）。
+// 探测不到时返回空串。注意：不要回落到配置里的裸名字（如 "nginx"），
+// 那会让 probeNginx 的 Missing 判定永远不成立——「未安装」会被当成「配置校验失败」
+// （页面显示 nginx -t 执行失败），且一键安装入口永远不出现。
 func (s *Server) nginxPath() string {
 	if p := strings.TrimSpace(s.cfg.NginxBinary); p != "" {
 		if filepath.IsAbs(p) {
@@ -1198,7 +1241,7 @@ func (s *Server) nginxPath() string {
 			return candidate
 		}
 	}
-	return s.cfg.NginxBinary
+	return ""
 }
 
 // probeNginx 真实探测 Nginx 可用性：解析可执行文件并执行 nginx -t；结果缓存 30 秒。

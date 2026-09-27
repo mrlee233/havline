@@ -216,8 +216,12 @@
           <p v-if="applyCA === 'zerossl' && !zerosslApiKey" class="ca-hint ca-hint--warn">
             使用 ZeroSSL 需在「设置」中配置 API Key
           </p>
+          <p v-if="applyCA === 'litessl'" class="ca-hint">
+            LiteSSL（亚数 TrustAsia）免费 DV 证书，支持单域名 / 通配符 / 多域名；
+            首次使用需在设置里填 EAB 凭据（FreeSSL 平台「证书自动化 → EAB 管理」创建）
+          </p>
           <p v-if="applyCA === 'buypass'" class="ca-hint ca-hint--warn">
-            Buypass 已于 2025-10-15 停止签发证书，请改选 Let's Encrypt 或 ZeroSSL
+            Buypass 已于 2025-10-15 停止签发证书，请改选 Let's Encrypt 或 LiteSSL
           </p>
         </div>
       </n-form-item>
@@ -486,7 +490,7 @@ const caOptions = ref<CertificateCAOption[]>([])
 const applyCAOptions = [
   { value: 'letsencrypt', label: "Let's Encrypt" },
   { value: 'zerossl', label: 'ZeroSSL' },
-  { value: 'buypass', label: 'Buypass' },
+  { value: 'litessl', label: 'LiteSSL' },
 ]
 const applyCA = ref('letsencrypt')
 const zerosslApiKey = ref('')
@@ -547,7 +551,9 @@ const caCardMeta: Record<string, { title: string; sub: string }> = {
   letsencrypt: { title: "Let's Encrypt", sub: '免费 · 自动续期' },
   'letsencrypt-staging': { title: "Let's Encrypt 测试", sub: '仅用于验证流程' },
   zerossl: { title: 'ZeroSSL', sub: '免费 · 稳定' },
-  buypass: { title: 'Buypass', sub: '免费 · 备用' },
+  // Buypass 已停服：仍保留元数据，历史证书记录要能正常显示
+  buypass: { title: 'Buypass', sub: '已停止签发' },
+  litessl: { title: 'LiteSSL', sub: '免费 · 国内根' },
 }
 
 function providerLabel(v: string) {

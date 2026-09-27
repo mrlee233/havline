@@ -30,8 +30,9 @@ func (h *CertHandler) Options(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, []map[string]string{
 		{"value": acme.CALetsEncrypt, "label": acme.CALabel(acme.CALetsEncrypt)},
 		{"value": acme.CAZeroSSL, "label": acme.CALabel(acme.CAZeroSSL)},
-		// Buypass 已于 2025-10-15 停止签发、2026-04-15 终止 ACME 服务，
-		// 不再列为可选 CA（历史记录仍能展示，直接提交会被 CAUnavailableReason 抦下）。
+		// Buypass 已于 2025-10-15 停止签发、2026-04-15 终止 ACME 服务，不再列为可选 CA
+		// （历史记录仍能展示，直接提交会被 CAUnavailableReason 抦下）；LiteSSL 接替其位置。
+		{"value": acme.CALiteSSL, "label": acme.CALabel(acme.CALiteSSL)},
 		{"value": acme.CALetsEncryptStaging, "label": acme.CALabel(acme.CALetsEncryptStaging)},
 	})
 }

@@ -168,21 +168,46 @@ func downloadOfficialBinary(ctx context.Context, frpDir string, release Release,
 	return extractClientBinary(archivePath, frpDir, release)
 }
 
+// checksumAssetNames 官方校验文件名候选（按优先级）。
+// frp 从早期版本起就一直是 frp_sha256_checksums.txt（不带版本号），
+// 下面保留一个旧名字兼底，避开上游再次改名时整条下载链路直接 404。
+func checksumAssetCandidates(version string) []string {
+	return []string{
+		"frp_sha256_checksums.txt",
+		"frp_" + version + "_sha256sums.txt",
+	}
+}
+
 func fetchChecksum(ctx context.Context, release Release) (string, error) {
 	version := strings.TrimPrefix(release.Version, "v")
-	name := "frp_" + version + "_sha256sums.txt"
-	url := officialAssetURL(release.Version, name)
-	data, err := fetchBytes(ctx, url, 1<<20)
-	if err != nil {
-		return "", fmt.Errorf("下载 FRP 官方校验文件失败：%w", err)
+	candidates := checksumAssetCandidates(version)
+	var lastErr error
+	for _, name := range candidates {
+		data, err := fetchBytes(ctx, officialAssetURL(release.Version, name), 1<<20)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if sum, ok := findChecksumLine(data, release.AssetName); ok {
+			return sum, nil
+		}
+		lastErr = fmt.Errorf("FRP 官方校验文件 %s 中未找到 %s", name, release.AssetName)
 	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("没有可用的官方校验文件")
+	}
+	return "", fmt.Errorf("下载 FRP 官方校验文件失败：%v（已尝试：%s）", lastErr, strings.Join(candidates, "、"))
+}
+
+// findChecksumLine 解析 sha256sum 格式（<hash>  <文件名>，文件名可能带 * 前缀）。
+func findChecksumLine(data []byte, assetName string) (string, bool) {
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) >= 2 && strings.TrimPrefix(fields[1], "*") == release.AssetName {
-			return fields[0], nil
+		if len(fields) >= 2 && strings.TrimPrefix(fields[1], "*") == assetName {
+			return fields[0], true
 		}
 	}
-	return "", fmt.Errorf("FRP 官方校验文件中未找到 %s", release.AssetName)
+	return "", false
 }
 
 func downloadArchive(ctx context.Context, frpDir string, release Release, checksum, proxy string, report downloadReporter) (string, error) {

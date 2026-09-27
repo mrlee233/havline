@@ -18,7 +18,10 @@ const (
 	KeyACMECA             = "acme_ca"
 	KeyZeroSSLAPIKey      = "zerossl_api_key"
 	// KeyACMEDNSResolvers DNS-01 传播检查用的递归解析器（逗号分隔；system = 用系统解析器）
-	KeyACMEDNSResolvers            = "acme_dns_resolvers"
+	KeyACMEDNSResolvers = "acme_dns_resolvers"
+	// LiteSSL 强制 EAB：kid 与 hmac 在 FreeSSL 的「证书自动化 → EAB 管理」创建
+	KeyLiteSSLEABKid               = "litessl_eab_kid"
+	KeyLiteSSLEABHMAC              = "litessl_eab_hmac"
 	KeyNotifyWebhookURL            = "notify_webhook_url"
 	KeyNotifyType                  = "notify_type"
 	KeyNotifyEmailJSON             = "notify_email_json"

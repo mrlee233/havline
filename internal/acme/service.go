@@ -416,6 +416,27 @@ func (s *Service) registerACMEAccount(ctx context.Context, client *lego.Client, 
 			Kid:                  kid,
 			HmacEncoded:          hmac,
 		})
+	case CALiteSSL:
+		// LiteSSL 的目录里 meta.externalAccountRequired = true：必须带 EAB。
+		// 与 ZeroSSL 不同，不经过厂商 API 换取，而是用户在 FreeSSL 平台自建 EAB 后直接填 kid/hmac。
+		kid, err := s.settings.Get(ctx, settings.KeyLiteSSLEABKid)
+		if err != nil {
+			return nil, err
+		}
+		hmac, err := s.settings.Get(ctx, settings.KeyLiteSSLEABHMAC)
+		if err != nil {
+			return nil, err
+		}
+		kid = strings.TrimSpace(kid)
+		hmac = strings.TrimSpace(hmac)
+		if kid == "" || hmac == "" {
+			return nil, fmt.Errorf("LiteSSL 要求 EAB 凭据：请在设置里填写 EAB Kid 与 EAB HMAC（在 FreeSSL 的「证书自动化 → EAB 管理」创建后原样粘贴）")
+		}
+		return client.Registration.RegisterWithExternalAccountBinding(registration.RegisterEABOptions{
+			TermsOfServiceAgreed: true,
+			Kid:                  kid,
+			HmacEncoded:          hmac,
+		})
 	default:
 		return client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 	}
