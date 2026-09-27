@@ -2,11 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v1.2.20] - 2026-09-27
 
 ### 修复
 
 - **DDNS 页 FRP 提示恢复**：`DdnsView.vue` 原来调用已退役的 `/api/frp`，请求失败后会把 `frpEnabled` 固定为 `false`，导致“FRP 内网穿透已启用”提示不再出现。现改用 `/api/frpmulti/status`，仅在“已配置服务端且存在启用规则”时显示，并补充判定函数单元测试
+
+### 变更
+
+- 版本号提升到 1.2.20；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- 本轮不涉及 Go 与 agent 行为，`AgentVersion` 仍为 0.12.7
 
 ## [v1.2.19] - 2026-09-27
 
