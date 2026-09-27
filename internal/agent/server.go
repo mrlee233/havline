@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -48,7 +49,8 @@ import (
 // 修掉「VPS 未安装 Nginx」告警与一键安装按钮永远不出现、以及把它误报成「配置校验未通过」的问题。
 // 0.12.7：vhost 目录探测不再要求被加载文件带 .conf 后缀（Debian 的 sites-enabled/default 不带），
 // 并在失败信息里带上最后一次的具体原因与常见的显式指定目录。
-const AgentVersion = "0.12.7"
+// 0.12.8：Agent Bearer Token 改为常量时间比较，避免认证路径上的长度/内容时序泄漏。
+const AgentVersion = "0.12.8"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -206,12 +208,28 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer "+s.cfg.Token {
+		token := bearerToken(r)
+		if token == "" || !secureTokenEqual(token, s.cfg.Token) {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 			return
 		}
 		next(w, r)
 	}
+}
+
+// bearerToken 解析 Authorization: Bearer <token>；格式不符时返回空串。
+func bearerToken(r *http.Request) string {
+	header := strings.TrimSpace(r.Header.Get("Authorization"))
+	const prefix = "Bearer "
+	if len(header) <= len(prefix) || !strings.EqualFold(header[:len(prefix)], prefix) {
+		return ""
+	}
+	return strings.TrimSpace(header[len(prefix):])
+}
+
+// secureTokenEqual 使用常量时间比较，避免通过响应时间推测 Token 内容。
+func secureTokenEqual(got, want string) bool {
+	return subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
 }
 
 func (s *Server) ping(w http.ResponseWriter, _ *http.Request) {

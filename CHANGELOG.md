@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.21] - 2026-09-27
+
+### 修复
+
+- **Agent Bearer Token 改为常量时间比较**：`internal/agent` 原来用普通字符串比较校验 Token，现将 Authorization 解析与 Token 比较拆分，改用 `crypto/subtle.ConstantTimeCompare`，避免认证路径上的长度与内容时序泄漏
+
+### 变更
+
+- 版本号提升到 1.2.21；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.12.7 → **0.12.8**，内嵌 amd64 / arm64 二进制已重编；VPS 上需点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/agent`：新增认证测试，覆盖正确 Token、大小写 Bearer、多余空白、错误 Token、长度不同、缺失 Authorization、错误认证方案
+
 ## [v1.2.20] - 2026-09-27
 
 ### 修复

@@ -312,6 +312,8 @@ Fonu 首次启动已创建管理员账户
 
 ## 3.3 P0-3：Agent Token 使用常量时间比较
 
+> 实施状态：2026-09-27 已完成。
+
 ### 3.3.1 现状
 
 `internal/agent/server.go` 的 `auth` 方法使用普通字符串比较：
@@ -369,6 +371,14 @@ if token == "" || !secureEqual(token, s.cfg.Token) {
 - 所有 Agent 接口仍使用相同 Bearer Token。
 - 正确 Token 通过，错误 Token 拒绝。
 - Agent 不依赖应用侧 API 中间件代码。
+
+### 3.3.6 实施记录
+
+- `internal/agent/server.go` 新增 `bearerToken` 与 `secureTokenEqual`，认证路径改用 `crypto/subtle.ConstantTimeCompare`。
+- `AgentVersion` 已由 `0.12.7` 提升到 `0.12.8`。
+- 新增 `internal/agent/auth_test.go`，覆盖正确 Token、大小写 Bearer、多余空白、错误 Token、长度不同、缺失 Authorization 和错误认证方案。
+- 内嵌 amd64 / arm64 二进制已重编；VPS 需要执行一次「升级 Agent」。
+- 验证通过：`go test ./internal/agent -count=1`、`go test ./... -count=1`、`go vet ./...`、`npm test`（17 条）。
 
 ---
 
