@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.1] - 2026-09-27
+
+### 新增
+
+- **示例页面（在线升级验证页）**：新增 `/example` 页面与侧栏「示例页面」入口，页面实时读取 `/api/version`，展示当前版本、验证步骤和验证结果，用于确认一键升级后前端路由、菜单与后端版本均已更新
+
+### 变更
+
+- 版本号提升到 1.3.1；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8，本次无 Agent 行为变化
+
+### 测试
+
+- 前端类型检查、单元测试与生产构建
+
 ## [v1.3.0] - 2026-09-27
 
 ### 新增

@@ -123,6 +123,7 @@ import {
   CogOutline,
   DocumentTextOutline,
   Ellipse,
+  FlashOutline,
   GitNetworkOutline,
   GridOutline,
   LockClosedOutline,
@@ -203,6 +204,7 @@ const menuDefs = [
   { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
   { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
   { label: '系统设置', key: 'settings', icon: CogOutline },
+  { label: '示例页面', key: 'example', icon: FlashOutline },
 ]
 
 const menuOptions = computed<MenuOption[]>(() =>
