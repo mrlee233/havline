@@ -133,6 +133,34 @@ docker images fonu                    # 看历史上留下哪些 tag，回滚时
 
 镜像 tag 由 `FONU_VERSION` 决定（`scripts/upgrade.sh` 会从仓库 `VERSION` 自动取），不设时是 `fonu:local`。
 
+镜像是本地构建的，所以升级不需要 `docker pull`；上面那条 `up` 会带上 `--build` 重新构建。
+
+### 5.3 只有编排文件时（`docker-compose.hub.yml` 部署，推荐路径）
+
+构建上下文是 Git 地址，所以**每次 `--build` 都会重新解析仓库分支**（日志里那句 `load git source ... refs/heads/main` 就是它），不需要 `git pull`：
+
+```bash
+cd /opt/fonu
+docker compose up -d --build        # 重新克隆 main → 构建 → 按新镜像重建容器
+```
+
+建议**带上版本号**，给镜像留一个固定 tag（否则一直是 `fonu:local`，回滚时找不到旧版）：
+
+```bash
+FONU_VERSION=1.2.19 docker compose up -d --build
+# 回滚：镜像还在本地，不用重新构建
+FONU_VERSION=1.2.18 docker compose up -d
+```
+
+版本号从仓库的 `CHANGELOG.md` 或 `VERSION` 文件取；面板左侧栏底部也会显示当前运行的版本。
+
+这套部署方式下，`scripts/upgrade.sh` 不太适用（它需要本地源码目录来 `git pull` 与读 `VERSION`）——如果你希望也能一条命令搞定，可以把这两个文件（`scripts/upgrade.sh` + `VERSION`）也放到部署目录，或告诉我，我给 hub 变体加一个专用脚本。
+
+### 5.4 升级前后的两件小事
+
+- **升级前备份**（整目录，含密钥）：见 §四那条 `tar` 命令；遇到异常可整个目录回滚。
+- **升级后确认**：`docker compose logs -f fonu` 看启动是否正常（会打印「会话密钥已就绪」），再刷新面板看版本与功能。
+
 ---
 
 ## 六、环境变量速查
