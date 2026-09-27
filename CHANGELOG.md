@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.0] - 2026-09-27
+
+### 新增
+
+- **Web 一键升级（Docker Compose）**：新增受限的 `fonu-updater` 升级 sidecar，支持 `docker-compose.yml`（本机源码构建）与 `docker-compose.hub.yml`（Git 仓库构建）两种部署。主程序只通过共享 Unix Socket 调用 sidecar，不直接挂载 Docker Socket；升级时只重建 `fonu` 服务，构建或健康检查失败会自动尝试回滚到升级前的镜像 tag
+- 前端侧栏在检测到可升级版本时显示「一键升级」入口，升级弹窗展示当前版本、目标版本、升级方式、阶段消息与最近日志；服务重启期间浏览器会自动等待恢复
+- 新增 `docs/system-upgrade.md`，说明首次部署 sidecar、安全边界、升级流程、回滚和常见问题
+
+### 变更
+
+- 版本号提升到 1.3.0；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8，本次无 Agent 行为变化
+
+### 注意
+
+- 已经运行旧版本的实例，需要先手动更新 Compose 文件并执行一次 `docker compose up -d --build`，让 `fonu-updater` sidecar 启动。此后才可以在 Web 页面一键升级
+
+### 测试
+
+- `internal/updater`：版本比较、compose 路径白名单、配置校验
+
 ## [v1.2.21] - 2026-09-27
 
 ### 修复

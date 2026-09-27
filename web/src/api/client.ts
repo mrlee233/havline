@@ -36,6 +36,7 @@ import type {
   SettingsMap,
   SystemLogEntry,
   NotifyTestPayload,
+  UpdateStatus,
 } from './types'
 
 export function asList<T>(value: T[] | null | undefined): T[] {
@@ -96,6 +97,8 @@ async function requestWithSignal<T>(path: string, init?: RequestInit, signal?: A
 
 export const api = {
   getVersion: () => request<AppVersion>('/api/version'),
+  getUpdateStatus: () => request<UpdateStatus>('/api/system/update/status'),
+  applyUpdate: () => request<UpdateStatus>('/api/system/update/apply', { method: 'POST' }),
   authStatus: () => request<AuthStatus>('/api/auth/status'),
   login: (username: string, password: string) =>
     request<{ message: string }>('/api/auth/login', {

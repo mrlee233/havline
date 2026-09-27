@@ -33,6 +33,7 @@ import (
 	"github.com/fonu/fonu/internal/service"
 	"github.com/fonu/fonu/internal/settings"
 	"github.com/fonu/fonu/internal/traffic"
+	"github.com/fonu/fonu/internal/updater"
 )
 
 type App struct {
@@ -113,6 +114,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
+	updaterClient := updater.NewClient(cfg.UpdaterSocket)
 
 	handler := api.NewRouter(api.Deps{
 		Config:    cfg,
@@ -129,6 +131,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		Discovery: discoverySvc,
 		FRPMulti:  frpMultiSvc,
 		Traffic:   trafficCollector,
+		Updater:   updaterClient,
 		StaticFS:  staticFS,
 		StartedAt: startedAt,
 	})

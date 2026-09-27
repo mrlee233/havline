@@ -21,6 +21,7 @@ type Config struct {
 	NginxDefaultHTTPSPort int
 	FrpcBin               string
 	FrpPIDFile            string
+	UpdaterSocket         string
 }
 
 func Load() Config {
@@ -39,6 +40,7 @@ func Load() Config {
 		NginxDefaultHTTPSPort: envIntOr("FONU_NGINX_HTTPS_PORT", 443),
 		FrpcBin:               envOr("FONU_FRPC_BIN", "frpc"),
 		FrpPIDFile:            envOr("FONU_FRP_PID", dataDir+"/frp/frpc.pid"),
+		UpdaterSocket:         envOr("FONU_UPDATER_SOCKET", "/run/fonu-updater/updater.sock"),
 	}
 }
 

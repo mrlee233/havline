@@ -35,7 +35,16 @@
             <span class="sider-footer__version">v{{ appVersion }}</span>
           </div>
           <a
-            v-if="hasUpdate"
+            v-if="canOneClickUpdate"
+            class="sider-footer__update"
+            href="#"
+            @click.prevent="showUpdateModal = true"
+          >
+            <n-icon :component="ArrowUpOutline" />
+            一键升级
+          </a>
+          <a
+            v-else-if="hasUpdate"
             class="sider-footer__update"
             :href="latestReleaseUrl"
             target="_blank"
@@ -90,6 +99,7 @@
       </n-layout-content>
     </n-layout>
   </n-layout>
+  <UpdateModal v-model:show="showUpdateModal" @updated="checkForUpdate" />
 </template>
 
 <script setup lang="ts">
@@ -129,7 +139,9 @@ import { api } from '../api/client'
 import { GITHUB_REPO, GITHUB_REPO_URL } from '../constants/app'
 import { useTheme } from '../composables/useTheme'
 import { fetchLatestRelease, isNewerVersion } from '../utils/version'
+import type { UpdateStatus } from '../api/types'
 import logoImg from '../assets/brand/logo.png'
+import UpdateModal from '../components/UpdateModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,7 +153,13 @@ const appVersion = ref(__APP_VERSION__)
 const latestVersion = ref('')
 const latestReleaseUrl = ref('')
 const hasUpdate = ref(false)
+const showUpdateModal = ref(false)
+const updateStatus = ref<UpdateStatus | null>(null)
 let clockTimer: number | undefined
+
+const canOneClickUpdate = computed(() => Boolean(
+  updateStatus.value?.enabled && updateStatus.value.update_available
+))
 
 async function checkForUpdate() {
   const release = await fetchLatestRelease()
@@ -164,7 +182,15 @@ async function loadVersion() {
     // keep build-time fallback
   }
 
-  await checkForUpdate()
+  await Promise.all([checkForUpdate(), loadUpdateStatus()])
+}
+
+async function loadUpdateStatus() {
+  try {
+    updateStatus.value = await api.getUpdateStatus()
+  } catch {
+    updateStatus.value = null
+  }
 }
 
 const menuDefs = [
@@ -363,11 +389,16 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
   font-size: 11px;
   font-weight: 500;
+  font-family: inherit;
   color: var(--fonu-brand);
   text-decoration: none;
   white-space: nowrap;
+  cursor: pointer;
   transition: opacity 0.15s;
 }
 

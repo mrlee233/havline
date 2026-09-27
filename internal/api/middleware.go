@@ -74,7 +74,8 @@ func tokenDeniedPath(path string) bool {
 	if path == "/api/auth/password" || path == "/api/auth/logout" {
 		return true
 	}
-	return strings.HasPrefix(path, "/api/settings/tokens")
+	return strings.HasPrefix(path, "/api/settings/tokens") ||
+		strings.HasPrefix(path, "/api/system/update")
 }
 
 func sessionIDFromContext(ctx context.Context) string {

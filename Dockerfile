@@ -11,6 +11,7 @@ ARG VERSION_FILE=VERSION
 ARG NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine
 ARG GO_IMAGE=docker.m.daocloud.io/library/golang:1.23-bookworm
 ARG RUNTIME_IMAGE=docker.m.daocloud.io/library/debian:bookworm-slim
+ARG UPDATER_IMAGE=docker.m.daocloud.io/library/docker:27-cli
 # Go 依赖代理：国内默认 goproxy.cn（官方 proxy.golang.org 国内不可达），海外可覆盖回 direct
 ARG GOPROXY=https://goproxy.cn,direct
 
@@ -43,6 +44,24 @@ COPY --from=web-builder /src/web/dist ./cmd/fonu/web/dist
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags "-X github.com/fonu/fonu/internal/version.Version=$(cat /src/VERSION | tr -d ' \t\n\r')" \
     -o /fonu ./cmd/fonu
+
+# 一键升级 sidecar：独立容器持有 Docker Socket，主程序只通过共享 Unix Socket 调用它
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS updater-builder
+ARG TARGETARCH
+ARG GOPROXY
+ENV GOPROXY=${GOPROXY}
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY cmd ./cmd
+COPY internal ./internal
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -trimpath -o /fonu-updater ./cmd/fonu-updater
+
+# updater 运行时：Docker CLI / Compose 与 Git 只在 sidecar 内可用
+FROM ${UPDATER_IMAGE} AS updater
+RUN apk add --no-cache git docker-cli-compose docker-cli-buildx ca-certificates
+COPY --from=updater-builder /fonu-updater /usr/local/bin/fonu-updater
+ENTRYPOINT ["/usr/local/bin/fonu-updater"]
 
 # 运行时 stage
 FROM ${RUNTIME_IMAGE}

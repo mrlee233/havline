@@ -17,6 +17,7 @@ import (
 	"github.com/fonu/fonu/internal/service"
 	"github.com/fonu/fonu/internal/settings"
 	"github.com/fonu/fonu/internal/traffic"
+	"github.com/fonu/fonu/internal/updater"
 )
 
 type Deps struct {
@@ -34,6 +35,7 @@ type Deps struct {
 	FRPMulti  *frp.Service
 	Traffic   *traffic.Collector
 	Notify    *notify.Service
+	Updater   *updater.Client
 	StaticFS  fs.FS
 	StartedAt string
 }

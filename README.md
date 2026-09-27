@@ -112,6 +112,12 @@ docker compose up -d --build
 
 </details>
 
+### Web 一键升级
+
+`docker-compose.yml` 与 `docker-compose.hub.yml` 会同时启动受限的 `fonu-updater` sidecar。检测到新版本后，侧栏会出现「一键升级」入口，可在管理页面完成构建、重建与健康检查。
+
+> 从旧版本升级时，需要先手动更新 Compose 文件并执行一次 `docker compose up -d --build` 启动 sidecar。详见 [`docs/system-upgrade.md`](docs/system-upgrade.md)。
+
 ### 首次登录
 
 1. 启动后查看容器/运行日志，获取自动生成的 **admin 初始密码**
@@ -149,12 +155,13 @@ docker compose up -d --build
 | ----------------------- | ------------------------- | ------------------------------------------ |
 | `FONU_LISTEN`           | `:6893`                   | 管理后台监听地址                           |
 | `FONU_DATA_DIR`         | `/data`                   | 数据目录（数据库、Nginx 配置、证书、日志） |
-| `FONU_SESSION_SECRET`   | `change-me-in-production` | 会话加密密钥，生产环境请自行修改           |
+| `FONU_SESSION_SECRET`   | 空（自动生成）            | 会话与凭据加密密钥；有数据后不要更换       |
 | `FONU_NGINX_HTTP_PORT`  | `80`                      | 新建 HTTP 反代规则的默认监听端口           |
 | `FONU_NGINX_HTTPS_PORT` | `443`                     | 新建 HTTPS 反代规则的默认监听端口          |
 | `FONU_NGINX_BIN`        | `nginx`                   | Nginx 可执行文件路径（本地开发可指定）     |
 | `FONU_FRPC_BIN`         | `frpc`                    | frpc 可执行文件路径（镜像不预装，用「应用配置」按需下载或自行放置） |
 | `FONU_FRP_PID`          | `{DATA_DIR}/frp/frpc.pid` | frpc 进程 PID 文件路径                     |
+| `FONU_UPDATER_SOCKET`   | `/run/fonu-updater/updater.sock` | 一键升级 sidecar 的 Unix Socket；未挂载时自动禁用 |
 
 ## 注意事项
 

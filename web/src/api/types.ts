@@ -121,6 +121,19 @@ export interface AppVersion {
   nginx_https_port: number
 }
 
+export interface UpdateStatus {
+  enabled: boolean
+  mode: string
+  current_version?: string
+  latest_version?: string
+  update_available: boolean
+  busy: boolean
+  phase: 'idle' | 'scheduled' | 'running' | 'success' | 'failed' | string
+  message: string
+  log?: string[]
+  checked_at?: string
+}
+
 export interface ApiError {
   error: string
 }

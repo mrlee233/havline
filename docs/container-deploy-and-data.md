@@ -172,8 +172,10 @@ FONU_VERSION=1.2.18 docker compose up -d
 | `FONU_LISTEN` | `:6893` | 面板监听地址 |
 | `FONU_SESSION_SECRET` | 空 | 留空即自动生成并持久化；**它是凭据加密密钥，有数据后不要更换** |
 | `FONU_NGINX_HTTP_PORT` / `FONU_NGINX_HTTPS_PORT` | `80` / `443` | 反代监听端口（host 网络那份默认 18080/9443） |
+| `FONU_UPDATER_SOCKET` | `/run/fonu-updater/updater.sock` | 一键升级 sidecar 的 Unix Socket |
+| `DOCKER_SOCK` | `/var/run/docker.sock` | 宿主机 Docker Socket；rootless Docker 或自定义路径时覆盖 |
 | `TZ` | `Asia/Shanghai` | 通知与日志显示用的时区 |
-| `NODE_IMAGE` / `GO_IMAGE` / `RUNTIME_IMAGE` | 国内镜像源 | 构建用的基础镜像，被加速器拦截时用来覆盖 |
+| `NODE_IMAGE` / `GO_IMAGE` / `RUNTIME_IMAGE` / `UPDATER_IMAGE` | 国内镜像源 | 构建用的基础镜像，被加速器拦截时用来覆盖 |
 
 ---
 

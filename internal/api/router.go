@@ -27,6 +27,7 @@ func NewRouter(deps Deps) http.Handler {
 		metricsHandler:    NewMetricsHandler(deps.Metrics),
 		discoveryHandler:  NewDiscoveryHandler(deps.Discovery),
 		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti),
+		updateHandler:     NewUpdateHandler(deps.Updater),
 		authSvc:           deps.Auth,
 		staticFS:          deps.StaticFS,
 	}
@@ -94,6 +95,8 @@ func NewRouter(deps Deps) http.Handler {
 	protect("GET /api/logs/system", r.logsHandler.System)
 	protect("GET /api/metrics/history", r.metricsHandler.History)
 	protect("GET /api/logs/stream", r.logsHandler.Stream)
+	protect("GET /api/system/update/status", r.updateHandler.Status)
+	protect("POST /api/system/update/apply", r.updateHandler.Apply)
 	protect("GET /api/backup/export", r.backupHandler.Export)
 	protect("POST /api/backup/restore", r.backupHandler.Restore)
 	protect("GET /api/backup/archives", r.backupHandler.ListArchives)
@@ -190,6 +193,7 @@ type Router struct {
 	metricsHandler    *MetricsHandler
 	discoveryHandler  *DiscoveryHandler
 	frpmultiHandler   *FRPMultiHandler
+	updateHandler     *UpdateHandler
 	authSvc           *auth.Service
 	staticFS          fs.FS
 }
