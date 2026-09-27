@@ -27,6 +27,9 @@ services:
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     image: fonu:${FONU_VERSION:-local}
+    # 有 build 段时 compose 默认会先尝试拉同名镜像（日志里那条 "fonu Pulling" 就是），
+    # 国内直连 Docker Hub 会超时报警；强制走构建，跳过这一步。
+    pull_policy: build
     container_name: fonu
     restart: unless-stopped
     ports:

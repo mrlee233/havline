@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.18] - 2026-09-27
+
+### 修复
+
+- **国内加速器上构建失败（401 Unauthorized）**：`Dockerfile` 顶部原来显式写了 `# syntax=docker/dockerfile:1`，这会让 BuildKit 额外去拉 `docker/dockerfile` 镜像，而在飞牛的 `docker.fnnas.com` 这类加速器上会被拦成 401（`resolve image config for docker-image://docker/dockerfile:1` 失败）。该行已移除：`RUN --mount=type=cache` 由 Docker 内建的 BuildKit frontend 已支持，不需要显式指定，缓存挂载保持不变
+- **compose 无谓地尝试拉镜像**：`docker-compose.hub.yml` 增加 `pull_policy: build`，跳过日志里那条 "fonu Pulling"（国内直连 Docker Hub 的超时告警），直接构建
+
+### 变更
+
+- 版本号提升到 1.2.18；`web/package.json` 同步对齐
+- 本轮**不涉及 Go 代码**（只改 Dockerfile 与 compose），因此安装包未重出，`dist/fonu-1.2.17-linux-*.tar.gz` 仍可用；`AgentVersion` 仍为 0.12.7
+
 ## [v1.2.17] - 2026-09-27
 
 ### 新增

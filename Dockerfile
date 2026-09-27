@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1
-# ↑ 为了能用 RUN --mount=type=cache：把 Go 模块/编译缓存与 npm 缓存跨次构建复用，
-#   在部署机（NAS）上重复构建通常从「几分钟」降到「几十秒」。
+# 不写 `# syntax=docker/dockerfile:1`：显式指定会让 BuildKit 额外去拉 docker/dockerfile 镜像，
+# 在国内加速器（如飞牛的 docker.fnnas.com）上可能直接 401 Unauthorized；
+# 而下面用到的 RUN --mount=type=cache 由 Docker 内建的 BuildKit frontend 已支持，无需显式指定。
 
 ARG TARGETARCH
 # 版本单一来源：根目录 VERSION 文件，本地改版本号只需改此文件
