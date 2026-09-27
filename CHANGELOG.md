@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.2] - 2026-09-27
+
+### 修复
+
+- **一键升级无法读取远端版本**：`fonu-updater` 检查更新时原来会 `git clone --depth 1` 整个仓库，而状态接口的父级超时只有 20 秒，克隆未完成即被 `signal: killed`，表现为 `fatal: early EOF`，前端因此一直不显示「一键升级」。现改为优先通过 Gitea API / raw 地址或 GitHub raw 读取 `VERSION`，显著降低检查耗时，不再依赖完整克隆
+
+### 变更
+
+- 版本号提升到 1.3.2；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8，本次无 Agent 行为变化
+- `fonu-updater` 位于 sidecar，不能通过自身升级自身；已有部署需要先手动重建一次 `updater` 服务，之后该修复才生效
+
+### 测试
+
+- `internal/updater`：新增 Gitea API / raw 地址解析、文本与 base64 JSON 版本内容解析测试
+
 ## [v1.3.1] - 2026-09-27
 
 ### 新增

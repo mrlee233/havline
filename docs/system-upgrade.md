@@ -134,6 +134,21 @@ FONU_VERSION=<上一个版本> docker compose up -d --no-deps --force-recreate f
 3. `FONU_UPDATER_SOCKET` 是否在两侧指向同一路径；
 4. 共享卷 `fonu-updater-sock` 是否存在。
 
+如果状态接口返回：
+
+```text
+读取远端版本失败：git clone ... signal: killed ... fatal: early EOF
+```
+
+说明运行中的 updater 仍是旧版本，仍在用完整克隆读取 `VERSION`。升级到 v1.3.2 后，updater 会改用 Gitea API / raw 地址读取版本文件。由于 sidecar 不能升级自身，需要先手动重建一次：
+
+```bash
+docker compose -f docker-compose.hub.yml up -d --build updater
+
+# 本地源码部署
+docker compose up -d --build updater
+```
+
 ### `docker-compose.yml` 模式提示存在未提交改动
 
 升级前的 Git 工作区检查要求干净，避免覆盖用户修改。先处理工作区，或手动执行：

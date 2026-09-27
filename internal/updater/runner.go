@@ -2,10 +2,12 @@ package updater
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,48 +125,136 @@ func (s *Server) prepareLocalSource(ctx context.Context) error {
 		return fmt.Errorf("本地源码存在未提交改动，已拒绝自动拉取")
 	}
 	s.logf("拉取远端源码")
-	if _, err := runCommand(ctx, s.cfg.ProjectDir, nil, "git", "pull", "--ff-only"); err != nil {
+	if _, err := runCommand(ctx, s.cfg.ProjectDir, nil, "git", "pull", "--ff-only", "origin", s.cfg.Branch); err != nil {
 		return fmt.Errorf("git pull 失败：%w", err)
 	}
 	return nil
 }
 
 func (s *Server) latestVersion(ctx context.Context) (string, error) {
-	if s.cfg.Mode == "git" {
-		return s.latestVersionFromGitClone(ctx)
+	repoURL := strings.TrimSpace(s.cfg.RepoURL)
+	if s.cfg.Mode == "local" {
+		if remote, err := s.localRemoteURL(ctx); err == nil && strings.TrimSpace(remote) != "" {
+			repoURL = remote
+		}
 	}
-	return s.latestVersionFromLocal(ctx)
-}
-
-func (s *Server) latestVersionFromLocal(ctx context.Context) (string, error) {
 	localPath := filepath.Join(s.cfg.ProjectDir, "VERSION")
-	if _, err := os.Stat(filepath.Join(s.cfg.ProjectDir, ".git")); err != nil {
-		return readVersionFile(localPath)
+	if repoURL != "" {
+		version, err := fetchRemoteVersion(ctx, repoURL, s.cfg.Branch)
+		if err == nil {
+			return version, nil
+		}
+		if s.cfg.Mode == "git" {
+			return "", err
+		}
+		s.logf("读取远端版本失败，改用本地 VERSION：%v", err)
 	}
-	fetchCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-	if _, err := runCommand(fetchCtx, s.cfg.ProjectDir, nil, "git", "fetch", "origin", s.cfg.Branch, "--prune"); err != nil {
-		return readVersionFile(localPath)
-	}
-	value, err := runCommand(ctx, s.cfg.ProjectDir, nil, "git", "show", "origin/"+s.cfg.Branch+":VERSION")
-	if err != nil {
-		return readVersionFile(localPath)
-	}
-	return strings.TrimSpace(value), nil
+	return readVersionFile(localPath)
 }
 
-func (s *Server) latestVersionFromGitClone(ctx context.Context) (string, error) {
-	dir, err := os.MkdirTemp("", "fonu-update-*")
+func (s *Server) localRemoteURL(ctx context.Context) (string, error) {
+	if _, err := os.Stat(filepath.Join(s.cfg.ProjectDir, ".git")); err != nil {
+		return "", err
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	output, err := runCommand(checkCtx, s.cfg.ProjectDir, nil, "git", "config", "--get", "remote.origin.url")
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(dir)
-	cloneCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
-	defer cancel()
-	if _, err := runCommand(cloneCtx, "", nil, "git", "clone", "--depth", "1", "--branch", s.cfg.Branch, s.cfg.RepoURL, dir); err != nil {
-		return "", fmt.Errorf("读取远端版本失败：%w", err)
+	return strings.TrimSpace(output), nil
+}
+
+// fetchRemoteVersion 通过仓库 raw / API 地址读取 VERSION，避免为了检查版本克隆整个仓库。
+func fetchRemoteVersion(ctx context.Context, repoURL, branch string) (string, error) {
+	urls, err := remoteVersionURLs(repoURL, branch)
+	if err != nil {
+		return "", err
 	}
-	return readVersionFile(filepath.Join(dir, "VERSION"))
+	var lastErr error
+	for _, candidate := range urls {
+		version, err := fetchVersionURL(ctx, candidate)
+		if err == nil {
+			return version, nil
+		}
+		lastErr = err
+	}
+	return "", fmt.Errorf("读取远端版本失败：%w", lastErr)
+}
+
+func remoteVersionURLs(repoURL, branch string) ([]string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(repoURL))
+	if err != nil || parsed.Host == "" {
+		return nil, fmt.Errorf("仓库地址无效：%s", repoURL)
+	}
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		branch = "main"
+	}
+	repoPath := strings.Trim(strings.TrimSuffix(parsed.Path, ".git"), "/")
+	if repoPath == "" {
+		return nil, fmt.Errorf("仓库地址缺少路径：%s", repoURL)
+	}
+	base := parsed.Scheme + "://" + parsed.Host
+	urls := []string{
+		fmt.Sprintf("%s/api/v1/repos/%s/contents/VERSION?ref=%s", base, repoPath, url.QueryEscape(branch)),
+		fmt.Sprintf("%s/%s/raw/branch/%s/VERSION", base, repoPath, url.PathEscape(branch)),
+		fmt.Sprintf("%s/%s/raw/%s/VERSION", base, repoPath, url.PathEscape(branch)),
+	}
+	if strings.EqualFold(parsed.Hostname(), "github.com") {
+		urls = append([]string{fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/VERSION", repoPath, url.PathEscape(branch))}, urls...)
+	}
+	return urls, nil
+}
+
+func fetchVersionURL(ctx context.Context, rawURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("%s: HTTP %d", rawURL, resp.StatusCode)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	version, err := parseRemoteVersion(data)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", rawURL, err)
+	}
+	return version, nil
+}
+
+func parseRemoteVersion(data []byte) (string, error) {
+	text := strings.TrimSpace(string(data))
+	if strings.HasPrefix(text, "{") {
+		var payload struct {
+			Content     string `json:"content"`
+			Encoding    string `json:"encoding"`
+			DownloadURL string `json:"download_url"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return "", err
+		}
+		if payload.Encoding == "base64" && payload.Content != "" {
+			decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(payload.Content))
+			if err != nil {
+				return "", err
+			}
+			text = strings.TrimSpace(string(decoded))
+		}
+	}
+	if err := validateSemver(text); err != nil {
+		return "", err
+	}
+	return text, nil
 }
 
 func readVersionFile(path string) (string, error) {
