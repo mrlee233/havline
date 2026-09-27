@@ -8,8 +8,9 @@
     </template>
   </PageHeader>
 
-  <n-alert type="success" :bordered="false" class="example-alert" title="在线升级验证页面已生效">
-    当前页面由 v{{ version }} 提供。如果你是在升级后首次看到此页面，说明前端构建、镜像重建和服务重启均已成功。
+  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.3 示例页面验证标识已生效">
+    当前页面由 v{{ version }} 提供，验证标识为 <span class="mono">{{ verificationMarker }}</span>。
+    如果你是在升级后首次看到这行内容，说明前端构建、镜像重建和服务重启均已成功。
   </n-alert>
 
   <div class="stats-row">
@@ -19,7 +20,7 @@
     <StatCard label="升级验证" value="通过" sub="示例路由与菜单已加载" tone="green">
       <template #icon><n-icon :component="CheckmarkCircleOutline" /></template>
     </StatCard>
-    <StatCard label="验证时间" :value="checkedAt || '刚刚'" sub="页面最近一次读取版本的时间" tone="blue" value-small>
+    <StatCard label="本次验证标识" :value="verificationMarker" sub="用于区分升级前后的前端资源" tone="blue" value-small>
       <template #icon><n-icon :component="FlashOutline" /></template>
     </StatCard>
   </div>
@@ -38,7 +39,9 @@
       <div><label>前端路由</label><span class="mono">/example</span></div>
       <div><label>侧栏菜单</label><span>已加载「示例页面」</span></div>
       <div><label>后端版本</label><span class="mono">{{ version }}</span></div>
+      <div><label>验证标识</label><span class="mono">{{ verificationMarker }}</span></div>
       <div><label>验证状态</label><StatusBadge kind="success" text="通过" /></div>
+      <div><label>最近检查</label><span>{{ checkedAt || '刚刚' }}</span></div>
     </div>
   </FonuCard>
 </template>
@@ -63,6 +66,7 @@ const message = useMessage()
 const version = ref(__APP_VERSION__)
 const checkedAt = ref('')
 const refreshing = ref(false)
+const verificationMarker = 'v1.3.3-example-page'
 
 async function refreshVersion() {
   refreshing.value = true

@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.3] - 2026-09-27
+
+### 新增
+
+- **示例页面升级验证标识**：示例页面新增固定的 `v1.3.3-example-page` 验证标识与展示项，升级后可直接通过标识区分新旧前端资源，确认页面、路由和静态资源均已更新
+
+### 变更
+
+- 版本号提升到 1.3.3；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8，本次无 Agent 行为变化
+
+### 测试
+
+- 前端类型检查、单元测试与生产构建
+
 ## [v1.3.2] - 2026-09-27
 
 ### 修复
