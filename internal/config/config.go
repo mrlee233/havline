@@ -1,10 +1,13 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 type Config struct {
@@ -28,7 +31,7 @@ func Load() Config {
 	return Config{
 		ListenAddr:            envOr("FONU_LISTEN", ":6893"),
 		DataDir:               dataDir,
-		SessionSecret:         envOr("FONU_SESSION_SECRET", "change-me-in-production"),
+		SessionSecret:         envOr("FONU_SESSION_SECRET", ""),
 		NginxBin:              envOr("FONU_NGINX_BIN", "nginx"),
 		NginxPIDFile:          envOr("FONU_NGINX_PID", dataDir+"/nginx/nginx.pid"),
 		NginxMimeTypes:        envOr("FONU_NGINX_MIME_TYPES", defaultMimeTypes()),
@@ -121,6 +124,69 @@ func (c Config) FrpConfigPath() string {
 
 func (c Config) FrpLogPath() string {
 	return filepath.Join(c.LogsDir(), "frpc.log")
+}
+
+// LegacySessionSecret 是历史版本在未配置 FONU_SESSION_SECRET 时使用的固定值。
+// 它同时是 secret box 的加密密钥，所以只提醒、不自动替换：
+// 换掉它会让库里已加密的凭据（frp token、通知密码等）再也解不开。
+const LegacySessionSecret = "change-me-in-production"
+
+// sessionSecretPath 会话密钥的持久化位置（与数据库同在数据目录，重建容器/升级都不受影响）
+func (c Config) sessionSecretPath() string {
+	return filepath.Join(c.DataDir, "session_secret")
+}
+
+// ResolveSessionSecret 补齐会话密钥并返回它的来源（写进启动日志，便于确认到底用的哪一个）：
+//   - 显式配置了（包括历史默认值）→ 原样使用，与既有数据保持兼容；
+//   - 没配置 → 读数据目录里的 session_secret；不存在或内容明显无效就生成一个（0600）。
+//
+// 这样 Docker 与原生部署都不必手工准备密钥，也不会出现「忘配就用固定弱密钥跑在公网」。
+func (c *Config) ResolveSessionSecret() (string, error) {
+	if secret := strings.TrimSpace(c.SessionSecret); secret != "" {
+		if secret == LegacySessionSecret {
+			return "环境变量（仍是历史默认值，建议改成随机值，注意更换后需重新登录）", nil
+		}
+		return "环境变量", nil
+	}
+	path := c.sessionSecretPath()
+	if data, err := os.ReadFile(path); err == nil {
+		// 长度不足或带空白的视为损坏（人工改坏、写了一半）：重新生成，而不是带着坏密钥启动
+		if secret := strings.TrimSpace(string(data)); len(secret) >= 32 && !strings.ContainsAny(secret, " \t\r\n") {
+			c.SessionSecret = secret
+			return path, nil
+		}
+	}
+	secret, err := randomSessionSecret()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(c.DataDir, 0o755); err != nil {
+		return "", err
+	}
+	// 先写临时文件再改名：避免中途失败留下半个密钥
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(secret+"\n"), 0o600); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	// WriteFile 的权限会被 umask 干扰，这里再显式收一道（密钥文件不该让同机其他用户读到）
+	if err := os.Chmod(path, 0o600); err != nil {
+		return "", err
+	}
+	c.SessionSecret = secret
+	return path, nil
+}
+
+// randomSessionSecret 32 字节随机数的十六进制表示（64 字符）
+func randomSessionSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("生成会话密钥失败: %w", err)
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func defaultDataDir() string {

@@ -26,7 +26,9 @@ services:
     environment:
       FONU_DATA_DIR: /data
       FONU_LISTEN: :6893
-      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-change-me-in-production}
+      # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
+      # 想自己指定就设这个变量；注意它同时是凭据加密密钥，已有数据后不要随意更换
+      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-}
       # 时区：通知消息时间按此显示（默认东八区）
       TZ: ${TZ:-Asia/Shanghai}
 

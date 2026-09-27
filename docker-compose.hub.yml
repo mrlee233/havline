@@ -1,11 +1,14 @@
-# 从仓库拉源码构建并启动（适合干净机器：只需要这一个文件 + 一个 .env）
+# 从仓库拉源码构建并启动（适合干净机器：只要这一个文件）
 #
 # 用法：
 #   mkdir -p /opt/fonu && cd /opt/fonu
 #   # 取本文件（按你仓库页面上的「原始文件」链接下载，或 git clone 后复制过来）：
 #   #   curl -fsSLo docker-compose.hub.yml <仓库里这个文件的原始地址>
-#   printf 'FONU_SESSION_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
-#   docker compose up -d --build
+#   docker compose up -d --build        # 会话密钥由应用首次启动自动生成并持久化在数据卷里
+#
+# 想自己指定会话密钥（可选项）：在 compose 文件同层建 .env 写入
+#   FONU_SESSION_SECRET=<一串随机字符，openssl rand -hex 32 可生成>
+# 注意：它同时是凭据加密密钥，数据卷里已经有数据后不要随意更换，否则已存的凭据无法解密。
 #
 # 构建上下文用的是 Git 地址：BuildKit 会自己把仓库克隆下来，不需要先 git clone 到本地；
 # 仓库匿名可读时无需凭据。需要认证时改用 https://<用户名>:<令牌>@<主机>/<路径>.git，
@@ -35,9 +38,9 @@ services:
     environment:
       FONU_DATA_DIR: /data
       FONU_LISTEN: :6893
-      # 不再默默回退到 change-me-in-production：没在 .env 里给值就直接拒绝启动
-      # （生成方式：openssl rand -hex 32）
-      FONU_SESSION_SECRET: "${FONU_SESSION_SECRET:?请先创建 .env 并写入 FONU_SESSION_SECRET（openssl rand -hex 32 可生成）}"
+      # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
+      # 想自己指定就在同层 .env 里设这个变量；注意它同时是凭据加密密钥，已有数据后不要更换
+      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-}
       # 时区：通知消息时间按此显示（默认东八区）
       TZ: ${TZ:-Asia/Shanghai}
 

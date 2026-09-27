@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.17] - 2026-09-27
+
+### 新增
+
+- **会话密钥自动生成**：`FONU_SESSION_SECRET` 未配置时，应用首次启动会在数据目录里生成 32 字节随机密钥（64 字符）并持久化到 `<数据目录>/session_secret`（权限 0600，先写临时文件再改名；读到损坏内容会重新生成）。启动日志会写明密钥来源（环境变量 / 文件路径 / 仍在使用历史默认值的提示）
+- **compose 改为「留空即自动」**：三个 compose 统一 `FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-}`；`docker-compose.hub.yml` 的单文件部署现在只要 `docker compose up -d --build`，**不再需要预先准备 `.env`**
+
+### 变更
+
+- `FONU_SESSION_SECRET` 的默认值由固定的 `change-me-in-production` 改为空（空 = 未配置 → 自动生成）
+- **不会自动替换已配置的值**：这个密钥同时是 `secret.NewBox` 的加密密钥，替换会让库里已加密的凭据（frp token、通知密码等）无法解密；对仍在使用历史默认值的实例只提示、不改数据
+- `.gitignore` 补上 `.env` 与 `.env.local`（`.env.example` 这类模板仍可入库）
+- 版本号提升到 1.2.17；`web/package.json` 同步对齐
+- 本轮不含 agent 行为变更，`AgentVersion` 仍为 0.12.7
+
+### 测试
+
+- `internal/config`：密钥生成与复用、文件权限（类 Unix 上校验 0600）、显式配置优先且不写文件、历史默认值保留并提示、损坏文件重新生成
+
 ## [v1.2.16] - 2026-09-27
 
 ### 改进

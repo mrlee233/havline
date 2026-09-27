@@ -57,6 +57,14 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		}
 	}
 
+	// 会话密钥：显式配置优先；未配置则在数据目录里读/生成并持久化
+	// （它同时是 secret box 的加密密钥，所以只在未配置时才生成，不替换已配置的值）
+	secretSource, err := cfg.ResolveSessionSecret()
+	if err != nil {
+		return nil, err
+	}
+	logger.Info("会话密钥已就绪", "module", "SYSTEM", "source", secretSource)
+
 	conn, err := db.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err

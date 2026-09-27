@@ -6,6 +6,9 @@ cmd/fonu/web/dist/
 dist/
 *.db
 /data/
+# 会话密钥等本地环境变量（.env.example 这类模板可以照常入库）
+.env
+.env.local
 .DS_Store
 .cursor/
 # scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪
