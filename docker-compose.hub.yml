@@ -1,10 +1,23 @@
-# 本地构建并打标签（原为从 Docker Hub 拉取 muxui/fonu，本地项目无需拉取）
-# 镜像 tag 随 VERSION 变（默认 fonu:local），可直接 docker save 导出或自行推送
+# 从仓库拉源码构建并启动（适合干净机器：只需要这一个文件 + 一个 .env）
+#
+# 用法：
+#   mkdir -p /opt/fonu && cd /opt/fonu
+#   # 取本文件（按你仓库页面上的「原始文件」链接下载，或 git clone 后复制过来）：
+#   #   curl -fsSLo docker-compose.hub.yml <仓库里这个文件的原始地址>
+#   printf 'FONU_SESSION_SECRET=%s\n' "$(openssl rand -hex 32)" > .env
+#   docker compose up -d --build
+#
+# 构建上下文用的是 Git 地址：BuildKit 会自己把仓库克隆下来，不需要先 git clone 到本地；
+# 仓库匿名可读时无需凭据。需要认证时改用 https://<用户名>:<令牌>@<主机>/<路径>.git，
+# 或先 git clone 后用 docker-compose.yml（本地上下文那份）。
+#
+# 首次构建要拉前端与 Go 依赖，比较慢；之后靠 Dockerfile 里的 cache mount 复用缓存。
+# 80/443 已被占用（如飞牛 NAS）请改用 docker-compose.host.yml。
 name: fonu
 services:
   fonu:
     build:
-      context: .
+      context: http://45.207.223.190:10082/mrlee/-Fonu.git#main
       args:
         NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
@@ -22,7 +35,9 @@ services:
     environment:
       FONU_DATA_DIR: /data
       FONU_LISTEN: :6893
-      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-change-me-in-production}
+      # 不再默默回退到 change-me-in-production：没在 .env 里给值就直接拒绝启动
+      # （生成方式：openssl rand -hex 32）
+      FONU_SESSION_SECRET: "${FONU_SESSION_SECRET:?请先创建 .env 并写入 FONU_SESSION_SECRET（openssl rand -hex 32 可生成）}"
       # 时区：通知消息时间按此显示（默认东八区）
       TZ: ${TZ:-Asia/Shanghai}
 

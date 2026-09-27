@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.16] - 2026-09-27
+
+### 改进
+
+- **`docker-compose.hub.yml` 改为「单文件从仓库拉取源码构建」**：`build.context` 直接用 Git 地址（`http://45.207.223.190:10082/mrlee/-Fonu.git#main`），由 BuildKit 自己克隆后再构建——干净机器上**只需要这一个 compose 文件 + 一个 `.env`**，不必先手动 `git clone`。升级也是回该目录重跑 `docker compose up -d --build`（会重新拉 `main` 的当前代码）。文件头补齐了完整用法
+- **会话密钥不再静默回退**：这一份把 `FONU_SESSION_SECRET` 写成必填（`${FONU_SESSION_SECRET:?...}`），没在 `.env` 里给值就直接拒绝启动并给出生成命令，避免用 `change-me-in-production` 直接跑在公网
+
+### 变更
+
+- 版本号提升到 1.2.16；`web/package.json` 同步对齐
+- 本轮不含 agent 行为变更，`AgentVersion` 仍为 0.12.7
+- 三个 compose 的分工：`docker-compose.yml`（本地源码上下文）、`docker-compose.hub.yml`（**从仓库拉取**）、`docker-compose.host.yml`（host 网络，仍需本地源码）
+
 ## [v1.2.15] - 2026-09-27
 
 ### 新增
