@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.1] - 2026-09-28
+
+### 变更
+
+- **P1-1 共享 Nginx 模板包**：新增纯生成包 `internal/nginxtmpl`，统一 TLS 指令、安全响应头、allow / deny、WebSocket 头、限流指令与 zone 命名；本机 `internal/nginx` 与公网 Agent 均改为调用共享函数，重复模板实现已删除
+- **安全响应头对齐**：两端统一输出 HSTS、`X-Content-Type-Options`、`X-Frame-Options`、`Referrer-Policy`，本机此前缺少 `Referrer-Policy`
+- **访问控制顺序统一**：统一为黑名单 `deny` → 仅大陆规则 → 白名单 `allow` → `deny all`，黑名单优先匹配
+- **TLS 指令显式化**：两端统一显式输出 `ssl_protocols TLSv1.2 TLSv1.3` 或 `TLSv1.3`
+- 版本号提升到 1.5.1；`AgentVersion` 0.14.0 → **0.14.1**，内嵌 amd64 / arm64 二进制已重编；VPS 上需点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/nginxtmpl`：新增共享函数的 TLS、安全头、访问控制、限流、zone 与 WebSocket 特征化测试
+- `internal/nginx`：本机生成测试继续通过；`internal/agent`：新增 vhost 顺序与共享语义测试
+
 ## [v1.5.0] - 2026-09-28
 
 ### 新增

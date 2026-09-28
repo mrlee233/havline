@@ -8,7 +8,7 @@
     </template>
   </PageHeader>
 
-  <n-alert type="success" :bordered="false" class="example-alert" title="v1.5.0 示例页面验证标识已生效">
+  <n-alert type="success" :bordered="false" class="example-alert" title="v1.5.1 示例页面验证标识已生效">
     当前页面由 v{{ version }} 提供，验证标识为 <span class="mono">{{ verificationMarker }}</span>。
     如果你是在升级后首次看到这行内容，说明前端构建、镜像重建和服务重启均已成功。
   </n-alert>
@@ -19,7 +19,7 @@
       <strong class="example-proof__value">{{ verificationRound }}</strong>
     </div>
     <div class="example-proof__hint">
-      看到这个新区块，说明前端资源已经从旧版本切换到 v1.5.0。
+      看到这个新区块，说明前端资源已经从旧版本切换到 v1.5.1。
     </div>
   </div>
 
@@ -33,16 +33,16 @@
     <StatCard label="本次验证标识" :value="verificationMarker" sub="用于区分升级前后的前端资源" tone="blue" value-small>
       <template #icon><n-icon :component="FlashOutline" /></template>
     </StatCard>
-    <StatCard label="页面状态" value="已更新" sub="v1.5.0 前端资源已加载" tone="teal">
+    <StatCard label="页面状态" value="已更新" sub="v1.5.1 前端资源已加载" tone="teal">
       <template #icon><n-icon :component="CheckmarkCircleOutline" /></template>
     </StatCard>
   </div>
 
   <FonuCard title="本次示例页变化" subtitle="用于确认升级后的页面内容确实发生变化">
     <ul class="example-changes">
-      <li>页面版本提示更新为 v1.5.0。</li>
-      <li>「本次升级验证」区块和页面状态同步更新为 v1.5.0。</li>
-      <li>验证标识更新为 <span class="mono">v1.5.0-example-page</span>。</li>
+      <li>页面版本提示更新为 v1.5.1。</li>
+      <li>「本次升级验证」区块和页面状态同步更新为 v1.5.1。</li>
+      <li>验证标识更新为 <span class="mono">v1.5.1-example-page</span>。</li>
     </ul>
   </FonuCard>
 
@@ -87,8 +87,8 @@ const message = useMessage()
 const version = ref(__APP_VERSION__)
 const checkedAt = ref('')
 const refreshing = ref(false)
-const verificationRound = 'v1.5.0'
-const verificationMarker = 'v1.5.0-example-page'
+const verificationRound = 'v1.5.1'
+const verificationMarker = 'v1.5.1-example-page'
 
 async function refreshVersion() {
   refreshing.value = true

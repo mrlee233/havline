@@ -48,6 +48,46 @@ func TestNginxRouteRendersUpstream(t *testing.T) {
 	}
 }
 
+// TestNginxRouteSharedTemplateSemantics 锁定共享模板迁出后的关键语义与顺序。
+func TestNginxRouteSharedTemplateSemantics(t *testing.T) {
+	out := nginxRoute(routeRequest{
+		Domain:          "a.example.com",
+		Upstream:        "127.0.0.1:8080",
+		TLS:             true,
+		RedirectTLS:     true,
+		SecurityHeaders: true,
+		WebSocket:       true,
+		AllowIPs:        []string{"192.168.1.0/24"},
+		DenyIPs:         []string{"8.8.8.8"},
+		RateLimitRate:   10,
+		RateLimitBurst:  20,
+		ConnLimitMax:    5,
+		ChinaOnly:       true,
+	}, "/etc/fonu-agent/certs/a.example.com")
+	for _, want := range []string{
+		"ssl_protocols TLSv1.2 TLSv1.3;",
+		`add_header Referrer-Policy "strict-origin-when-cross-origin" always;`,
+		"deny 8.8.8.8;",
+		"if ($fonu_china_client = 0) { return 403; }",
+		"allow 192.168.1.0/24;",
+		"deny all;",
+		"limit_conn fonu_a_example_com_conn 5;",
+		"limit_req zone=fonu_a_example_com_req burst=20 nodelay;",
+		"proxy_set_header Upgrade $http_upgrade;",
+		`proxy_set_header Connection "upgrade";`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("缺少 %q：\n%s", want, out)
+		}
+	}
+	denyIdx := strings.Index(out, "deny 8.8.8.8;")
+	allowIdx := strings.Index(out, "allow 192.168.1.0/24;")
+	denyAllIdx := strings.Index(out, "deny all;")
+	if denyIdx < 0 || allowIdx < 0 || denyAllIdx < 0 || !(denyIdx < allowIdx && allowIdx < denyAllIdx) {
+		t.Fatalf("allow / deny 顺序不正确：\n%s", out)
+	}
+}
+
 // TestFileSHA256 覆盖 frps 安装包的校验路径。
 func TestFileSHA256(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "payload.txt")

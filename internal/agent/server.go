@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/fonu/fonu/internal/fsutil"
+	"github.com/fonu/fonu/internal/nginxtmpl"
 	"github.com/fonu/fonu/internal/sysinfo"
 )
 
@@ -59,7 +60,8 @@ import (
 // 0.13.3：HTTPS 反代改用 default_server 并在 reload 后做本机证书指纹自检，
 // 证书不匹配时回滚并回报实际指纹与端口占用进程，区分「nginx 未生效」与「公网链路被接管」。
 // 0.14.0：HTTPS 端口自动选择（7443/8443/9443）、当前证书信息查询、主机防火墙检测与 ufw/firewalld 显式放行。
-const AgentVersion = "0.14.0"
+// 0.14.1：vhost 模板迁出到 internal/nginxtmpl，统一 TLS、安全头、allow/deny、WebSocket 与限流输出。
+const AgentVersion = "0.14.1"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -1519,14 +1521,10 @@ func nginxRoute(req routeRequest, certDir string) string {
 		fmt.Fprintf(&b, "    proxy_read_timeout %s;\n", timeout)
 	}
 	// 安全响应头：HSTS 仅在 HTTPS 实际启用时输出
-	if req.SecurityHeaders {
-		b.WriteString("    add_header X-Content-Type-Options \"nosniff\" always;\n")
-		b.WriteString("    add_header X-Frame-Options \"SAMEORIGIN\" always;\n")
-		b.WriteString("    add_header Referrer-Policy \"strict-origin-when-cross-origin\" always;\n")
-		if tlsEnabled {
-			b.WriteString("    add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains\" always;\n")
-		}
-	}
+	b.WriteString(nginxtmpl.ServerSecurityHeaders(nginxtmpl.SecurityHeaders{
+		Enabled: req.SecurityHeaders,
+		HTTPS:   tlsEnabled,
+	}))
 	// 限流/连接数的 zone 定义在 fonuagent-limits.conf（http 上下文），此处只声明状态码
 	if req.RateLimitRate > 0 {
 		b.WriteString("    limit_req_status 429;\n")
@@ -1536,26 +1534,19 @@ func nginxRoute(req routeRequest, certDir string) string {
 	}
 	if req.WebSocket {
 		b.WriteString("    proxy_http_version 1.1;\n")
-		b.WriteString("    proxy_set_header Upgrade $http_upgrade;\n")
-		b.WriteString("    proxy_set_header Connection \"upgrade\";\n")
+		b.WriteString(nginxtmpl.UpgradeHeaders("    ", "\"upgrade\""))
 	}
 	// IP 访问控制：白名单（allow + deny all）与黑名单（deny）可同时生效；
-	// Nginx 按出现顺序匹配，因此 allow 在前、deny 在后。
-	var acl strings.Builder
-	for _, ip := range req.AllowIPs {
-		ip = strings.TrimSpace(ip)
-		if ip != "" {
-			fmt.Fprintf(&acl, "        allow %s;\n", ip)
-		}
+	// 顺序由共享模板统一：deny → 仅大陆规则 → allow → deny all。
+	chinaDeny := ""
+	if req.ChinaOnly {
+		chinaDeny = "        if ($fonu_china_client = 0) { return 403; }\n"
 	}
-	for _, ip := range req.DenyIPs {
-		if ip = strings.TrimSpace(ip); ip != "" {
-			fmt.Fprintf(&acl, "        deny %s;\n", ip)
-		}
-	}
-	if len(req.AllowIPs) > 0 {
-		acl.WriteString("        deny all;\n")
-	}
+	aclText := nginxtmpl.AccessDirectives(nginxtmpl.AccessControl{
+		Allow:     req.AllowIPs,
+		Deny:      req.DenyIPs,
+		ChinaDeny: chinaDeny,
+	}, "        ")
 	// Basic Auth：密码优先用规则表单值（自定义），留空则首次自动生成并复用（htpasswd 格式）；
 	// 自动生成的明文由 putRoute 在响应里回一次，这里只写 auth_basic 指令，不写密码注释
 	authLine := ""
@@ -1568,24 +1559,14 @@ func nginxRoute(req routeRequest, certDir string) string {
 			authLine = fmt.Sprintf("        auth_basic \"Fonu Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
 		}
 	}
-	// 限流 / 连接数 / 仅中国大陆 IP 的 location 级指令（zone 与 geo 变量在 http 上下文定义）
-	var limitText strings.Builder
-	if req.RateLimitRate > 0 {
-		zone := zoneKey(req.Domain)
-		if req.RateLimitBurst > 0 {
-			fmt.Fprintf(&limitText, "        limit_req zone=%s_req burst=%d nodelay;\n", zone, req.RateLimitBurst)
-		} else {
-			fmt.Fprintf(&limitText, "        limit_req zone=%s_req nodelay;\n", zone)
-		}
-	}
-	if req.ConnLimitMax > 0 {
-		fmt.Fprintf(&limitText, "        limit_conn %s_conn %d;\n", zoneKey(req.Domain), req.ConnLimitMax)
-	}
-	if req.ChinaOnly {
-		limitText.WriteString("        if ($fonu_china_client = 0) { return 403; }\n")
-	}
-	aclText := acl.String()
-	fmt.Fprintf(&b, "    location / {\n%s%s%s        proxy_pass http://%s;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_http_version 1.1;\n    }\n}\n", aclText, authLine, limitText.String(), req.Upstream)
+	// 限流 / 连接数（zone 在 http 上下文定义）
+	limitText := nginxtmpl.LimitDirectives(nginxtmpl.LimitConfig{
+		Zone:  nginxtmpl.ZoneName("fonu", req.Domain),
+		Rate:  req.RateLimitRate,
+		Burst: req.RateLimitBurst,
+		Conn:  req.ConnLimitMax,
+	}, "        ")
+	fmt.Fprintf(&b, "    location / {\n%s%s%s        proxy_pass http://%s;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_http_version 1.1;\n    }\n}\n", aclText, authLine, limitText, req.Upstream)
 	return b.String()
 }
 
@@ -1594,16 +1575,7 @@ const agentStateDir = "/var/lib/fonu-agent"
 
 // zoneKey 把域名转成合法的 nginx zone 名（仅保留小写字母与数字，其余换下划线）。
 func zoneKey(domain string) string {
-	var b strings.Builder
-	b.WriteString("fonu_")
-	for _, r := range strings.ToLower(domain) {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			b.WriteRune(r)
-		} else {
-			b.WriteByte('_')
-		}
-	}
-	return b.String()
+	return nginxtmpl.ZoneName("fonu", domain)
 }
 
 // limitsFilePath 返回 zone 定义文件（放在 vhost 目录，顶层指令即 http 上下文）。
@@ -1684,10 +1656,10 @@ func (s *Server) writeLimitState(state map[string]routeLimit) error {
 		item := state[domain]
 		key := zoneKey(domain)
 		if item.Rate > 0 {
-			fmt.Fprintf(&b, "limit_req_zone $binary_remote_addr zone=%s_req:10m rate=%dr/s;\n", key, item.Rate)
+			b.WriteString(nginxtmpl.RateLimitZone(key+"_req", item.Rate))
 		}
 		if item.Conn > 0 {
-			fmt.Fprintf(&b, "limit_conn_zone $binary_remote_addr zone=%s_conn:10m;\n", key)
+			b.WriteString(nginxtmpl.ConnLimitZone(key + "_conn"))
 		}
 	}
 	return atomicWrite(path, []byte(b.String()), 0o640)
@@ -1722,12 +1694,11 @@ func (s *Server) clearLimitState(domain string) error {
 
 // sslDirectives 生成证书与 TLS 协议指令；tls13Only 时只允许 TLS 1.3。
 func sslDirectives(certDir string, tls13Only bool) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "    ssl_certificate %s;\n    ssl_certificate_key %s;\n", filepath.Join(certDir, "fullchain.pem"), filepath.Join(certDir, "privkey.pem"))
-	if tls13Only {
-		b.WriteString("    ssl_protocols TLSv1.3;\n")
-	}
-	return b.String()
+	return nginxtmpl.SSLDirectives(nginxtmpl.TLSConfig{
+		CertPath:  filepath.Join(certDir, "fullchain.pem"),
+		KeyPath:   filepath.Join(certDir, "privkey.pem"),
+		TLS13Only: tls13Only,
+	})
 }
 
 // writeBasicAuthSecret 用规则表单提供的密码写入 htpasswd（自定义密码场景）。

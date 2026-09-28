@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/nginxtmpl"
 	"github.com/fonu/fonu/internal/proxy"
 )
 
@@ -171,9 +172,13 @@ func appendSSLServerBlock(b *strings.Builder, cfg config.Config, port int, serve
 	writeListenDirectives(&block, port, true, rule.ListenIPv4, rule.ListenIPv6)
 	block.WriteString(fmt.Sprintf("    server_name %s;\n\n", serverNames))
 	writeCommentLine(&block, 4, "SSL 证书")
-	block.WriteString(fmt.Sprintf("    ssl_certificate %s;\n", absNginxPath(cert.CertPath)))
-	block.WriteString(fmt.Sprintf("    ssl_certificate_key %s;\n", absNginxPath(cert.KeyPath)))
-	writeTLSProtocols(&block, rule.Security)
+	writeTLSProtocolComment(&block, rule.Security)
+	block.WriteString(nginxtmpl.SSLDirectives(nginxtmpl.TLSConfig{
+		CertPath:  absNginxPath(cert.CertPath),
+		KeyPath:   absNginxPath(cert.KeyPath),
+		TLS13Only: rule.Security.TLSMin13Only,
+	}))
+	block.WriteString("\n")
 	writeServerSecurityHeaders(&block, rule.Security, true)
 	writeErrorPages(&block, cfg)
 	writeLocationWithSecurity(&block, cfg, rule, opts)
@@ -217,11 +222,10 @@ func writeProxyLocationBody(b *strings.Builder, upstream string, sec proxy.Secur
         proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-Port $server_port;
         proxy_set_header X-Real-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
+%s
         proxy_buffering off;
         proxy_read_timeout 3600s;
-`, sslBlock, upstream, hostHeader))
+`, sslBlock, upstream, hostHeader, nginxtmpl.UpgradeHeaders("        ", "$connection_upgrade")))
 }
 
 func writeListenDirectives(b *strings.Builder, port int, ssl bool, ipv4 bool, ipv6 bool) {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/fonu/fonu/internal/fsutil"
+	"github.com/fonu/fonu/internal/nginxtmpl"
 )
 
 const (
@@ -209,9 +210,7 @@ func renderHTTPSProxy(port int, certPath, keyPath string) string {
 server {
     listen %d ssl default_server;
     server_name _;
-    ssl_certificate %s;
-    ssl_certificate_key %s;
-    ssl_protocols TLSv1.2 TLSv1.3;
+%s
 
     location /api/v1/ {
         proxy_pass http://127.0.0.1:7700;
@@ -222,7 +221,7 @@ server {
         proxy_set_header Authorization $http_authorization;
     }
 }
-`, port, certPath, keyPath)
+`, port, nginxtmpl.SSLDirectives(nginxtmpl.TLSConfig{CertPath: certPath, KeyPath: keyPath}))
 }
 
 func certificatePin(certPEM string) (string, error) {

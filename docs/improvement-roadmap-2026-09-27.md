@@ -585,6 +585,8 @@ P1 的核心是控制复杂度，不改变可见功能。
 
 ## 4.1 P1-1：抽共享 Nginx 模板包
 
+> 实施状态：2026-09-28 已完成（v1.5.1）。共享包 `internal/nginxtmpl` 已落地，本机与 Agent 的 TLS、安全响应头、allow/deny、WebSocket、限流指令与 zone 命名均已迁出；仅保留中国 IP geo 变量名与 Agent 限流文件路径的适配层。
+
 ### 4.1.1 现状
 
 本机与公网 Agent 各有一套 Nginx 生成逻辑：

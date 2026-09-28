@@ -6,18 +6,19 @@ import (
 	"strings"
 
 	"github.com/fonu/fonu/internal/config"
+	"github.com/fonu/fonu/internal/nginxtmpl"
 	"github.com/fonu/fonu/internal/proxy"
 )
 
 type GenerateOptions struct {
-	TrustedProxy               TrustedProxyConfig
-	GlobalIPBlacklist          []string
-	GlobalIPWhitelist          []string
-	ChinaCIDRAvailable         bool
-	ChinaCIDRPathOverride      string
-	GlobalCustomOverride       string
-	GlobalCustomPathOverride   string
-	RuleCustomOverrides        map[int64]string
+	TrustedProxy             TrustedProxyConfig
+	GlobalIPBlacklist        []string
+	GlobalIPWhitelist        []string
+	ChinaCIDRAvailable       bool
+	ChinaCIDRPathOverride    string
+	GlobalCustomOverride     string
+	GlobalCustomPathOverride string
+	RuleCustomOverrides      map[int64]string
 }
 
 func writeGlobalAllowList(b *strings.Builder, cidrs []string) {
@@ -52,16 +53,23 @@ func writeLimitZones(b *strings.Builder, rules []proxy.Rule) {
 			writeLimitZoneComments(b, rule)
 		}
 		if rule.Security.RateLimitEnabled() {
-			rl := rule.Security.RateLimit
-			b.WriteString(fmt.Sprintf("    limit_req_zone $binary_remote_addr zone=fonu_rule_%d_req:10m rate=%dr/s;\n", rule.ID, rl.Rate))
+			zone := fmt.Sprintf("fonu_rule_%d_req", rule.ID)
+			writeIndentedZone(b, nginxtmpl.RateLimitZone(zone, rule.Security.RateLimit.Rate))
 		}
 		if rule.Security.ConnLimitEnabled() {
-			b.WriteString(fmt.Sprintf("    limit_conn_zone $binary_remote_addr zone=fonu_rule_%d_conn:10m;\n", rule.ID))
+			writeIndentedZone(b, nginxtmpl.ConnLimitZone(fmt.Sprintf("fonu_rule_%d_conn", rule.ID)))
 		}
 	}
 	if hasLimitZones(rules) {
 		b.WriteString("\n")
 	}
+}
+
+func writeIndentedZone(b *strings.Builder, line string) {
+	if strings.TrimSpace(line) == "" {
+		return
+	}
+	b.WriteString("    " + line)
 }
 
 func hasLimitZones(rules []proxy.Rule) bool {
@@ -135,18 +143,18 @@ func writeChinaOnlyBypassGeo(b *strings.Builder, rules []proxy.Rule, opts Genera
 	}
 }
 
-func writeChinaOnlyCheck(b *strings.Builder, rule proxy.Rule, opts GenerateOptions) {
+func chinaOnlyCheckDirectives(rule proxy.Rule, opts GenerateOptions) string {
 	sec := rule.Security.Normalize()
 	if !sec.ChinaOnly {
-		return
+		return ""
 	}
 	if !opts.ChinaCIDRAvailable {
-		b.WriteString(`        if ($fonu_is_private = 0) {
+		return `        if ($fonu_is_private = 0) {
             return 403;
         }
-`)
-		return
+`
 	}
+	var b strings.Builder
 	b.WriteString(`        set $fonu_china_block 0;
         if ($fonu_is_china = 0) {
             set $fonu_china_block 1;
@@ -163,6 +171,7 @@ func writeChinaOnlyCheck(b *strings.Builder, rule proxy.Rule, opts GenerateOptio
             return 403;
         }
 `)
+	return b.String()
 }
 
 func writeServerSecurityHeaders(b *strings.Builder, sec proxy.SecurityConfig, https bool) {
@@ -170,20 +179,8 @@ func writeServerSecurityHeaders(b *strings.Builder, sec proxy.SecurityConfig, ht
 		return
 	}
 	writeSecurityHeadersComment(b)
-	b.WriteString(`    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-
-`)
-}
-
-func writeTLSProtocols(b *strings.Builder, sec proxy.SecurityConfig) {
-	writeTLSProtocolComment(b, sec)
-	if sec.TLSMin13Only {
-		b.WriteString("    ssl_protocols TLSv1.3;\n\n")
-	} else {
-		b.WriteString("    ssl_protocols TLSv1.2 TLSv1.3;\n\n")
-	}
+	b.WriteString(nginxtmpl.ServerSecurityHeaders(nginxtmpl.SecurityHeaders{Enabled: true, HTTPS: true}))
+	b.WriteString("\n")
 }
 
 func writeErrorPages(b *strings.Builder, cfg config.Config) {
@@ -216,25 +213,24 @@ func writeLocationSecurity(b *strings.Builder, cfg config.Config, rule proxy.Rul
 	sec := rule.Security.Normalize()
 	writeLocationSecurityComments(b, rule, opts)
 
-	for _, cidr := range sec.IPBlacklist {
-		b.WriteString(fmt.Sprintf("        deny %s;\n", cidr))
+	acl := nginxtmpl.AccessControl{
+		Deny:      sec.IPBlacklist,
+		ChinaDeny: chinaOnlyCheckDirectives(rule, opts),
 	}
-
-	writeChinaOnlyCheck(b, rule, opts)
-
 	if sec.WhitelistEnabled() {
-		for _, cidr := range sec.IPWhitelist {
-			b.WriteString(fmt.Sprintf("        allow %s;\n", cidr))
-		}
-		b.WriteString("        deny all;\n")
+		acl.Allow = sec.IPWhitelist
 	}
+	b.WriteString(nginxtmpl.AccessDirectives(acl, "        "))
 
+	limits := nginxtmpl.LimitConfig{Zone: fmt.Sprintf("fonu_rule_%d", rule.ID)}
 	if sec.ConnLimitEnabled() {
-		b.WriteString(fmt.Sprintf("        limit_conn fonu_rule_%d_conn %d;\n", rule.ID, sec.ConnLimit.Max))
+		limits.Conn = sec.ConnLimit.Max
 	}
 	if sec.RateLimitEnabled() {
-		b.WriteString(fmt.Sprintf("        limit_req zone=fonu_rule_%d_req burst=%d nodelay;\n", rule.ID, sec.RateLimit.Burst))
+		limits.Rate = sec.RateLimit.Rate
+		limits.Burst = sec.RateLimit.Burst
 	}
+	b.WriteString(nginxtmpl.LimitDirectives(limits, "        "))
 
 	if sec.BasicAuthEnabled() {
 		path := absNginxPath(HtpasswdPath(cfg, rule.ID))
