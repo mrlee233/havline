@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,14 +50,37 @@ func TestEnsureComposeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := server.ensureComposeFile(); err == nil {
+	if err := server.ensureComposeFile(context.Background()); err == nil {
 		t.Fatal("缺少 compose 文件时应返回错误")
 	}
 	path := filepath.Join(dir, "docker-compose.yml")
 	if err := os.WriteFile(path, []byte("services: {}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := server.ensureComposeFile(); err != nil {
+	if err := server.ensureComposeFile(context.Background()); err != nil {
 		t.Fatalf("存在 compose 文件时不应报错: %v", err)
+	}
+}
+
+func TestResolveComposePlanUsesHostProjectDir(t *testing.T) {
+	containerDir := t.TempDir()
+	hostDir := t.TempDir()
+	server, err := NewServer(Config{
+		ProjectDir:     containerDir,
+		ComposeFile:    "docker-compose.hub.yml",
+		HostProjectDir: hostDir,
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := server.resolveComposePlan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.helper {
+		t.Fatal("容器内看不到 Compose 文件时应使用 helper 模式")
+	}
+	if plan.helperComposePath != filepath.Join("/workspace", "docker-compose.hub.yml") {
+		t.Fatalf("helper compose 路径不正确: %s", plan.helperComposePath)
 	}
 }

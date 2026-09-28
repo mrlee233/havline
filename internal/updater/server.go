@@ -22,16 +22,19 @@ var serviceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 // Config 是 fonu-updater sidecar 的运行配置。
 type Config struct {
-	SocketPath    string
-	ProjectDir    string
-	ComposeFile   string
-	Service       string
-	Mode          string
-	RepoURL       string
-	Branch        string
-	AppURL        string
-	BuildTimeout  time.Duration
-	HealthTimeout time.Duration
+	SocketPath     string
+	ProjectDir     string
+	ComposeFile    string
+	Service        string
+	Mode           string
+	RepoURL        string
+	Branch         string
+	AppURL         string
+	HostProjectDir string
+	SelfImage      string
+	DockerSocket   string
+	BuildTimeout   time.Duration
+	HealthTimeout  time.Duration
 }
 
 type Server struct {
@@ -42,6 +45,14 @@ type Server struct {
 	mu          sync.Mutex
 	state       Status
 	lastChecked time.Time
+}
+
+type composePlan struct {
+	helper            bool
+	containerCompose  string
+	hostProjectDir    string
+	hostComposePath   string
+	helperComposePath string
 }
 
 // NewServer 校验 sidecar 配置；参数不正确时拒绝启动。
@@ -68,6 +79,11 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 	if strings.TrimSpace(cfg.AppURL) == "" {
 		cfg.AppURL = "http://fonu:6893"
 	}
+	if strings.TrimSpace(cfg.DockerSocket) == "" {
+		cfg.DockerSocket = "/var/run/docker.sock"
+	}
+	cfg.HostProjectDir = strings.TrimSpace(cfg.HostProjectDir)
+	cfg.SelfImage = strings.TrimSpace(cfg.SelfImage)
 	if cfg.BuildTimeout <= 0 {
 		cfg.BuildTimeout = 30 * time.Minute
 	}
@@ -162,15 +178,95 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, status)
 }
 
-func (s *Server) ensureComposeFile() error {
+func (s *Server) ensureComposeFile(ctx context.Context) error {
+	_, err := s.resolveComposePlan(ctx)
+	return err
+}
+
+func (s *Server) resolveComposePlan(ctx context.Context) (composePlan, error) {
 	info, err := os.Stat(s.composePath)
+	if err == nil && !info.IsDir() {
+		return composePlan{containerCompose: s.composePath}, nil
+	}
+	if err == nil && info.IsDir() {
+		return composePlan{}, fmt.Errorf("Compose 路径是目录而不是文件：%s", s.composePath)
+	}
+	hostDir, hostComposePath, discoverErr := s.discoverHostCompose(ctx)
+	if discoverErr == nil {
+		helperPath, pathErr := helperComposePath(hostDir, hostComposePath)
+		if pathErr == nil {
+			return composePlan{
+				helper:            true,
+				hostProjectDir:    hostDir,
+				hostComposePath:   hostComposePath,
+				helperComposePath: helperPath,
+			}, nil
+		}
+	}
+	return composePlan{}, fmt.Errorf("找不到 Compose 文件 %s，且无法自动定位宿主机目录；请设置 FONU_UPDATE_HOST_DIR", s.composePath)
+}
+
+func (s *Server) discoverHostCompose(ctx context.Context) (string, string, error) {
+	if s.cfg.HostProjectDir != "" {
+		if !filepath.IsAbs(s.cfg.HostProjectDir) {
+			return "", "", fmt.Errorf("FONU_UPDATE_HOST_DIR 必须是绝对路径")
+		}
+		return s.cfg.HostProjectDir, filepath.Join(s.cfg.HostProjectDir, filepath.Base(s.cfg.ComposeFile)), nil
+	}
+	workingDir, _ := s.dockerLabel(ctx, "com.docker.compose.project.working_dir")
+	configFiles, _ := s.dockerLabel(ctx, "com.docker.compose.project.config_files")
+	hostDir := strings.TrimSpace(workingDir)
+	hostCompose := chooseComposeFile(configFiles, filepath.Base(s.cfg.ComposeFile))
+	if hostCompose == "" {
+		return "", "", fmt.Errorf("无法从容器标签读取 Compose 文件")
+	}
+	if hostDir == "" {
+		hostDir = filepath.Dir(hostCompose)
+	}
+	if !filepath.IsAbs(hostDir) || !filepath.IsAbs(hostCompose) {
+		return "", "", fmt.Errorf("容器标签中的 Compose 路径不是绝对路径")
+	}
+	return filepath.Clean(hostDir), filepath.Clean(hostCompose), nil
+}
+
+func (s *Server) dockerLabel(ctx context.Context, label string) (string, error) {
+	format := fmt.Sprintf(`{{ index .Config.Labels %q }}`, label)
+	checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	output, err := runCommand(checkCtx, "", nil, "docker", "inspect", "--format", format, s.cfg.Service)
 	if err != nil {
-		return fmt.Errorf("找不到 Compose 文件 %s；请确认 updater 的 /workspace 挂载，或在 .env 设置 FONU_UPDATE_HOST_DIR 指向 Compose 所在目录", s.composePath)
+		return "", err
 	}
-	if info.IsDir() {
-		return fmt.Errorf("Compose 路径是目录而不是文件：%s", s.composePath)
+	return strings.TrimSpace(output), nil
+}
+
+func chooseComposeFile(configFiles, expectedBase string) string {
+	for _, item := range strings.Split(configFiles, ",") {
+		path := strings.TrimSpace(item)
+		if path == "" {
+			continue
+		}
+		if filepath.Base(path) == expectedBase {
+			return path
+		}
 	}
-	return nil
+	for _, item := range strings.Split(configFiles, ",") {
+		if path := strings.TrimSpace(item); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func helperComposePath(hostDir, hostCompose string) (string, error) {
+	rel, err := filepath.Rel(hostDir, hostCompose)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("Compose 文件不在宿主机项目目录内")
+	}
+	return filepath.Join("/workspace", rel), nil
 }
 
 // Status 返回当前版本、远端版本和任务状态。
@@ -182,7 +278,7 @@ func (s *Server) Status(ctx context.Context) Status {
 		return status
 	}
 	s.mu.Unlock()
-	if err := s.ensureComposeFile(); err != nil {
+	if err := s.ensureComposeFile(ctx); err != nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.state.UpdateAvailable = false

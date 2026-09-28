@@ -94,7 +94,7 @@ docker compose -f docker-compose.hub.yml up -d --build
 | `FONU_UPDATE_BRANCH` | `git` 模式下的分支，默认 `main` |
 | `FONU_UPDATE_APP_URL` | 健康检查地址，默认 `http://fonu:6893` |
 | `DOCKER_SOCK` | 宿主机 Docker Socket，默认 `/var/run/docker.sock` |
-| `FONU_UPDATE_HOST_DIR` | 宿主机上 Compose 文件所在目录；Docker UI / fnOS 场景下建议显式设置 |
+| `FONU_UPDATE_HOST_DIR` | 宿主机上 Compose 文件所在目录；留空时自动从 Compose 容器标签发现，设置后作为显式覆盖 |
 
 ## 6. 前端行为
 
@@ -160,13 +160,15 @@ docker compose up -d --build
 
 ### 升级时报 `/workspace/docker-compose.hub.yml: no such file or directory`
 
-说明 updater 容器没有挂载到真实的 Compose 项目目录。先查询运行中 `fonu` 容器的 Compose 工作目录：
+v1.3.6 起 updater 会自动从 `fonu` 容器的 Compose 标签读取宿主机目录，并通过 helper 容器执行 Compose。如果自动发现仍失败，可以显式设置目录：
+
+先查询运行中 `fonu` 容器的 Compose 工作目录：
 
 ```bash
 docker inspect fonu --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}'
 ```
 
-把输出目录写入 Compose 同层 `.env`：
+把输出目录写入 Compose 同层 `.env` 作为覆盖：
 
 ```dotenv
 FONU_UPDATE_HOST_DIR=/实际/的/Compose/目录
@@ -178,7 +180,7 @@ FONU_UPDATE_HOST_DIR=/实际/的/Compose/目录
 docker compose -f /实际/的/Compose/目录/docker-compose.hub.yml up -d --build updater
 ```
 
-状态接口此时会明确提示 Compose 文件缺失，修复挂载后按钮才会重新显示。
+状态接口会明确提示 Compose 文件缺失，修复挂载或设置覆盖后按钮才会重新显示。
 
 ### `docker-compose.hub.yml` 模式无法读取远端版本
 
@@ -226,16 +228,16 @@ FONU_VERSION=<旧版本> docker compose up -d --no-deps --force-recreate fonu
 
 ## 10. 在线升级验证
 
-示例页面用于验证升级结果。v1.3.5 的验证流程：
+示例页面用于验证升级结果。v1.3.6 的验证流程：
 
 1. 确认当前线上实例为 v1.3.0，且 `fonu-updater` sidecar 已运行。
-2. 确认远端 `main` 分支的 `VERSION` 为 `1.3.5`。
+2. 确认远端 `main` 分支的 `VERSION` 为 `1.3.6`。
 3. 在侧栏看到「一键升级」后点击并确认。
 4. 等待升级弹窗显示成功，页面自动刷新。
 5. 打开侧栏「示例页面」，确认：
    - 页面路由为 `/example`；
-   - 页面显示的版本为 `1.3.5`；
-   - 页面显示验证标识 `v1.3.5-example-page`；
+   - 页面显示的版本为 `1.3.6`；
+   - 页面显示验证标识 `v1.3.6-example-page`；
    - 「升级验证」显示为「通过」。
 
 如果示例页面可见且版本正确，说明镜像构建、容器重建、后端版本注入和前端静态资源更新均已生效。

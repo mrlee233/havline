@@ -63,6 +63,9 @@ services:
       FONU_UPDATE_SERVICE: fonu
       FONU_UPDATE_MODE: local
       FONU_UPDATE_APP_URL: http://fonu:6893
+      FONU_UPDATE_HOST_DIR: ${FONU_UPDATE_HOST_DIR:-}
+      FONU_UPDATE_SELF_IMAGE: fonu-updater:${FONU_VERSION:-local}
+      FONU_UPDATE_DOCKER_SOCK: ${DOCKER_SOCK:-/var/run/docker.sock}
       TZ: ${TZ:-Asia/Shanghai}
 
 volumes:

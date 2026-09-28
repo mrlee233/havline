@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.6] - 2026-09-28
+
+### 修复
+
+- **自动定位宿主机 Compose 目录**：当 updater 容器内的 `/workspace` 没有挂载到真实 Compose 目录时，不再直接失败。updater 会从 `fonu` 容器的 `com.docker.compose.project.working_dir` / `project.config_files` 标签读取宿主机路径，并通过临时 helper 容器挂载真实目录执行 `docker compose`。`FONU_UPDATE_HOST_DIR` 仍可作为显式覆盖
+- 示例页验证标识更新为 `v1.3.6-example-page`
+
+### 变更
+
+- 版本号提升到 1.3.6；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8
+
+### 测试
+
+- `internal/updater`：覆盖 Compose 文件直挂载与宿主机目录 helper 模式
+
 ## [v1.3.5] - 2026-09-28
 
 ### 新增

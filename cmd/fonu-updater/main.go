@@ -12,14 +12,17 @@ import (
 
 func main() {
 	server, err := updater.NewServer(updater.Config{
-		SocketPath:  envOr("FONU_UPDATER_SOCKET", "/run/fonu-updater/updater.sock"),
-		ProjectDir:  envOr("FONU_UPDATE_PROJECT_DIR", "/workspace"),
-		ComposeFile: envOr("FONU_UPDATE_COMPOSE_FILE", "docker-compose.yml"),
-		Service:     envOr("FONU_UPDATE_SERVICE", "fonu"),
-		Mode:        envOr("FONU_UPDATE_MODE", "local"),
-		RepoURL:     envOr("FONU_UPDATE_REPO", ""),
-		Branch:      envOr("FONU_UPDATE_BRANCH", "main"),
-		AppURL:      envOr("FONU_UPDATE_APP_URL", "http://fonu:6893"),
+		SocketPath:     envOr("FONU_UPDATER_SOCKET", "/run/fonu-updater/updater.sock"),
+		ProjectDir:     envOr("FONU_UPDATE_PROJECT_DIR", "/workspace"),
+		ComposeFile:    envOr("FONU_UPDATE_COMPOSE_FILE", "docker-compose.yml"),
+		Service:        envOr("FONU_UPDATE_SERVICE", "fonu"),
+		Mode:           envOr("FONU_UPDATE_MODE", "local"),
+		RepoURL:        envOr("FONU_UPDATE_REPO", ""),
+		Branch:         envOr("FONU_UPDATE_BRANCH", "main"),
+		AppURL:         envOr("FONU_UPDATE_APP_URL", "http://fonu:6893"),
+		HostProjectDir: envOr("FONU_UPDATE_HOST_DIR", ""),
+		SelfImage:      envOr("FONU_UPDATE_SELF_IMAGE", ""),
+		DockerSocket:   envOr("FONU_UPDATE_DOCKER_SOCK", "/var/run/docker.sock"),
 	}, nil)
 	if err != nil {
 		log.Fatal(err)

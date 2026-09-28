@@ -22,7 +22,7 @@ func (s *Server) runUpdate(ctx context.Context) error {
 	s.state.Phase = PhaseRunning
 	s.state.Message = "正在准备升级"
 	s.mu.Unlock()
-	if err := s.ensureComposeFile(); err != nil {
+	if err := s.ensureComposeFile(ctx); err != nil {
 		return err
 	}
 
@@ -316,9 +316,53 @@ func imageTag(image string) string {
 }
 
 func (s *Server) compose(ctx context.Context, version string, args ...string) (string, error) {
-	fullArgs := append([]string{"compose", "-f", s.composePath}, args...)
+	plan, err := s.resolveComposePlan(ctx)
+	if err != nil {
+		return "", err
+	}
+	if plan.helper {
+		return s.composeViaHelper(ctx, plan, version, args...)
+	}
+	fullArgs := append([]string{"compose", "-f", plan.containerCompose}, args...)
 	env := []string{"FONU_VERSION=" + version}
 	return runCommand(ctx, s.cfg.ProjectDir, env, "docker", fullArgs...)
+}
+
+func (s *Server) composeViaHelper(ctx context.Context, plan composePlan, version string, args ...string) (string, error) {
+	image, err := s.selfImage(ctx)
+	if err != nil {
+		return "", err
+	}
+	helperArgs := []string{
+		"run", "--rm", "--entrypoint", "docker",
+		"-v", s.cfg.DockerSocket + ":/var/run/docker.sock",
+		"-v", plan.hostProjectDir + ":/workspace",
+		"-w", "/workspace",
+		"-e", "FONU_VERSION=" + version,
+		image,
+		"compose", "-f", plan.helperComposePath,
+	}
+	helperArgs = append(helperArgs, args...)
+	return runCommand(ctx, "", nil, "docker", helperArgs...)
+}
+
+func (s *Server) selfImage(ctx context.Context) (string, error) {
+	if s.cfg.SelfImage != "" {
+		return s.cfg.SelfImage, nil
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	output, err := runCommand(ctx, "", nil, "docker", "inspect", "--format", "{{.Config.Image}}", hostname)
+	if err != nil {
+		return "", fmt.Errorf("无法识别 updater 镜像：%w", err)
+	}
+	image := strings.TrimSpace(output)
+	if image == "" {
+		return "", fmt.Errorf("无法识别 updater 镜像")
+	}
+	return image, nil
 }
 
 func runCommand(ctx context.Context, dir string, extraEnv []string, name string, args ...string) (string, error) {
