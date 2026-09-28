@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.8] - 2026-09-28
+
+### 新增
+
+- **示例页面 v1.3.8 验证标识**：页面版本提示、「本次升级验证」区块、页面状态和验证标识同步更新为 `v1.3.8-example-page`，用于再次验证线上升级后的前端资源切换
+
+### 变更
+
+- 版本号提升到 1.3.8；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8
+
+### 测试
+
+- 前端类型检查、单元测试与生产构建
+
 ## [v1.3.7] - 2026-09-28
 
 ### 新增
