@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.2] - 2026-09-28
+
+### 修复
+
+- **升级 Agent 不再强制切回 SSH 隧道**：HTTPS 直连模式下点击「升级 Agent」原先会无条件建立隧道并把 transport 改回 `tunnel`，用户升级后需要重新切换 HTTPS。现在升级前是 `https-pin` 时会保持 HTTPS 直连，只更新 Token 密文并重新验证连通
+- **清理隧道模式下残留的 HTTPS 反代**：旧升级流程切回隧道时没有关闭 Agent 上的 `fonuagent-https.conf`，导致 7443 等端口继续暴露。现在从 HTTPS 迁移到隧道、应用启动恢复隧道、手动「重启隧道」时都会通过隧道调用 `DisableHTTPS` 清理残留
+
+### 变更
+
+- 版本号提升到 1.5.2；`AgentVersion` 保持 **0.14.1**，本次是中央端修复，不需要重新升级 Agent
+
+### 测试
+
+- `internal/frp` 现有单元测试与编译校验通过；升级分支依赖真实 SSH/Agent 环境，未新增本地集成测试
+
 ## [v1.5.1] - 2026-09-28
 
 ### 变更

@@ -745,6 +745,10 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	if err != nil {
 		return Server{}, err
 	}
+	// 已是 HTTPS 直连时，升级 Agent 不应把用户的传输方式改回隧道。
+	if server.AgentTransport == "https-pin" {
+		return s.keepAgentHTTPSAfterInstall(ctx, server, token, agentToken)
+	}
 	localPort, listener, err := s.reserveAgentTunnelPort(ctx, serverID, server.AgentLocalPort)
 	if err != nil {
 		return Server{}, err
@@ -786,8 +790,43 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 		_ = (AgentInstaller{SSH: installer}).RestorePreviousConfig(ctx)
 		return Server{}, err
 	}
+	// 旧版升级流程可能残留 fonuagent-https.conf，这里通过隧道顺手关闭，避免 7443 继续暴露。
+	_ = client.DisableHTTPS(ctx)
 	s.invalidateAgentClient(serverID)
 	return updated, nil
+}
+
+// keepAgentHTTPSAfterInstall 在 HTTPS 直连模式下完成 Agent 升级：
+// 保持 agent_url、pin 与 transport 不变，只更新 Token 密文并重新验证连通。
+func (s *Service) keepAgentHTTPSAfterInstall(ctx context.Context, server Server, token, agentToken string) (Server, error) {
+	baseURL := agentHTTPSBaseURL(server)
+	pins := agentTransportPins(server)
+	if len(pins) == 0 {
+		return Server{}, fmt.Errorf("Agent 已升级，但 HTTPS 直连缺少证书指纹；请重新切换 HTTPS 直连")
+	}
+	client := NewAgentClientWithPins(baseURL, token, pins...)
+	if err := client.Ping(ctx); err != nil {
+		return Server{}, fmt.Errorf("Agent 已升级，但 HTTPS 直连验证失败: %w", err)
+	}
+	input := ServerInput{
+		Name: server.Name, ServerAddr: server.ServerAddr, ServerPort: server.ServerPort,
+		TLS: server.TLS, TLSServerName: server.TLSServerName, Enabled: server.Enabled,
+		Options: server.Options, AgentURL: baseURL,
+		AgentToken: token, SSHHost: server.SSHHost, SSHPort: server.SSHPort, SSHUser: server.SSHUser,
+		SSHAuth: server.SSHAuth, MgmtEnabled: true,
+	}
+	if _, err := s.store.UpdateServer(ctx, server.ID, input, "", false, agentToken, true, "", false); err != nil {
+		return Server{}, err
+	}
+	listenAddr := strings.TrimSpace(server.AgentListenAddr)
+	if listenAddr == "" {
+		listenAddr = fmt.Sprintf("0.0.0.0:%d", listenPort("", 7443))
+	}
+	if err := s.store.SetAgentTransport(ctx, server.ID, baseURL, "https-pin", server.AgentLocalPort, server.AgentTLSPin, listenAddr, "connected", ""); err != nil {
+		return Server{}, err
+	}
+	s.invalidateAgentClient(server.ID)
+	return s.store.GetServer(ctx, server.ID)
 }
 
 func (s *Service) tunnelContext(fallback context.Context) context.Context {
@@ -885,8 +924,19 @@ func (s *Service) StartAgentTunnels(ctx context.Context) {
 		}
 		if _, err := s.ensureAgentTunnel(ctx, server.ID); err != nil {
 			s.logger.Warn("Agent 隧道启动失败", "server_id", server.ID, "error", err.Error())
+			continue
 		}
+		s.cleanupLegacyAgentHTTPS(ctx, server.ID)
 	}
+}
+
+// cleanupLegacyAgentHTTPS 清理隧道模式下可能残留的 fonuagent-https.conf，避免 7443 继续暴露。
+func (s *Service) cleanupLegacyAgentHTTPS(ctx context.Context, serverID int64) {
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return
+	}
+	_ = client.DisableHTTPS(ctx)
 }
 
 func (s *Service) stopAgentTunnels() {
@@ -933,6 +983,7 @@ func (s *Service) RestartAgentTunnel(ctx context.Context, serverID int64) (Serve
 		_ = s.store.SetAgentTransport(ctx, serverID, current.AgentURL, "tunnel", current.AgentLocalPort, current.AgentTLSPin, current.AgentListenAddr, "failed", err.Error())
 		return Server{}, err
 	}
+	s.cleanupLegacyAgentHTTPS(ctx, serverID)
 	server, err := s.store.GetServer(ctx, serverID)
 	if err != nil {
 		return Server{}, err
