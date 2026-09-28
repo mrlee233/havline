@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.4] - 2026-09-28
+
+### 修复
+
+- **Agent nginx 版本目录被误加载**：切换 HTTPS 直连时，配置备份会写到 `<配置文件>.versions` 目录；该目录位于 `sites-enabled` 时会被 nginx 的 `include .../sites-enabled/*` 当成配置文件读取，导致 `nginx -t` 报 `pread() ".../fonuagent-https.conf.versions" failed (21: Is a directory)`。现在版本目录改为隐藏目录 `.<文件名>.versions`，`include *` 不再匹配；旧目录会在读取、备份或 `nginx -t` 前自动迁移，历史版本内容保留
+
+### 变更
+
+- 版本号提升到 1.4.4；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.13.0 → **0.13.1**，内嵌 amd64 / arm64 二进制已重编；VPS 上需点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/fsutil`：新增隐藏版本目录与旧目录迁移测试
+- `internal/agent`：新增 `migrateLegacyVersionDirs` 迁移测试
+
 ## [v1.4.3] - 2026-09-28
 
 ### 修复

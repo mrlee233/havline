@@ -198,3 +198,34 @@ func TestReadVersionRejectsTraversal(t *testing.T) {
 		t.Fatalf("版本目录不存在时应返回空列表且无错误：%v %v", versions, err)
 	}
 }
+
+func TestVersionsDirIsHidden(t *testing.T) {
+	path := filepath.Join("/etc/nginx/sites-enabled", "fonuagent-https.conf")
+	base := filepath.Base(VersionsDir(path))
+	if !strings.HasPrefix(base, ".") {
+		t.Fatalf("版本目录应以点号开头，避免被 nginx 的 include * 加载：%s", base)
+	}
+}
+
+func TestMigrateLegacyVersions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "fonuagent-https.conf")
+	legacy := path + ".versions"
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	name := "20260101T000000.000-abcd.conf"
+	if err := os.WriteFile(filepath.Join(legacy, name), []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	versions, err := ListVersions(path)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("迁移后应保留 1 个版本：%v %v", versions, err)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("旧版本目录应被移走，避免 nginx include * 命中：%v", err)
+	}
+	data, err := ReadVersion(path, versions[0].Name)
+	if err != nil || string(data) != "old" {
+		t.Fatalf("迁移后版本内容应可读：%q %v", data, err)
+	}
+}

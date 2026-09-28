@@ -61,15 +61,62 @@ func Backup(path string) error {
 	return WriteFileAtomic(path+".bak", data, 0o600)
 }
 
-// VersionsDir 返回某文件的版本目录（<path>.versions），供列表 / 回滚读取。
+// VersionsDir 返回某文件的版本目录（.<name>.versions），供列表 / 回滚读取。
+// 目录名以点号开头，避免被 nginx 的 include <dir>/* 当成配置文件读取。
 func VersionsDir(path string) string {
+	return filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".versions")
+}
+
+// legacyVersionsDir 是旧布局（<path>.versions）。它会被 nginx 的 include * 误读为配置文件，
+// 因此读取 / 备份前统一迁移到隐藏目录。
+func legacyVersionsDir(path string) string {
 	return path + ".versions"
 }
 
-// BackupVersioned 把现有文件留存为 <path>.versions/<时间戳>-<随机>.conf，并只保留最近 keep 份。
+// MigrateLegacyVersions 把旧版本目录迁移到隐藏目录。只移动内容，不删除历史版本；
+// 迁移后旧目录已空，删除它是为了让 nginx 的 include * 不再命中该目录。
+func MigrateLegacyVersions(path string) error {
+	legacy := legacyVersionsDir(path)
+	info, err := os.Stat(legacy)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	target := VersionsDir(path)
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+			return err
+		}
+		if err := os.Rename(legacy, target); err == nil {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(target, 0o700); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(legacy)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		src := filepath.Join(legacy, entry.Name())
+		dst := filepath.Join(target, entry.Name())
+		if _, err := os.Stat(dst); err == nil {
+			continue
+		}
+		if err := os.Rename(src, dst); err != nil {
+			return err
+		}
+	}
+	return os.Remove(legacy)
+}
+
+// BackupVersioned 把现有文件留存为 .<name>.versions/<时间戳>-<随机>.conf，并只保留最近 keep 份。
 // 文件名前缀是 UTC 时间戳（同一秒内用随机后缀避开冲突），因此目录内按文件名倒序就是版本新旧顺序。
 // 文件不存在视为无需备份，返回空串；keep <= 0 表示不剪枝。
 func BackupVersioned(path string, keep int) (string, error) {
+	if err := MigrateLegacyVersions(path); err != nil {
+		return "", err
+	}
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return "", nil
@@ -107,6 +154,9 @@ type VersionEntry struct {
 
 // ListVersions 按新的在前列出版本；版本目录不存在时返回空列表（首次备份前是正常状态）。
 func ListVersions(path string) ([]VersionEntry, error) {
+	if err := MigrateLegacyVersions(path); err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(VersionsDir(path))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -134,6 +184,9 @@ func ListVersions(path string) ([]VersionEntry, error) {
 func ReadVersion(path, name string) ([]byte, error) {
 	if name == "" || name != filepath.Base(name) || name == "." || name == ".." {
 		return nil, fmt.Errorf("版本名无效")
+	}
+	if err := MigrateLegacyVersions(path); err != nil {
+		return nil, err
 	}
 	data, err := os.ReadFile(filepath.Join(VersionsDir(path), name))
 	if err != nil {

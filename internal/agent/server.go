@@ -52,7 +52,9 @@ import (
 // 0.12.8：Agent Bearer Token 改为常量时间比较，避免认证路径上的长度/内容时序泄漏。
 // 0.12.9：限流状态文件损坏时拒绝覆盖，避免保存单条规则时清空其他域名的限流配置。
 // 0.13.0：默认只监听回环地址，非回环监听必须显式允许；状态接口暴露监听范围与传输安全。
-const AgentVersion = "0.13.0"
+// 0.13.1：nginx 版本备份目录改为隐藏目录（.<name>.versions）并自动迁移旧目录，
+// 修掉旧 <name>.versions 目录被 include * 当配置文件读取、nginx -t 报 pread() "Is a directory" 的问题。
+const AgentVersion = "0.13.1"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -760,6 +762,7 @@ func detectNginxConfDir(binary string) (string, error) {
 	})
 	var lastReason string
 	for _, dir := range dirs {
+		migrateLegacyVersionDirs(dir)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			lastReason = fmt.Sprintf("%s: %v", dir, err)
 			continue
@@ -1275,7 +1278,28 @@ func (s *Server) routePath(domain string) string {
 }
 
 func (s *Server) validateNginx() error {
+	migrateLegacyVersionDirs(s.cfg.NginxConfDir)
 	return runCommand(s.nginxPath(), "-t")
+}
+
+// migrateLegacyVersionDirs 把 conf 目录下的 <name>.versions 目录迁移为隐藏目录。
+// 旧布局会被 nginx 的 include * 当成配置文件读取，报 pread() "Is a directory" 导致 nginx -t 失败。
+func migrateLegacyVersionDirs(dir string) {
+	dir = strings.TrimSpace(dir)
+	if dir == "" {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == ".versions" || !strings.HasSuffix(entry.Name(), ".versions") {
+			continue
+		}
+		base := strings.TrimSuffix(filepath.Join(dir, entry.Name()), ".versions")
+		_ = fsutil.MigrateLegacyVersions(base)
+	}
 }
 
 func (s *Server) reloadNginx() error {

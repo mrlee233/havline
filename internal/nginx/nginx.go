@@ -131,7 +131,7 @@ func (m *Manager) Apply(ctx context.Context, rules []proxy.Rule, certs []CertSou
 	}
 
 	currentPath := m.cfg.NginxConfigPath()
-	// 覆盖前留退路：.bak 保留最近一次（兼容既有读取方），.versions/ 保留最近 10 份（供版本对比与回滚）
+	// 覆盖前留退路：.bak 保留最近一次（兼容既有读取方），隐藏的 .versions 目录保留最近 10 份（供版本对比与回滚）
 	if err := fsutil.Backup(currentPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return ApplyResult{}, err
