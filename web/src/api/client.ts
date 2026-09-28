@@ -37,6 +37,10 @@ import type {
   SystemLogEntry,
   NotifyTestPayload,
   UpdateStatus,
+  CfMirror,
+  CfRuntimeStatus,
+  CfTunnel,
+  CfTunnelPayload,
 } from './types'
 
 export function asList<T>(value: T[] | null | undefined): T[] {
@@ -474,4 +478,33 @@ export const api = {
     }
     return (await response.json()) as { message: string }
   },
+
+  listCfTunnels: () => request<CfTunnel[]>('/api/cloudflare/tunnels'),
+  getCfTunnel: (id: number) => request<CfTunnel>(`/api/cloudflare/tunnels/${id}`),
+  createCfTunnel: (payload: CfTunnelPayload) =>
+    request<CfTunnel>('/api/cloudflare/tunnels', { method: 'POST', body: JSON.stringify(payload) }),
+  updateCfTunnel: (id: number, payload: CfTunnelPayload) =>
+    request<CfTunnel>(`/api/cloudflare/tunnels/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  deleteCfTunnel: (id: number) =>
+    request<{ ok: boolean }>(`/api/cloudflare/tunnels/${id}`, { method: 'DELETE' }),
+  startCfTunnel: (id: number) =>
+    request<CfTunnel>(`/api/cloudflare/tunnels/${id}/start`, { method: 'POST' }),
+  stopCfTunnel: (id: number) =>
+    request<CfTunnel>(`/api/cloudflare/tunnels/${id}/stop`, { method: 'POST' }),
+  restartCfTunnel: (id: number) =>
+    request<CfTunnel>(`/api/cloudflare/tunnels/${id}/restart`, { method: 'POST' }),
+  getCfTunnelStatus: (id: number) =>
+    request<CfRuntimeStatus>(`/api/cloudflare/tunnels/${id}/status`),
+  getCfTunnelLogs: (id: number, lines = 200) =>
+    request<{ output: string }>(`/api/cloudflare/tunnels/${id}/logs?lines=${lines}`),
+  getCfTunnelConfig: (id: number) =>
+    request<{ content: string }>(`/api/cloudflare/tunnels/${id}/config`),
+  getCfBinary: () => request<{ version: string; mirrors: CfMirror[] }>('/api/cloudflare/binary'),
+  downloadCfBinary: (mirror: string) =>
+    request<{ ok: boolean; version: string }>('/api/cloudflare/binary/download', {
+      method: 'POST',
+      body: JSON.stringify({ mirror }),
+    }),
+  getCfIngressCandidates: () =>
+    request<{ hostnames: string[] }>('/api/cloudflare/ingress-candidates'),
 }

@@ -280,6 +280,8 @@ Cloudflare Tunnel 把「服务端」换成 Cloudflare 的边缘网络：本机 `
 
 > 本节是 2026-09-28 的优化版落地口径。§一～§十一 保留为背景与论证；出现冲突时以本节为准。
 
+> 实施状态（2026-09-28，v1.6.0）：阶段 1–2 已实施，包含 token-local / token-remote 两种模式、token 解码与 creds.json / config.yml 生成、ingress 生成器、SQLite 存储、cloudflared 二进制下载、进程托管、日志、metrics 端口发现与健康抓取、`/api/cloudflare/*` 接口与前端页面。阶段 3 的账号模式（cert.pem）与云端 fetch / push、阶段 4 的边缘优选与快速隧道尚未实施。
+
 ### 12.1 源码核对新增的关键事实
 
 逐文件核对 `F:\WWW\cf\Tunnel-Cloudflared-linux` 后，以下事实会直接改变实施细节：

@@ -1,0 +1,379 @@
+<template>
+  <PageHeader title="Cloudflare 隧道" description="通过 cloudflared 把内网 Web 服务发布到 Cloudflare 边缘，无需公网 IP">
+    <template #actions>
+      <n-button :loading="binaryLoading" @click="openBinary">cloudflared 二进制</n-button>
+      <n-button type="primary" @click="openCreate">新建隧道</n-button>
+    </template>
+  </PageHeader>
+
+  <n-alert v-if="binaryVersion" type="info" :bordered="false" class="cf-alert">
+    已安装：<span class="mono">{{ binaryVersion }}</span>
+  </n-alert>
+  <n-alert v-else type="warning" :bordered="false" class="cf-alert">
+    尚未安装 cloudflared。请先点右上角「cloudflared 二进制」下载，再创建隧道。
+  </n-alert>
+
+  <FonuCard title="隧道列表" subtitle="token 模式默认使用 Fonu 生成的本地 ingress；云端规则模式请在 Cloudflare 面板管理">
+    <div v-if="!tunnels.length" class="cf-empty">还没有隧道，点「新建隧道」开始。</div>
+    <div v-for="item in tunnels" :key="item.id" class="cf-row">
+      <div class="cf-row__main">
+        <strong>{{ item.name }}</strong>
+        <StatusBadge :kind="statusKind(item.status)" :text="statusText(item.status)" />
+        <span class="cf-meta mono">{{ modeText(item.mode) }}</span>
+        <span class="cf-meta mono">{{ item.tunnel_id || '—' }}</span>
+        <span v-if="item.metrics_port" class="cf-meta mono">metrics :{{ item.metrics_port }}</span>
+      </div>
+      <div class="cf-row__actions">
+        <n-button size="small" @click="openDetail(item)">详情</n-button>
+        <n-button size="small" @click="openEdit(item)">编辑</n-button>
+        <n-button v-if="item.status !== 'connected' && item.status !== 'starting'" size="small" type="success" @click="startTunnel(item)">启动</n-button>
+        <n-button v-else size="small" type="warning" @click="stopTunnel(item)">停止</n-button>
+        <n-button size="small" @click="restartTunnel(item)">重启</n-button>
+        <n-popconfirm @positive-click="removeTunnel(item)">
+          <template #trigger><n-button size="small" type="error" quaternary>删除</n-button></template>
+          将停止该隧道并删除本地配置、凭据与日志。继续？
+        </n-popconfirm>
+      </div>
+    </div>
+  </FonuCard>
+
+  <n-modal v-model:show="editorVisible" preset="card" class="cf-modal" :title="editing ? '编辑隧道' : '新建隧道'">
+    <n-form label-placement="top">
+      <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
+      <n-form-item label="模式">
+        <n-select v-model:value="form.mode" :options="modeOptions" />
+      </n-form-item>
+      <n-form-item :label="editing ? 'Token（留空保留原值）' : 'Token'">
+        <n-input v-model:value="form.token" type="password" show-password-on="click" placeholder="Cloudflare 面板生成的隧道 token" />
+      </n-form-item>
+      <n-form-item label="暴露域名">
+        <n-select v-model:value="form.hostnames" multiple filterable tag :options="hostnameOptions" placeholder="从本机反代规则选择，或直接输入域名" />
+      </n-form-item>
+      <n-form-item label="回源 service">
+        <n-input v-model:value="form.origin_service" placeholder="http://127.0.0.1:80" />
+      </n-form-item>
+      <n-form-item label="传输协议">
+        <n-select v-model:value="form.network.transport_protocol" :options="protocolOptions" />
+      </n-form-item>
+      <n-form-item label="边缘地址族">
+        <n-select v-model:value="form.network.edge_ip_version" :options="edgeOptions" />
+      </n-form-item>
+      <n-form-item label="HA 连接数"><n-input-number v-model:value="form.network.ha_connections" :min="1" :max="4" /></n-form-item>
+      <n-form-item label="代理模式">
+        <n-select v-model:value="form.network.proxy_mode" :options="proxyOptions" />
+      </n-form-item>
+      <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
+    </n-form>
+    <template #footer>
+      <div class="cf-modal__footer">
+        <n-button @click="editorVisible = false">取消</n-button>
+        <n-button type="primary" :loading="saving" @click="saveTunnel">保存</n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <n-modal v-model:show="detailVisible" preset="card" class="cf-modal" :title="detailTunnel?.name || '隧道详情'">
+    <div v-if="detailTunnel" class="cf-detail">
+      <div class="cf-detail__row">
+        <StatusBadge :kind="statusKind(detailStatus?.status || detailTunnel.status)" :text="statusText(detailStatus?.status || detailTunnel.status)" />
+        <span class="cf-meta mono">连接数 {{ detailStatus?.connections ?? 0 }}</span>
+        <span class="cf-meta mono">延迟 {{ (detailStatus?.latency_ms ?? 0).toFixed(0) }} ms</span>
+        <span class="cf-meta mono">{{ detailStatus?.transport || '—' }}</span>
+      </div>
+      <p v-if="detailStatus?.bandwidth_notice" class="cf-hint">{{ detailStatus.bandwidth_notice }}</p>
+      <h4>config.yml</h4>
+      <pre class="cf-pre">{{ detailConfig || '暂无配置' }}</pre>
+      <h4>日志</h4>
+      <pre class="cf-pre">{{ detailLogs || '暂无日志' }}</pre>
+    </div>
+    <template #footer>
+      <div class="cf-modal__footer">
+        <n-button @click="refreshDetail">刷新</n-button>
+        <n-button type="primary" @click="detailVisible = false">关闭</n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <n-modal v-model:show="binaryVisible" preset="card" class="cf-modal" title="cloudflared 二进制">
+    <n-form label-placement="top">
+      <n-form-item label="当前版本"><span class="mono">{{ binaryVersion || '未安装' }}</span></n-form-item>
+      <n-form-item label="下载镜像">
+        <n-select v-model:value="selectedMirror" :options="mirrorOptions" />
+      </n-form-item>
+    </n-form>
+    <template #footer>
+      <div class="cf-modal__footer">
+        <n-button @click="binaryVisible = false">取消</n-button>
+        <n-button type="primary" :loading="binaryLoading" @click="downloadBinary">下载并安装</n-button>
+      </div>
+    </template>
+  </n-modal>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { NAlert, NButton, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, useMessage } from 'naive-ui'
+import { api, asList } from '../api/client'
+import type { CfMirror, CfRuntimeStatus, CfTunnel, CfTunnelPayload } from '../api/types'
+import FonuCard from '../components/FonuCard.vue'
+import PageHeader from '../components/PageHeader.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
+import type { StatusKind } from '../utils/status'
+
+const message = useMessage()
+const tunnels = ref<CfTunnel[]>([])
+const binaryVersion = ref('')
+const mirrors = ref<CfMirror[]>([])
+const candidates = ref<string[]>([])
+const loading = ref(false)
+const saving = ref(false)
+const binaryLoading = ref(false)
+const selectedMirror = ref('official')
+const editorVisible = ref(false)
+const binaryVisible = ref(false)
+const detailVisible = ref(false)
+const editing = ref<CfTunnel | null>(null)
+const detailTunnel = ref<CfTunnel | null>(null)
+const detailStatus = ref<CfRuntimeStatus | null>(null)
+const detailConfig = ref('')
+const detailLogs = ref('')
+
+const form = ref<CfTunnelPayload>(emptyForm())
+
+const modeOptions = [
+  { label: 'Token + 本地规则（Fonu 生成 ingress）', value: 'token-local' },
+  { label: 'Token + 云端规则（Cloudflare 面板管理）', value: 'token-remote' },
+]
+const protocolOptions = [
+  { label: 'HTTP/2（国内推荐）', value: 'http2' },
+  { label: 'QUIC', value: 'quic' },
+  { label: '自动', value: 'auto' },
+]
+const edgeOptions = [
+  { label: 'IPv4（推荐）', value: '4' },
+  { label: 'IPv6', value: '6' },
+  { label: '自动', value: 'auto' },
+]
+const proxyOptions = [
+  { label: '跟随系统环境变量', value: 'system' },
+  { label: '禁用代理', value: 'disabled' },
+]
+const hostnameOptions = computed(() => candidates.value.map((host) => ({ label: host, value: host })))
+const mirrorOptions = computed(() => mirrors.value.map((item) => ({ label: item.name, value: item.id })))
+
+function emptyForm(): CfTunnelPayload {
+  return {
+    name: '',
+    mode: 'token-local',
+    token: '',
+    hostnames: [],
+    origin_service: 'http://127.0.0.1:80',
+    network: { transport_protocol: 'http2', edge_ip_version: '4', ha_connections: 2, proxy_mode: 'system' },
+    auto_start: false,
+  }
+}
+
+async function load() {
+  loading.value = true
+  try {
+    tunnels.value = asList(await api.listCfTunnels())
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '读取隧道列表失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadBinary() {
+  try {
+    const result = await api.getCfBinary()
+    binaryVersion.value = result.version || ''
+    mirrors.value = asList(result.mirrors)
+  } catch {
+    // 二进制状态不影响列表
+  }
+}
+
+async function loadCandidates() {
+  try {
+    candidates.value = (await api.getCfIngressCandidates()).hostnames || []
+  } catch {
+    candidates.value = []
+  }
+}
+
+function openCreate() {
+  editing.value = null
+  form.value = emptyForm()
+  editorVisible.value = true
+}
+
+function openEdit(item: CfTunnel) {
+  editing.value = item
+  form.value = {
+    name: item.name,
+    mode: item.mode,
+    token: '',
+    hostnames: [],
+    origin_service: 'http://127.0.0.1:80',
+    network: { ...item.network },
+    auto_start: item.auto_start,
+  }
+  editorVisible.value = true
+}
+
+async function saveTunnel() {
+  saving.value = true
+  try {
+    if (editing.value) {
+      await api.updateCfTunnel(editing.value.id, form.value)
+    } else {
+      await api.createCfTunnel(form.value)
+    }
+    editorVisible.value = false
+    message.success('隧道已保存')
+    await load()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存隧道失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function startTunnel(item: CfTunnel) {
+  await runAction('启动', () => api.startCfTunnel(item.id))
+}
+
+async function stopTunnel(item: CfTunnel) {
+  await runAction('停止', () => api.stopCfTunnel(item.id))
+}
+
+async function restartTunnel(item: CfTunnel) {
+  await runAction('重启', () => api.restartCfTunnel(item.id))
+}
+
+async function removeTunnel(item: CfTunnel) {
+  try {
+    await api.deleteCfTunnel(item.id)
+    message.success('隧道已删除')
+    await load()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '删除隧道失败')
+  }
+}
+
+async function runAction(label: string, fn: () => Promise<unknown>) {
+  try {
+    await fn()
+    message.success(`${label}指令已下发`)
+    await load()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : `${label}失败`)
+  }
+}
+
+async function openDetail(item: CfTunnel) {
+  detailTunnel.value = item
+  detailVisible.value = true
+  await refreshDetail()
+}
+
+async function refreshDetail() {
+  const item = detailTunnel.value
+  if (!item) return
+  try {
+    const [status, config, logs] = await Promise.all([
+      api.getCfTunnelStatus(item.id),
+      api.getCfTunnelConfig(item.id),
+      api.getCfTunnelLogs(item.id, 200),
+    ])
+    detailStatus.value = status
+    detailConfig.value = config.content || ''
+    detailLogs.value = logs.output || ''
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '读取隧道详情失败')
+  }
+}
+
+function openBinary() {
+  binaryVisible.value = true
+}
+
+async function downloadBinary() {
+  binaryLoading.value = true
+  try {
+    const result = await api.downloadCfBinary(selectedMirror.value)
+    binaryVersion.value = result.version || ''
+    message.success('cloudflared 已下载并安装')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '下载 cloudflared 失败')
+  } finally {
+    binaryLoading.value = false
+  }
+}
+
+function modeText(mode: string) {
+  if (mode === 'token-remote') return '云端规则'
+  if (mode === 'token-local') return '本地规则'
+  return mode
+}
+
+function statusText(status: string) {
+  return ({
+    connected: '已连接',
+    starting: '启动中',
+    reconnecting: '重连中',
+    failed: '失败',
+    stopped: '已停止',
+  } as Record<string, string>)[status] || status || '未知'
+}
+
+function statusKind(status: string): StatusKind {
+  if (status === 'connected') return 'success'
+  if (status === 'starting' || status === 'reconnecting') return 'warning'
+  if (status === 'failed') return 'error'
+  return 'unknown'
+}
+
+onMounted(() => {
+  void load()
+  void loadBinary()
+  void loadCandidates()
+})
+
+useVisibilityPolling(() => load(), 5000)
+</script>
+
+<style scoped>
+.cf-alert { margin-bottom: var(--fonu-space-4); }
+.cf-empty { padding: 24px 0; color: var(--fonu-text-muted); }
+.cf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fonu-space-4);
+  padding: 12px 0;
+  border-bottom: 1px solid var(--fonu-border);
+}
+.cf-row:last-child { border-bottom: none; }
+.cf-row__main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cf-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.cf-meta { font-size: 12px; color: var(--fonu-text-secondary); }
+.cf-modal { width: 620px; max-width: 94vw; }
+.cf-modal__footer { display: flex; justify-content: flex-end; gap: 8px; }
+.cf-detail__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.cf-hint { font-size: 12px; color: var(--fonu-text-muted); }
+.cf-pre {
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--fonu-border);
+  border-radius: var(--fonu-radius-sm);
+  background: var(--fonu-bg);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+</style>

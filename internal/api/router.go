@@ -39,6 +39,7 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		metricsHandler:    NewMetricsHandler(deps.Metrics),
 		discoveryHandler:  NewDiscoveryHandler(deps.Discovery),
 		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti, deps.Auth),
+		cloudflareHandler: NewCloudflareHandler(deps.Cloudflare),
 		updateHandler:     NewUpdateHandler(deps.Updater),
 		authSvc:           deps.Auth,
 		staticFS:          deps.StaticFS,
@@ -190,6 +191,24 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("GET /api/frpmulti/config/export", frpHandler.ExportConfig)
 	}
 
+	if deps.Cloudflare != nil {
+		cf := r.cloudflareHandler
+		protect("GET /api/cloudflare/tunnels", cf.List)
+		protect("POST /api/cloudflare/tunnels", cf.Create)
+		protect("GET /api/cloudflare/tunnels/{id}", cf.Get)
+		protect("PUT /api/cloudflare/tunnels/{id}", cf.Update)
+		protect("DELETE /api/cloudflare/tunnels/{id}", cf.Delete)
+		protect("POST /api/cloudflare/tunnels/{id}/start", cf.Start)
+		protect("POST /api/cloudflare/tunnels/{id}/stop", cf.Stop)
+		protect("POST /api/cloudflare/tunnels/{id}/restart", cf.Restart)
+		protect("GET /api/cloudflare/tunnels/{id}/status", cf.Status)
+		protect("GET /api/cloudflare/tunnels/{id}/logs", cf.Logs)
+		protect("GET /api/cloudflare/tunnels/{id}/config", cf.Config)
+		protect("GET /api/cloudflare/binary", cf.BinaryInfo)
+		protect("POST /api/cloudflare/binary/download", cf.DownloadBinary)
+		protect("GET /api/cloudflare/ingress-candidates", cf.IngressCandidates)
+	}
+
 	if deps.StaticFS != nil {
 		mux.Handle("/", r.spaHandler())
 	}
@@ -224,6 +243,7 @@ type Router struct {
 	metricsHandler    *MetricsHandler
 	discoveryHandler  *DiscoveryHandler
 	frpmultiHandler   *FRPMultiHandler
+	cloudflareHandler *CloudflareHandler
 	updateHandler     *UpdateHandler
 	authSvc           *auth.Service
 	staticFS          fs.FS

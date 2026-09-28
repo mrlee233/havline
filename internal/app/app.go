@@ -17,6 +17,7 @@ import (
 	"github.com/fonu/fonu/internal/backup"
 	"github.com/fonu/fonu/internal/certificate"
 	"github.com/fonu/fonu/internal/chinacidr"
+	"github.com/fonu/fonu/internal/cloudflared"
 	"github.com/fonu/fonu/internal/config"
 	"github.com/fonu/fonu/internal/db"
 	"github.com/fonu/fonu/internal/ddns"
@@ -42,6 +43,7 @@ type App struct {
 	server     *http.Server
 	nginx      *nginx.Manager
 	frpMulti   *frp.Service
+	cloudflare *cloudflared.Service
 	scheduler  *scheduler.Scheduler
 	shutdownFn context.CancelFunc
 	db         interface{ Close() error }
@@ -112,28 +114,34 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		conn.Close()
 		return nil, err
 	}
+	cloudflareSvc := cloudflared.NewService(cfg, cloudflared.NewStore(conn), secretBox, logger, proxySvc)
+	if err := cloudflareSvc.EnsureDirs(); err != nil {
+		conn.Close()
+		return nil, err
+	}
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
 	updaterClient := updater.NewClient(cfg.UpdaterSocket)
 
 	handler := api.NewRouter(api.Deps{
-		Config:    cfg,
-		Logger:    logger,
-		Auth:      authSvc,
-		Proxy:     proxySvc,
-		DDNS:      ddnsSvc,
-		ACME:      acmeSvc,
-		Settings:  settingsStore,
-		Notify:    notifySvc,
-		ChinaCIDR: chinaCIDRSvc,
-		Backup:    backupSvc,
-		Metrics:   metricsStore,
-		Discovery: discoverySvc,
-		FRPMulti:  frpMultiSvc,
-		Traffic:   trafficCollector,
-		Updater:   updaterClient,
-		StaticFS:  staticFS,
-		StartedAt: startedAt,
+		Config:     cfg,
+		Logger:     logger,
+		Auth:       authSvc,
+		Proxy:      proxySvc,
+		DDNS:       ddnsSvc,
+		ACME:       acmeSvc,
+		Settings:   settingsStore,
+		Notify:     notifySvc,
+		ChinaCIDR:  chinaCIDRSvc,
+		Backup:     backupSvc,
+		Metrics:    metricsStore,
+		Discovery:  discoverySvc,
+		FRPMulti:   frpMultiSvc,
+		Cloudflare: cloudflareSvc,
+		Traffic:    trafficCollector,
+		Updater:    updaterClient,
+		StaticFS:   staticFS,
+		StartedAt:  startedAt,
 	})
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -148,6 +156,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	frpMultiSvc.SetBaseContext(ctx)
 	go frpMultiSvc.StartAgentTunnels(ctx)
 	go frpMultiSvc.StartAgentCertificateRenewal(ctx)
+	go cloudflareSvc.StartAuto(ctx)
 	intervalMinutes, _ := settingsStore.GetInt(ctx, settings.KeyDDNSCheckInterval)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 5

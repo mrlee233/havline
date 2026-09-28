@@ -1,0 +1,137 @@
+package cloudflared
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type Store struct {
+	db *sql.DB
+}
+
+func NewStore(db *sql.DB) *Store {
+	return &Store{db: db}
+}
+
+const tunnelSelect = `
+SELECT id, name, mode, COALESCE(tunnel_id, ''), COALESCE(account_tag, ''),
+       COALESCE(credentials_enc, ''), COALESCE(cert_pem_enc, ''),
+       COALESCE(config_path, ''), COALESCE(creds_path, ''), COALESCE(log_path, ''),
+       COALESCE(network_json, '{}'), COALESCE(status, 'stopped'), COALESCE(last_error, ''),
+       COALESCE(metrics_port, 0), COALESCE(auto_start, 0), created_at, updated_at
+FROM cf_tunnels`
+
+func (s *Store) List(ctx context.Context) ([]Tunnel, error) {
+	rows, err := s.db.QueryContext(ctx, tunnelSelect+` ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Tunnel{}
+	for rows.Next() {
+		item, err := scanTunnel(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) Get(ctx context.Context, id int64) (Tunnel, error) {
+	item, err := scanTunnel(s.db.QueryRowContext(ctx, tunnelSelect+` WHERE id = ?`, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Tunnel{}, fmt.Errorf("Cloudflare 隧道不存在")
+	}
+	return item, err
+}
+
+func (s *Store) Create(ctx context.Context, in CreateInput, tunnelID, accountTag, credentialsEnc, certPEMEnc, configPath, credsPath, logPath string) (Tunnel, error) {
+	network, _ := json.Marshal(in.Network)
+	result, err := s.db.ExecContext(ctx, `
+		INSERT INTO cf_tunnels(name, mode, tunnel_id, account_tag, credentials_enc, cert_pem_enc,
+		    config_path, creds_path, log_path, network_json, status, auto_start, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, datetime('now'))
+	`, in.Name, in.Mode, tunnelID, accountTag, credentialsEnc, certPEMEnc,
+		configPath, credsPath, logPath, string(network), boolInt(in.AutoStart))
+	if err != nil {
+		return Tunnel{}, mapUniqueName(err)
+	}
+	id, _ := result.LastInsertId()
+	return s.Get(ctx, id)
+}
+
+func (s *Store) Update(ctx context.Context, id int64, in CreateInput, tunnelID, accountTag, credentialsEnc, certPEMEnc, configPath, credsPath, logPath string) (Tunnel, error) {
+	network, _ := json.Marshal(in.Network)
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE cf_tunnels
+		SET name = ?, mode = ?, tunnel_id = ?, account_tag = ?, credentials_enc = ?,
+		    cert_pem_enc = ?, config_path = ?, creds_path = ?, log_path = ?,
+		    network_json = ?, auto_start = ?, updated_at = datetime('now')
+		WHERE id = ?
+	`, in.Name, in.Mode, tunnelID, accountTag, credentialsEnc, certPEMEnc,
+		configPath, credsPath, logPath, string(network), boolInt(in.AutoStart), id)
+	if err != nil {
+		return Tunnel{}, mapUniqueName(err)
+	}
+	return s.Get(ctx, id)
+}
+
+func (s *Store) Delete(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM cf_tunnels WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) SetRuntime(ctx context.Context, id int64, status, lastError string, metricsPort int) error {
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE cf_tunnels SET status = ?, last_error = ?, metrics_port = ?, updated_at = datetime('now')
+		WHERE id = ?
+	`, status, lastError, metricsPort, id)
+	return err
+}
+
+func scanTunnel(row interface{ Scan(dest ...any) error }) (Tunnel, error) {
+	var item Tunnel
+	var networkJSON, created, updated string
+	var autoStart int
+	err := row.Scan(&item.ID, &item.Name, &item.Mode, &item.TunnelID, &item.AccountTag,
+		&item.CredentialsEnc, &item.CertPEMEnc, &item.ConfigPath, &item.CredsPath, &item.LogPath,
+		&networkJSON, &item.Status, &item.LastError, &item.MetricsPort, &autoStart, &created, &updated)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	item.AutoStart = autoStart == 1
+	item.Network = DefaultNetworkSettings()
+	_ = json.Unmarshal([]byte(networkJSON), &item.Network)
+	item.CreatedAt = parseTime(created)
+	item.UpdatedAt = parseTime(updated)
+	return item, nil
+}
+
+func parseTime(raw string) time.Time {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, raw); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
+}
+
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func mapUniqueName(err error) error {
+	if err != nil && strings.Contains(err.Error(), "UNIQUE") {
+		return fmt.Errorf("Cloudflare 隧道名称已存在")
+	}
+	return err
+}

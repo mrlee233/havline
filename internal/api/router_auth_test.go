@@ -13,6 +13,7 @@ import (
 
 	"github.com/fonu/fonu/internal/auth"
 	"github.com/fonu/fonu/internal/certificate"
+	"github.com/fonu/fonu/internal/cloudflared"
 	"github.com/fonu/fonu/internal/config"
 	"github.com/fonu/fonu/internal/db"
 	"github.com/fonu/fonu/internal/frp"
@@ -42,13 +43,15 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 	cfg := config.Config{DataDir: dir, NginxPIDFile: filepath.Join(dir, "nginx.pid")}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	frpSvc := frp.NewService(cfg, frp.NewStore(conn), box, logger, certificate.NewStore(conn))
+	cfSvc := cloudflared.NewService(cfg, cloudflared.NewStore(conn), box, logger, nil)
 
 	handler, specs := newRouterWithSpecs(Deps{
-		Config:   cfg,
-		Auth:     authSvc,
-		FRPMulti: frpSvc,
-		Settings: settings.NewStore(conn),
-		Logger:   logger,
+		Config:     cfg,
+		Auth:       authSvc,
+		FRPMulti:   frpSvc,
+		Cloudflare: cfSvc,
+		Settings:   settings.NewStore(conn),
+		Logger:     logger,
 	})
 
 	protected, public := 0, 0

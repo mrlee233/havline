@@ -201,6 +201,7 @@ const menuDefs = [
   { label: '反向代理', key: 'proxies', icon: SwapHorizontalOutline },
   { label: '内网穿透', key: 'frp', icon: GitNetworkOutline },
   { label: '公网服务端', key: 'frp-agent', icon: HardwareChipOutline },
+  { label: 'Cloudflare 隧道', key: 'cloudflare', icon: CloudOutline },
   { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
   { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
   { label: '系统设置', key: 'settings', icon: CogOutline },

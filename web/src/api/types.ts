@@ -1038,3 +1038,61 @@ export interface StatusPagePayload {
   unknown: number
   routes: StatusPageRoute[]
 }
+
+// Cloudflare Tunnel 独立模块
+export interface CfNetworkSettings {
+  transport_protocol: string
+  edge_ip_version: string
+  ha_connections: number
+  proxy_mode: string
+  origin_ca_pool?: string
+  no_tls_verify?: boolean
+  http_host_header?: string
+}
+
+export interface CfTunnel {
+  id: number
+  name: string
+  mode: string
+  tunnel_id: string
+  account_tag: string
+  config_path: string
+  creds_path: string
+  log_path: string
+  network: CfNetworkSettings
+  status: string
+  last_error?: string
+  metrics_port?: number
+  auto_start: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface CfRuntimeStatus {
+  running: boolean
+  status: string
+  last_error?: string
+  metrics_port?: number
+  connections: number
+  latency_ms: number
+  bandwidth_in: number
+  bandwidth_out: number
+  transport: string
+  bandwidth_notice?: string
+}
+
+export interface CfMirror {
+  id: string
+  name: string
+  base: string
+}
+
+export interface CfTunnelPayload {
+  name: string
+  mode: string
+  token?: string
+  hostnames: string[]
+  origin_service?: string
+  network: CfNetworkSettings
+  auto_start: boolean
+}

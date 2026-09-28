@@ -9,6 +9,7 @@ import CertificatesView from '../views/CertificatesView.vue'
 import LogsView from '../views/LogsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import FrpView from '../views/FrpView.vue'
+import CloudflareView from '../views/CloudflareView.vue'
 import AgentView from '../views/AgentView.vue'
 import ProxyRemoteView from '../views/ProxyRemoteView.vue'
 import StatusPageView from '../views/StatusPageView.vue'
@@ -62,6 +63,12 @@ const router = createRouter({
           name: 'frp-agent',
           component: AgentView,
           meta: { title: '公网 Agent', description: '管理部署在公网 VPS 上的 fonu-agent 与 frps' },
+        },
+        {
+          path: 'cloudflare',
+          name: 'cloudflare',
+          component: CloudflareView,
+          meta: { title: 'Cloudflare 隧道', description: '通过 cloudflared 把内网 Web 服务发布到 Cloudflare 边缘' },
         },
         {
           path: 'public-proxy',

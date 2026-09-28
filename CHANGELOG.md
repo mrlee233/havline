@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.0] - 2026-09-28
+
+### 新增
+
+- **Cloudflare 隧道独立模块（阶段 1–2）**：新增 `internal/cloudflared` 包，覆盖 token 解码、`creds.json` / `config.yml` 生成、ingress 生成器、SQLite 存储、cloudflared 二进制下载（镜像表 + 大小与可执行校验）、子进程托管、日志追加、metrics 端口发现与健康抓取
+- 新增 `cf_tunnels` 表与 `/api/cloudflare/*` 接口：列表、创建、更新、删除、启动、停止、重启、状态、日志、配置预览、二进制信息与下载、ingress 候选域名
+- 前端新增「Cloudflare 隧道」页面：隧道列表、创建 / 编辑、启停、配置预览、日志、二进制下载与网络调优设置
+- 支持 `token-local`（Fonu 生成本地 ingress）与 `token-remote`（Cloudflare 面板管理规则）两种模式；界面显示模式差异
+- 网络调优默认值：`http2` / IPv4 / HA 2 / 跟随系统代理；ingress 锁定 catch-all、`127.0.0.1` 归一化与稳定排序三条不变式
+
+### 变更
+
+- 版本号提升到 1.6.0；`AgentVersion` 保持 **0.14.1**，本次无 Agent 行为变化
+
+### 测试
+
+- `internal/cloudflared`：token 解码、ingress 不变式、config.yml、metrics 解析、启动参数、镜像 URL、代理禁用单元测试
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
+### 未实施
+
+- 账号模式（`cert.pem`）与云端 ingress 的 fetch / push
+- 边缘 IP 优选、快速隧道、自动 DNS
+
 ## [v1.5.4] - 2026-09-28
 
 ### 变更
