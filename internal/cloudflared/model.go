@@ -72,6 +72,7 @@ type CreateInput struct {
 
 // AppSettings 是模块级配置；默认 token 只回显掩码，不返回明文。
 type AppSettings struct {
+	AccountID              string          `json:"account_id"`
 	DefaultTokenConfigured bool            `json:"default_token_configured"`
 	DefaultTokenMasked     string          `json:"default_token_masked"`
 	APITokenConfigured     bool            `json:"api_token_configured"`
@@ -82,10 +83,11 @@ type AppSettings struct {
 
 // AppSettingsInput 是保存应用配置的入参；Token 留空表示保留原值。
 type AppSettingsInput struct {
-	Token    string          `json:"token"`
-	APIToken string          `json:"api_token"`
-	Mirror   string          `json:"mirror"`
-	Network  NetworkSettings `json:"network"`
+	AccountID string          `json:"account_id"`
+	Token     string          `json:"token"`
+	APIToken  string          `json:"api_token"`
+	Mirror    string          `json:"mirror"`
+	Network   NetworkSettings `json:"network"`
 }
 
 // RuntimeStatus 是隧道运行状态与指标快照。

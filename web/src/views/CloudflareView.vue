@@ -39,19 +39,18 @@
 
   <n-modal v-model:show="editorVisible" preset="card" :style="{ width: 'min(720px, 96vw)' }" :title="editing ? '编辑隧道' : '新建隧道'">
     <div class="cf-modal__body">
-      <n-alert :type="form.mode === 'token-remote' ? 'warning' : 'info'" :bordered="false" class="cf-mode-alert">
-        {{ modeHint }}
+      <n-alert type="info" :bordered="false" class="cf-mode-alert">
+        隧道由 Cloudflare API 创建；Fonu 负责本地配置、进程、日志与健康。
       </n-alert>
-      <n-alert v-if="!appSettings.default_token_configured" type="warning" :bordered="false" class="cf-mode-alert">
-        还没有默认 Token，请先到「应用配置」保存，再创建隧道。
+      <n-alert v-if="!appSettings.account_id || !appSettings.api_token_configured" type="warning" :bordered="false" class="cf-mode-alert">
+        请先在「应用配置」中填写 Account ID 与 API Token，再创建隧道。
       </n-alert>
       <n-divider title-placement="left">基本信息</n-divider>
       <n-form label-placement="top">
         <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
-        <n-form-item label="模式"><n-select v-model:value="form.mode" :options="modeOptions" /></n-form-item>
       </n-form>
       <n-divider title-placement="left">暴露规则</n-divider>
-      <n-form v-if="form.mode === 'token-local'" label-placement="top">
+      <n-form label-placement="top">
         <n-form-item label="暴露域名">
           <n-select v-model:value="form.hostnames" multiple filterable tag :options="hostnameOptions" placeholder="从本机反代规则选择，或直接输入域名" />
         </n-form-item>
@@ -59,14 +58,11 @@
           <n-input v-model:value="form.origin_service" placeholder="http://127.0.0.1:80" />
         </n-form-item>
       </n-form>
-      <n-alert v-else type="warning" :bordered="false" class="cf-mode-alert">
-        云端规则模式下，本地域名与回源配置不生效，请在 Cloudflare 面板管理 ingress。
-      </n-alert>
       <n-divider title-placement="left">运行</n-divider>
       <n-form label-placement="top">
         <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
       </n-form>
-      <p class="cf-hint">Token 与网络调优统一在「应用配置」中管理，保存后会应用到新建隧道。</p>
+      <p class="cf-hint">网络调优统一在「应用配置」中管理，保存后会应用到新建隧道。</p>
     </div>
     <template #footer>
       <div class="cf-modal__footer">
@@ -122,17 +118,12 @@
       </div>
       <p class="cf-hint">下载后会校验文件大小与可执行性，并原子替换现有二进制。国内环境推荐 gh-proxy 镜像。</p>
 
-      <n-divider title-placement="left">Token 配置</n-divider>
+      <n-divider title-placement="left">Cloudflare 账号</n-divider>
       <n-form label-placement="top">
-        <n-form-item label="隧道 Token（Tunnel Token）">
-          <n-input
-            v-model:value="settingsForm.token"
-            type="password"
-            show-password-on="click"
-            :placeholder="appSettings.default_token_configured ? `已配置 ${appSettings.default_token_masked}，留空保留` : '粘贴 Cloudflare 隧道 token（eyJ...）'"
-          />
+        <n-form-item label="Account ID">
+          <n-input v-model:value="settingsForm.account_id" :placeholder="appSettings.account_id || '例如 b590ee0f16701d36f2819b0e3c938e81'" />
         </n-form-item>
-        <n-form-item label="API Token（可选，用于连接验证）">
+        <n-form-item label="API Token">
           <n-input
             v-model:value="settingsForm.api_token"
             type="password"
@@ -143,12 +134,12 @@
       </n-form>
       <div class="cf-code-toolbar">
         <n-button size="small" :loading="tokenTesting" @click="testToken">测试连接</n-button>
-        <n-button size="small" tag="a" href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">获取 Token</n-button>
+        <n-button size="small" tag="a" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">获取 API Token</n-button>
       </div>
       <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
         {{ tokenTestResult }}
       </n-alert>
-      <p class="cf-hint">隧道 Token 用于 cloudflared 运行；API Token 用于验证 Cloudflare 账号连接（格式 cfat_...）。测试连接优先使用 API Token。</p>
+      <p class="cf-hint">Fonu 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道，不再需要手工填写 Tunnel Token。</p>
 
       <n-divider title-placement="left">默认网络设置</n-divider>
       <n-form label-placement="top">
@@ -194,6 +185,7 @@ const tokenTesting = ref(false)
 const tokenTestResult = ref('')
 const tokenTestOk = ref(false)
 const appSettings = ref<CfAppSettings>({
+  account_id: '',
   default_token_configured: false,
   default_token_masked: '',
   api_token_configured: false,
@@ -201,7 +193,7 @@ const appSettings = ref<CfAppSettings>({
   mirror: 'official',
   network: emptyNetwork(),
 })
-const settingsForm = ref<CfAppSettingsInput>({ token: '', api_token: '', mirror: 'official', network: emptyNetwork() })
+const settingsForm = ref<CfAppSettingsInput>({ account_id: '', token: '', api_token: '', mirror: 'official', network: emptyNetwork() })
 const editorVisible = ref(false)
 const detailVisible = ref(false)
 const editing = ref<CfTunnel | null>(null)
@@ -213,10 +205,6 @@ const detailLoading = ref(false)
 
 const form = ref<CfTunnelPayload>(emptyForm())
 
-const modeOptions = [
-  { label: 'Token + 本地规则（Fonu 生成 ingress）', value: 'token-local' },
-  { label: 'Token + 云端规则（Cloudflare 面板管理）', value: 'token-remote' },
-]
 const protocolOptions = [
   { label: 'HTTP/2（国内推荐）', value: 'http2' },
   { label: 'QUIC', value: 'quic' },
@@ -236,14 +224,10 @@ const mirrorOptions = computed(() => {
   const list = mirrors.value.length ? mirrors.value : [{ id: 'official', name: 'GitHub 官方源', base: '' }]
   return list.map((item) => ({ label: item.name, value: item.id }))
 })
-const modeHint = computed(() => (form.value.mode === 'token-remote'
-  ? '云端规则模式：cloudflared 用 --token 启动，ingress 由 Cloudflare 面板管理，Fonu 只负责进程、日志与健康。'
-  : '本地规则模式：Fonu 解码 token 并生成本地 config.yml，域名与回源由下方配置决定。'))
-
 function emptyForm(): CfTunnelPayload {
   return {
     name: '',
-    mode: 'token-local',
+    mode: 'account-local',
     token: '',
     hostnames: [],
     origin_service: 'http://127.0.0.1:80',
@@ -310,16 +294,17 @@ async function saveTunnel() {
     message.warning('请填写隧道名称')
     return
   }
-  if (!editing.value && !appSettings.value.default_token_configured) {
-    message.warning('请先在「应用配置」中保存默认 Token')
+  if (!appSettings.value.account_id || !appSettings.value.api_token_configured) {
+    message.warning('请先在「应用配置」中填写 Account ID 与 API Token')
     return
   }
-  if (form.value.mode === 'token-local' && !form.value.hostnames.length) {
-    message.warning('本地规则模式至少需要一个暴露域名')
+  if (!form.value.hostnames.length) {
+    message.warning('请至少选择一个暴露域名')
     return
   }
   const payload: CfTunnelPayload = {
     ...form.value,
+    mode: editing.value ? form.value.mode : 'account-local',
     token: '',
     network: { ...appSettings.value.network },
   }
@@ -419,7 +404,7 @@ async function loadAppSettings() {
   try {
     const result = await api.getCfSettings()
     appSettings.value = result
-    settingsForm.value = { token: '', api_token: '', mirror: result.mirror || 'official', network: { ...result.network } }
+    settingsForm.value = { account_id: result.account_id || '', token: '', api_token: '', mirror: result.mirror || 'official', network: { ...result.network } }
   } catch (error) {
     message.error(error instanceof Error ? error.message : '读取应用配置失败')
   } finally {
@@ -430,13 +415,8 @@ async function loadAppSettings() {
 async function testToken() {
   tokenTesting.value = true
   tokenTestResult.value = ''
-  const apiToken = (settingsForm.value.api_token || '').trim()
-  const useAPI = apiToken !== '' || appSettings.value.api_token_configured
   try {
-    const result = await api.testCfToken(
-      useAPI ? apiToken : (settingsForm.value.token || ''),
-      useAPI ? 'api' : 'tunnel',
-    )
+    const result = await api.testCfToken((settingsForm.value.api_token || '').trim(), 'api')
     tokenTestOk.value = true
     tokenTestResult.value = result.message || '连接成功'
   } catch (error) {
@@ -452,7 +432,7 @@ async function saveSettings() {
   try {
     const result = await api.saveCfSettings(settingsForm.value)
     appSettings.value = result
-    settingsForm.value = { token: '', api_token: '', mirror: result.mirror, network: { ...result.network } }
+    settingsForm.value = { account_id: result.account_id || '', token: '', api_token: '', mirror: result.mirror, network: { ...result.network } }
     message.success('应用配置已保存')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '保存应用配置失败')
@@ -475,6 +455,7 @@ async function downloadBinary() {
 }
 
 function modeText(mode: string) {
+  if (mode === 'account-local') return 'API 管理'
   if (mode === 'token-remote') return '云端规则'
   if (mode === 'token-local') return '本地规则'
   return mode

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.8] - 2026-09-28
+
+### 变更
+
+- **Cloudflare 凭据模型改为 Account ID + API Token**：应用配置不再要求 Tunnel Token；Fonu 用 Account ID + API Token 调用 Cloudflare API：
+  - 「测试连接」调用 `GET /accounts/{account_id}/tokens/verify`
+  - 新建隧道时自动创建 `config_src=local` 的命名隧道、获取凭据、生成本地 `config.yml` 与 `creds.json`
+  - 删除隧道时同步删除云端隧道；编辑时同步推送 ingress
+- 隧道弹窗去掉 Token 与模式选择，只保留名称、暴露域名、回源 service 与自动启动
+- 新增 `cf_settings.account_id` 字段（迁移 `033`）
+
+### 变更
+
+- 版本号提升到 1.6.8；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.7] - 2026-09-28
 
 ### 新增
