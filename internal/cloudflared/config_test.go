@@ -1,6 +1,7 @@
 package cloudflared
 
 import (
+	"bytes"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -29,6 +30,28 @@ func TestDecodeTokenAlternativeFields(t *testing.T) {
 func TestDecodeTokenRejectsInvalid(t *testing.T) {
 	if _, _, _, err := DecodeToken("not-base64"); err == nil {
 		t.Fatal("非法 token 应报错")
+	}
+}
+
+func TestDecodeTokenURLSafe(t *testing.T) {
+	payload := `{"a":"account-1","t":"tunnel-2","s":"secret-3"}`
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(payload))
+	if _, _, _, err := DecodeToken(encoded); err != nil {
+		t.Fatalf("URL-safe token 应可解码: %v", err)
+	}
+}
+
+func TestDecodeBase64Flexible(t *testing.T) {
+	raw := []byte{0xfb, 0xef, 0xbe, 0xad}
+	for _, encoded := range []string{
+		base64.RawURLEncoding.EncodeToString(raw),
+		base64.URLEncoding.EncodeToString(raw),
+		base64.RawStdEncoding.EncodeToString(raw),
+	} {
+		got, err := decodeBase64(encoded)
+		if err != nil || !bytes.Equal(got, raw) {
+			t.Fatalf("编码 %q 解码失败：%v", encoded, err)
+		}
 	}
 }
 

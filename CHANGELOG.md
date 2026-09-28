@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.6] - 2026-09-28
+
+### 修复
+
+- **Token 解码兼容 URL-safe base64**：Cloudflare 面板生成的 Tunnel Token 使用 URL-safe base64（含 `-` / `_`），原先只按标准 base64 解码，会报 `illegal base64 data at input byte N` 并返回 502。现在同时兼容标准 / URL-safe 与有无填充四种形式，失败时给出更明确的提示
+
+### 变更
+
+- 版本号提升到 1.6.6；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- 新增 URL-safe 与无填充 token 解码测试
+
 ## [v1.6.5] - 2026-09-28
 
 ### 新增

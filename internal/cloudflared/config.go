@@ -20,12 +20,9 @@ func DecodeToken(token string) (accountTag, tunnelID, tunnelSecret string, err e
 	if clean == "" {
 		return "", "", "", fmt.Errorf("token 为空")
 	}
-	if remainder := len(clean) % 4; remainder != 0 {
-		clean += strings.Repeat("=", 4-remainder)
-	}
-	raw, err := base64.StdEncoding.DecodeString(clean)
+	raw, err := decodeBase64(clean)
 	if err != nil {
-		return "", "", "", fmt.Errorf("token base64 解码失败: %w", err)
+		return "", "", "", err
 	}
 	var payload tokenPayload
 	if err := json.Unmarshal(raw, &payload); err != nil || payload.TunnelID == "" {
@@ -43,6 +40,30 @@ func DecodeToken(token string) (accountTag, tunnelID, tunnelSecret string, err e
 		return "", "", "", fmt.Errorf("token 缺少 AccountTag / TunnelID / TunnelSecret")
 	}
 	return payload.AccountTag, payload.TunnelID, payload.TunnelSecret, nil
+}
+
+// decodeBase64 同时兼容标准 base64 与 URL-safe base64，并兼容有无填充两种形式。
+// Cloudflare 面板生成的 Tunnel Token 使用 URL-safe 编码，直接用标准 base64 会在 '-' / '_' 处失败。
+func decodeBase64(input string) ([]byte, error) {
+	encodings := []*base64.Encoding{
+		base64.StdEncoding, base64.RawStdEncoding,
+		base64.URLEncoding, base64.RawURLEncoding,
+	}
+	for _, encoding := range encodings {
+		if data, err := encoding.DecodeString(input); err == nil {
+			return data, nil
+		}
+	}
+	padded := input
+	if remainder := len(padded) % 4; remainder != 0 {
+		padded += strings.Repeat("=", 4-remainder)
+	}
+	for _, encoding := range encodings {
+		if data, err := encoding.DecodeString(padded); err == nil {
+			return data, nil
+		}
+	}
+	return nil, fmt.Errorf("token base64 解码失败：请确认粘贴的是完整的 Cloudflare 隧道 token")
 }
 
 // CredentialsJSON 生成 cloudflared 需要的 creds.json 内容。
