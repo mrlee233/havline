@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.0] - 2026-09-28
+
+### 新增
+
+- **Agent 默认监听回环**：`fonu-agent` 默认改为 `127.0.0.1:7700`；监听非回环地址必须显式设置 `FONU_AGENT_ALLOW_REMOTE=1`，状态接口新增监听地址、监听范围和传输安全字段
+- **SSH 隧道自动接入**：中央 Fonu 安装或升级 Agent 后自动分配 `17700-18700` 范围内的本地回环端口，通过现有 SSH 凭据建立隧道访问 VPS 的 `127.0.0.1:7700`，无需新增公网端口、证书或防火墙规则
+- **隧道生命周期管理**：应用启动后自动恢复 tunnel transport；应用退出时统一关闭；每个服务端支持单独的「重启隧道」操作
+- **旧公网 HTTP 自动迁移**：旧 Agent 点击「升级 Agent」后安装脚本会备份旧 `agent.env`、改写为回环监听并自动建立隧道；隧道验证失败时恢复旧监听配置
+
+### 变更
+
+- 数据库新增 Agent transport / 本地端口 / TLS pin / 监听地址 / 连接状态 / 连接错误字段（迁移 028）
+- 前端「公网 Agent」页显示传输方式、隧道状态、本地入口和 Agent 监听地址；旧公网 HTTP 显示迁移警告
+- 版本号提升到 1.4.0；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.12.9 → **0.13.0**，内嵌 amd64 / arm64 二进制已重编；VPS 上需升级 Agent
+
+### 测试
+
+- `internal/agent`：回环默认值与远程监听保护
+- `internal/frp` / `internal/app`：隧道生命周期、transport 存储与启动恢复编译验证
+
 ## [v1.3.9] - 2026-09-28
 
 ### 修复

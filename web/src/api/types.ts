@@ -396,6 +396,12 @@ export interface FRPSavePayload {
 
 export interface FrpServer {
   agent_url?: string
+  agent_transport: 'tunnel' | 'https-pin' | 'http' | string
+  agent_local_port?: number
+  agent_tls_pin?: string
+  agent_listen_addr?: string
+  agent_transport_state: string
+  agent_transport_error?: string
   agent_configured?: boolean
   ssh_configured?: boolean
   mgmt_enabled?: boolean

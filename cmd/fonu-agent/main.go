@@ -7,13 +7,15 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/fonu/fonu/internal/agent"
 )
 
 func main() {
-	listen := flag.String("listen", envOr("FONU_AGENT_LISTEN", ":7700"), "agent listen address")
+	listen := flag.String("listen", envOr("FONU_AGENT_LISTEN", "127.0.0.1:7700"), "agent listen address")
+	allowRemote := flag.Bool("allow-remote", envBool("FONU_AGENT_ALLOW_REMOTE"), "allow non-loopback listen address")
 	token := flag.String("token", os.Getenv("FONU_AGENT_TOKEN"), "agent bearer token")
 	nginxDir := flag.String("nginx-conf-dir", envOr("FONU_AGENT_NGINX_CONF_DIR", ""), "managed nginx config directory（留空自动探测 Nginx 实际加载的 vhost 目录）")
 	certsDir := flag.String("certs-dir", envOr("FONU_AGENT_CERTS_DIR", "/var/lib/fonu-agent/certs"), "certificate directory")
@@ -30,7 +32,7 @@ func main() {
 		log.Fatal("FONU_AGENT_TOKEN or -token is required")
 	}
 	server, err := agent.NewServer(agent.Config{
-		ListenAddr: *listen, Token: *token, NginxConfDir: *nginxDir,
+		ListenAddr: *listen, AllowRemote: *allowRemote, Token: *token, NginxConfDir: *nginxDir,
 		CertsDir: *certsDir, FrpsConfigPath: *frpsConfig, FrpsBinary: *frpsBin, DataDir: *dataDir,
 	})
 	if err != nil {
@@ -48,4 +50,13 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envBool(key string) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

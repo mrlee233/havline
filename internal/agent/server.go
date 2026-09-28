@@ -51,11 +51,13 @@ import (
 // 并在失败信息里带上最后一次的具体原因与常见的显式指定目录。
 // 0.12.8：Agent Bearer Token 改为常量时间比较，避免认证路径上的长度/内容时序泄漏。
 // 0.12.9：限流状态文件损坏时拒绝覆盖，避免保存单条规则时清空其他域名的限流配置。
-const AgentVersion = "0.12.9"
+// 0.13.0：默认只监听回环地址，非回环监听必须显式允许；状态接口暴露监听范围与传输安全。
+const AgentVersion = "0.13.0"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
 	ListenAddr     string
+	AllowRemote    bool
 	Token          string
 	NginxConfDir   string
 	NginxBinary    string
@@ -67,8 +69,9 @@ type Config struct {
 
 // Server 暴露 agent HTTP 服务。
 type Server struct {
-	cfg Config
-	mu  sync.Mutex
+	cfg            Config
+	listenLoopback bool
+	mu             sync.Mutex
 	// metrics 采样缓存：CPU 占用率需要两次采样，间隔内的重复请求直接复用上次结果
 	metricsMu     sync.Mutex
 	metricsAt     time.Time
@@ -128,7 +131,11 @@ var domainPattern = regexp.MustCompile(`^(?i:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])
 
 func NewServer(cfg Config) (*Server, error) {
 	if strings.TrimSpace(cfg.ListenAddr) == "" {
-		cfg.ListenAddr = ":7700"
+		cfg.ListenAddr = "127.0.0.1:7700"
+	}
+	loopback, err := validateListenAddr(cfg.ListenAddr, cfg.AllowRemote)
+	if err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(cfg.NginxConfDir) == "" {
 		// 目录探测失败不阻断启动：agent 照常提供状态接口，路由写入时重试探测（systemd PATH 下可能找不到 nginx，写入前会补全路径）
@@ -164,11 +171,41 @@ func NewServer(cfg Config) (*Server, error) {
 			return nil, fmt.Errorf("create agent directory: %w", err)
 		}
 	}
-	server := &Server{cfg: cfg}
+	server := &Server{cfg: cfg, listenLoopback: loopback}
 	// 启动后台预解析目录（不阻断监听）；每次启动都会用最新探测逻辑重新解析并覆盖落盘缓存，
 	// 历史错误目录的缓存会被自动修正。
 	server.preloadNginxConfDir()
 	return server, nil
+}
+
+func validateListenAddr(addr string, allowRemote bool) (bool, error) {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(addr))
+	if err != nil {
+		return false, fmt.Errorf("Agent 监听地址无效: %w", err)
+	}
+	host = strings.Trim(host, "[]")
+	loopback := strings.EqualFold(host, "localhost")
+	if ip := net.ParseIP(host); ip != nil {
+		loopback = ip.IsLoopback()
+	}
+	if !loopback && !allowRemote {
+		return false, fmt.Errorf("检测到 Agent 将监听非回环地址 %s；默认安全模式只监听 127.0.0.1:7700。如确认需要远程监听，请设置 FONU_AGENT_ALLOW_REMOTE=1", addr)
+	}
+	return loopback, nil
+}
+
+func listenScope(loopback bool) string {
+	if loopback {
+		return "loopback"
+	}
+	return "public"
+}
+
+func transportSecurity(loopback bool) string {
+	if loopback {
+		return "loopback"
+	}
+	return "plaintext-http"
 }
 
 func (s *Server) Handler() http.Handler {
@@ -242,28 +279,32 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	nginxProbe := s.probeNginx()
 	frpsActive := exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service":          "fonu-agent",
-		"agent_version":    AgentVersion,
-		"nginx_binary":     s.cfg.NginxBinary,
-		"nginx_conf_dir":   s.cfg.NginxConfDir,
-		"nginx_ok":         nginxProbe.OK,
-		"nginx_missing":    nginxProbe.Missing,
-		"nginx_running":    nginxProbe.Running,
-		"nginx_path":       nginxProbe.Path,
-		"nginx_version":    nginxProbe.Version,
-		"nginx_error":      nginxProbe.Error,
-		"frps_binary":      s.cfg.FrpsBinary,
-		"frps_config_path": s.cfg.FrpsConfigPath,
-		"ports":            ports,
-		"frps_active":      frpsActive,
-		"frps_vhost_hint":  "curl -H 'Host: 你的域名' http://127.0.0.1:8080 可测试 frps vhost 是否通",
-		"frps_unit_exec":   strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
-		"frps_enabled":     exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
-		"frps_version":     strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
-		"frps_log_tail":    strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
-		"dashboard_addr":   strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
-		"routes":           s.routeNames(),
-		"checked_at":       time.Now().UTC().Format(time.RFC3339),
+		"service":               "fonu-agent",
+		"agent_version":         AgentVersion,
+		"listen_addr":           s.cfg.ListenAddr,
+		"listen_scope":          listenScope(s.listenLoopback),
+		"remote_access_enabled": s.cfg.AllowRemote,
+		"transport_security":    transportSecurity(s.listenLoopback),
+		"nginx_binary":          s.cfg.NginxBinary,
+		"nginx_conf_dir":        s.cfg.NginxConfDir,
+		"nginx_ok":              nginxProbe.OK,
+		"nginx_missing":         nginxProbe.Missing,
+		"nginx_running":         nginxProbe.Running,
+		"nginx_path":            nginxProbe.Path,
+		"nginx_version":         nginxProbe.Version,
+		"nginx_error":           nginxProbe.Error,
+		"frps_binary":           s.cfg.FrpsBinary,
+		"frps_config_path":      s.cfg.FrpsConfigPath,
+		"ports":                 ports,
+		"frps_active":           frpsActive,
+		"frps_vhost_hint":       "curl -H 'Host: 你的域名' http://127.0.0.1:8080 可测试 frps vhost 是否通",
+		"frps_unit_exec":        strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
+		"frps_enabled":          exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
+		"frps_version":          strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
+		"frps_log_tail":         strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
+		"dashboard_addr":        strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
+		"routes":                s.routeNames(),
+		"checked_at":            time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

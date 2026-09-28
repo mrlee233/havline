@@ -131,6 +131,7 @@ func NewRouter(deps Deps) http.Handler {
 		protect("POST /api/frpmulti/servers/{id}/agent/uninstall", frpHandler.AgentUninstall)
 		protect("POST /api/frpmulti/servers/{id}/agent/ssh-diagnose", frpHandler.AgentSSHDiagnose)
 		protect("POST /api/frpmulti/servers/{id}/agent/test", frpHandler.AgentTest)
+		protect("POST /api/frpmulti/servers/{id}/agent/tunnel/restart", frpHandler.AgentTunnelRestart)
 		protect("GET /api/frpmulti/servers/{id}/agent/status", frpHandler.AgentStatus)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes", frpHandler.AgentRoutes)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/health", frpHandler.AgentRouteHealth)

@@ -458,6 +458,10 @@ func (s *Server) clearLimitState(domain string) error
 
 ## 3.5 P0-5：明确 Agent 默认监听策略
 
+> 方案文档：`agent-listen-strategy-plan.md`（2026-09-28，待实施）
+
+> 实施状态：阶段 1-3 已随 v1.4.0 实施（默认回环、SSH 隧道、旧 HTTP 自动迁移）；HTTPS + pin 高级模式待后续。
+
 ### 3.5.1 现状
 
 - `cmd/fonu-agent/main.go` 默认 `:7700`。

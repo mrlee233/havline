@@ -324,6 +324,20 @@ func (h *FRPMultiHandler) AgentTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+func (h *FRPMultiHandler) AgentTunnelRestart(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	server, err := h.svc.RestartAgentTunnel(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, server)
+}
+
 func (h *FRPMultiHandler) AgentStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {

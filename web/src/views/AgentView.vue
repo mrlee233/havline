@@ -241,11 +241,22 @@
       <FonuCard class="section-card" title="Agent 生命周期（SSH）">
         <div class="section-body">
           <p class="form-hint">
-            首次安装、升级、卸载需要 SSH（在「内网穿透」页服务端表单的「公网 Agent 管理」区填写）；安装成功后自动回填 Agent 地址与 Token。
-            日常管理走 Agent API，无需 SSH。SSH 信息仅用于生命周期操作，凭据加密存储、不回显。
+            首次安装、升级、卸载需要 SSH（在「内网穿透」页服务端表单的「公网 Agent 管理」区填写）；安装成功后自动建立 SSH 隧道，不会默认暴露公网 7700。
+            SSH 信息仅用于生命周期和隧道，凭据加密存储、不回显。
           </p>
+          <div class="field-grid agent-transport-grid">
+            <div><label>传输方式</label><span class="field-tags"><StatusBadge :kind="agentTransportKind(server)" :text="agentTransportText(server)" /></span></div>
+            <div><label>隧道状态</label><span>{{ agentTransportStateText(server) }}</span></div>
+            <div><label>本地入口</label><span class="mono">{{ server.agent_transport === 'tunnel' && server.agent_local_port ? `127.0.0.1:${server.agent_local_port}` : '—' }}</span></div>
+            <div><label>Agent 监听</label><span class="mono">{{ server.agent_listen_addr || '—' }}</span></div>
+          </div>
+          <n-alert v-if="server.agent_transport === 'http'" type="warning" :bordered="false" class="agent-transport-warning">
+            当前仍是公网明文 HTTP。点击「升级 Agent」可自动迁移到 SSH 隧道安全模式。
+          </n-alert>
+          <p v-if="server.agent_transport_error" class="form-hint agent-transport-error">{{ server.agent_transport_error }}</p>
           <div class="agent-actions">
             <n-button size="small" :loading="busy === 'agent-install'" :disabled="busy !== null && busy !== 'agent-install'" @click="installAgent(server)">{{ server.agent_configured ? '升级 Agent' : '安装 Agent' }}</n-button>
+            <n-button v-if="server.agent_transport === 'tunnel'" size="small" :loading="busy === 'tunnel-restart'" :disabled="busy !== null && busy !== 'tunnel-restart'" @click="restartAgentTunnel(server)">重启隧道</n-button>
             <n-button size="small" :loading="busy === 'diagnose'" :disabled="busy !== null && busy !== 'diagnose'" @click="diagnoseAgent(server)">SSH 诊断</n-button>
             <n-button size="small" quaternary :loading="busy === 'agent-uninstall'" :disabled="busy !== null && busy !== 'agent-uninstall'" @click="uninstallAgent(server, true)">卸载（保留路由/证书）</n-button>
             <n-popconfirm @positive-click="uninstallAgent(server, false)">
@@ -674,7 +685,7 @@ use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
 // 操作动作：按动作粒度控制 loading，保证"只有被点的按钮转圈"
 type Action =
   | 'probe' | 'agent-install' | 'agent-uninstall' | 'diagnose'
-  | 'frps-start' | 'frps-stop' | 'frps-restart' | 'frps-install' | 'push-config'
+  | 'tunnel-restart' | 'frps-start' | 'frps-stop' | 'frps-restart' | 'frps-install' | 'push-config'
 
 interface OpOutput { at: string; source: string; text: string; ok: boolean }
 
@@ -1396,6 +1407,31 @@ function serverStartupKind(server: FrpServer): StatusKind {
   return 'unknown'
 }
 
+function restartAgentTunnel(target: FrpServer) {
+  return run('tunnel-restart', '重启 SSH 隧道', () => api.restartFrpAgentTunnel(target.id),
+    () => ({ text: 'SSH 隧道已重建并完成连接检查', ok: true }))
+    .then(async (result) => { if (result !== undefined) await load() })
+}
+
+function agentTransportText(server: FrpServer) {
+  if (server.agent_transport === 'tunnel') return 'SSH 隧道'
+  if (server.agent_transport === 'https-pin') return 'HTTPS + 证书固定'
+  return '公网 HTTP（兼容）'
+}
+
+function agentTransportKind(server: FrpServer): StatusKind {
+  if (server.agent_transport === 'tunnel' || server.agent_transport === 'https-pin') return 'success'
+  return 'warning'
+}
+
+function agentTransportStateText(server: FrpServer) {
+  if (server.agent_transport !== 'tunnel') return '不适用'
+  if (server.agent_transport_state === 'connected') return '已连接'
+  if (server.agent_transport_state === 'reconnecting') return '重连中'
+  if (server.agent_transport_state === 'failed') return '连接失败'
+  return '未建立'
+}
+
 function processStateText(server: FrpServer) {
   return ({ starting: '启动中', running: '运行中', stopped: '已停止', error: '异常', unknown: '未知' } as Record<string, string>)[server.process_state] ?? '未知'
 }
@@ -1594,6 +1630,9 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
 .field-grid label { color: var(--fonu-text-secondary); font-size: 12px; }
 .field-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--fonu-space-3); }
+.agent-transport-grid { margin-top: var(--fonu-space-3); }
+.agent-transport-warning { margin-top: var(--fonu-space-3); }
+.agent-transport-error { color: var(--fonu-error); }
 .tooltip-trigger { display: inline-flex; }
 .frps-install-row { display: flex; align-items: center; gap: 10px; margin-top: var(--fonu-space-3); flex-wrap: wrap; }
 .frps-version-select { width: 200px; }

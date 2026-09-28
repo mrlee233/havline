@@ -49,6 +49,9 @@ type Service struct {
 	agentMu      sync.Mutex
 	agentClients map[int64]cachedAgentClient
 
+	tunnelMu sync.Mutex
+	tunnels  map[int64]*agentTunnel
+
 	// 诊断短 TTL 缓存与并发上限，避免列表页轮询叠加外部探测
 	diagMu       sync.Mutex
 	diagCache    map[int64]diagnosticsCacheEntry
@@ -79,6 +82,7 @@ func NewService(cfg config.Config, store *Store, secretBox *secret.Box, logger *
 		trafficClient: newFRPSTrafficClient(),
 		trafficLast:   map[int64]trafficSample{},
 		diagCache:     map[int64]diagnosticsCacheEntry{},
+		tunnels:       map[int64]*agentTunnel{},
 	}
 	return service
 }
@@ -356,6 +360,10 @@ func (s *Service) enrichServerRuntime(ctx context.Context, server *Server) {
 	server.LastDisconnectedAt = runtime.LastDisconnectedAt
 	server.LastError = runtime.LastError
 	server.LastStartedAt = runtime.LastStartedAt
+	if state, lastError, ok := s.tunnelState(server.ID); ok {
+		server.AgentTransportState = state
+		server.AgentTransportError = lastError
+	}
 }
 
 func (s *Service) setServerRuntime(ctx context.Context, serverID int64, status, lastError string) {
@@ -629,10 +637,14 @@ func (s *Service) UpdateServer(ctx context.Context, id int64, in ServerInput) (S
 	if !server.Enabled {
 		_ = s.managerForServer(id).Stop(ctx)
 	}
+	if !server.MgmtEnabled || server.AgentTransport != "tunnel" {
+		s.stopAgentTunnel(id)
+	}
 	return server, s.persistConfig(ctx)
 }
 
 func (s *Service) DeleteServer(ctx context.Context, id int64) error {
+	s.stopAgentTunnel(id)
 	if err := s.managerForServer(id).Stop(ctx); err != nil {
 		return err
 	}
@@ -732,10 +744,31 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	if err != nil {
 		return Server{}, err
 	}
+	localPort := server.AgentLocalPort
+	if localPort == 0 {
+		localPort, err = s.allocateAgentTunnelPort(ctx)
+		if err != nil {
+			return Server{}, err
+		}
+	}
+	tunnel := newAgentTunnel(s.tunnelContext(ctx), serverID, localPort, installer)
+	if err := tunnel.Start(); err != nil {
+		return Server{}, err
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", localPort)
+	client := NewAgentClient(baseURL, token)
+	if err := client.Ping(ctx); err != nil {
+		tunnel.Stop()
+		rollbackErr := (AgentInstaller{SSH: installer}).RestorePreviousConfig(ctx)
+		if rollbackErr != nil {
+			return Server{}, fmt.Errorf("Agent 已安装，但 SSH 隧道验证失败: %w；恢复旧监听配置也失败: %v", err, rollbackErr)
+		}
+		return Server{}, fmt.Errorf("Agent 已安装，但 SSH 隧道验证失败，已恢复旧监听配置: %w", err)
+	}
 	input := ServerInput{
 		Name: server.Name, ServerAddr: server.ServerAddr, ServerPort: server.ServerPort,
 		TLS: server.TLS, TLSServerName: server.TLSServerName, Enabled: server.Enabled,
-		Options: server.Options, AgentURL: fmt.Sprintf("http://%s:%d", server.SSHHost, 7700),
+		Options: server.Options, AgentURL: baseURL,
 		AgentToken: token, SSHHost: server.SSHHost, SSHPort: server.SSHPort, SSHUser: server.SSHUser,
 		SSHAuth: server.SSHAuth, MgmtEnabled: true,
 	}
@@ -743,7 +776,165 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	if err != nil {
 		return Server{}, err
 	}
+	s.tunnelMu.Lock()
+	if existing := s.tunnels[serverID]; existing != nil {
+		existing.Stop()
+	}
+	s.tunnels[serverID] = tunnel
+	s.tunnelMu.Unlock()
+	if err := s.store.SetAgentTransport(ctx, serverID, "tunnel", localPort, "", "127.0.0.1:7700", "connected", ""); err != nil {
+		tunnel.Stop()
+		_ = (AgentInstaller{SSH: installer}).RestorePreviousConfig(ctx)
+		return Server{}, err
+	}
 	return updated, nil
+}
+
+func (s *Service) tunnelContext(fallback context.Context) context.Context {
+	s.downloadMu.RLock()
+	base := s.baseCtx
+	s.downloadMu.RUnlock()
+	if base != nil {
+		return base
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return context.Background()
+}
+
+func (s *Service) allocateAgentTunnelPort(ctx context.Context) (int, error) {
+	s.tunnelMu.Lock()
+	defer s.tunnelMu.Unlock()
+	servers, err := s.store.ListServers(ctx)
+	if err != nil {
+		return 0, err
+	}
+	used := map[int]bool{}
+	for _, server := range servers {
+		if server.AgentLocalPort > 0 {
+			used[server.AgentLocalPort] = true
+		}
+	}
+	for port := 17700; port <= 18700; port++ {
+		if used[port] {
+			continue
+		}
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err != nil {
+			continue
+		}
+		_ = listener.Close()
+		return port, nil
+	}
+	return 0, fmt.Errorf("SSH 隧道本地端口 17700-18700 已耗尽")
+}
+
+func (s *Service) ensureAgentTunnel(ctx context.Context, serverID int64) (*agentTunnel, error) {
+	s.tunnelMu.Lock()
+	if tunnel := s.tunnels[serverID]; tunnel != nil {
+		s.tunnelMu.Unlock()
+		return tunnel, nil
+	}
+	s.tunnelMu.Unlock()
+
+	server, installer, err := s.sshInstaller(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	localPort := server.AgentLocalPort
+	if localPort == 0 {
+		localPort, err = s.allocateAgentTunnelPort(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	tunnel := newAgentTunnel(s.tunnelContext(ctx), serverID, localPort, installer)
+	if err := tunnel.Start(); err != nil {
+		return nil, err
+	}
+	s.tunnelMu.Lock()
+	if existing := s.tunnels[serverID]; existing != nil {
+		s.tunnelMu.Unlock()
+		tunnel.Stop()
+		return existing, nil
+	}
+	s.tunnels[serverID] = tunnel
+	s.tunnelMu.Unlock()
+	if err := s.store.SetAgentTransport(ctx, serverID, "tunnel", localPort, server.AgentTLSPin, "127.0.0.1:7700", "connected", ""); err != nil {
+		tunnel.Stop()
+		return nil, err
+	}
+	return tunnel, nil
+}
+
+// StartAgentTunnels 在应用启动后恢复所有 tunnel transport。
+func (s *Service) StartAgentTunnels(ctx context.Context) {
+	servers, err := s.store.ListServers(ctx)
+	if err != nil {
+		s.logger.Warn("恢复 Agent 隧道失败", "error", err.Error())
+		return
+	}
+	for _, server := range servers {
+		if !server.MgmtEnabled || server.AgentTransport != "tunnel" {
+			continue
+		}
+		if _, err := s.ensureAgentTunnel(ctx, server.ID); err != nil {
+			s.logger.Warn("Agent 隧道启动失败", "server_id", server.ID, "error", err.Error())
+		}
+	}
+}
+
+func (s *Service) stopAgentTunnels() {
+	s.tunnelMu.Lock()
+	tunnels := make([]*agentTunnel, 0, len(s.tunnels))
+	for id, tunnel := range s.tunnels {
+		tunnels = append(tunnels, tunnel)
+		delete(s.tunnels, id)
+	}
+	s.tunnelMu.Unlock()
+	for _, tunnel := range tunnels {
+		tunnel.Stop()
+	}
+}
+
+func (s *Service) stopAgentTunnel(serverID int64) {
+	s.tunnelMu.Lock()
+	tunnel := s.tunnels[serverID]
+	delete(s.tunnels, serverID)
+	s.tunnelMu.Unlock()
+	if tunnel != nil {
+		tunnel.Stop()
+	}
+}
+
+func (s *Service) tunnelState(serverID int64) (string, string, bool) {
+	s.tunnelMu.Lock()
+	tunnel := s.tunnels[serverID]
+	s.tunnelMu.Unlock()
+	if tunnel == nil {
+		return "", "", false
+	}
+	state, lastError := tunnel.State()
+	return state, lastError, true
+}
+
+func (s *Service) RestartAgentTunnel(ctx context.Context, serverID int64) (Server, error) {
+	current, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	s.stopAgentTunnel(serverID)
+	if _, err := s.ensureAgentTunnel(ctx, serverID); err != nil {
+		_ = s.store.SetAgentTransport(ctx, serverID, "tunnel", current.AgentLocalPort, current.AgentTLSPin, current.AgentListenAddr, "failed", err.Error())
+		return Server{}, err
+	}
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	s.enrichServerRuntime(ctx, &server)
+	return server, nil
 }
 
 func (s *Service) AgentUninstall(ctx context.Context, serverID int64, keepData bool) (string, error) {
@@ -751,7 +942,12 @@ func (s *Service) AgentUninstall(ctx context.Context, serverID int64, keepData b
 	if err != nil {
 		return "", err
 	}
-	return AgentInstaller{SSH: installer}.Uninstall(ctx, keepData)
+	output, err := AgentInstaller{SSH: installer}.Uninstall(ctx, keepData)
+	if err == nil {
+		s.stopAgentTunnel(serverID)
+		_ = s.store.SetAgentTransport(ctx, serverID, "tunnel", 0, "", "", "stopped", "")
+	}
+	return output, err
 }
 
 func (s *Service) AgentSSHDiagnose(ctx context.Context, serverID int64) (string, error) {
@@ -1307,7 +1503,7 @@ type cachedAgentClient struct {
 
 func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient, bool) {
 	server, err := s.store.GetServer(ctx, serverID)
-	if err != nil || !server.MgmtEnabled || server.AgentURL == "" || !server.AgentConfigured {
+	if err != nil || !server.MgmtEnabled || !server.AgentConfigured {
 		return nil, false
 	}
 	encoded, err := s.store.AgentToken(ctx, serverID)
@@ -1318,8 +1514,18 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	if err != nil || token == "" {
 		return nil, false
 	}
+	baseURL := server.AgentURL
+	if server.AgentTransport == "tunnel" {
+		tunnel, err := s.ensureAgentTunnel(ctx, serverID)
+		if err != nil {
+			return nil, false
+		}
+		baseURL = fmt.Sprintf("http://127.0.0.1:%d", tunnel.localPort)
+	} else if baseURL == "" {
+		return nil, false
+	}
 	// 复用同一个 http.Client：批量同步 N 条路由时不再每次新建 Transport 与 TLS 握手
-	fingerprint := server.AgentURL + "|" + encoded
+	fingerprint := baseURL + "|" + encoded
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
 	if s.agentClients == nil {
@@ -1328,7 +1534,7 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	if cached, ok := s.agentClients[serverID]; ok && cached.fingerprint == fingerprint {
 		return cached.client, true
 	}
-	client := NewAgentClient(server.AgentURL, token)
+	client := NewAgentClient(baseURL, token)
 	s.agentClients[serverID] = cachedAgentClient{fingerprint: fingerprint, client: client}
 	return client, true
 }
@@ -1421,6 +1627,7 @@ func (s *Service) AutoStart(ctx context.Context) error {
 }
 
 func (s *Service) Stop(ctx context.Context) error {
+	s.stopAgentTunnels()
 	_ = s.ReconcileRuntime(ctx)
 	servers, err := s.store.ListServers(ctx)
 	if err != nil {

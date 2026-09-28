@@ -84,6 +84,13 @@ func (i AgentInstaller) Uninstall(ctx context.Context, keepData bool) (string, e
 	return strings.TrimSpace(out), err
 }
 
+// RestorePreviousConfig 在安全迁移验证失败时恢复安装前的 agent.env，并重启旧监听配置。
+func (i AgentInstaller) RestorePreviousConfig(ctx context.Context) error {
+	command := `if [ -f /etc/fonu-agent/agent.env.previous ]; then cp /etc/fonu-agent/agent.env.previous /etc/fonu-agent/agent.env && chmod 600 /etc/fonu-agent/agent.env && systemctl restart fonu-agent; fi`
+	_, err := i.SSH.Run(ctx, command)
+	return err
+}
+
 // Diagnose agent 失联时走 SSH 急救：进程、端口、服务日志尾部。
 func (i AgentInstaller) Diagnose(ctx context.Context) (string, error) {
 	return i.SSH.Run(ctx, "systemctl status fonu-agent --no-pager -l 2>/dev/null | head -20; echo '---'; journalctl -u fonu-agent -n 15 --no-pager 2>/dev/null; echo '---'; ss -tlnp 2>/dev/null | grep ':7700 ' || echo '7700 not listening'")
@@ -144,6 +151,10 @@ if [ ! -f "$CONF_FILE" ]; then
   # 用 /dev/urandom 生成 64 位 hex token，不依赖 openssl（缺失时会静默写入空 token，导致 Fonu 无法认证 agent）
   printf 'FONU_AGENT_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$CONF_FILE"
 fi
+cp "$CONF_FILE" "$CONF_FILE.previous" 2>/dev/null || true
+touch "$CONF_FILE"
+sed -i '/^FONU_AGENT_LISTEN=/d; /^FONU_AGENT_ALLOW_REMOTE=/d' "$CONF_FILE"
+printf 'FONU_AGENT_LISTEN=127.0.0.1:7700\nFONU_AGENT_ALLOW_REMOTE=0\n' >> "$CONF_FILE"
 cat > "$UNIT" <<'UNIT'
 [Unit]
 Description=Fonu FRPS management agent

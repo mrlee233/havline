@@ -279,6 +279,24 @@ func (s *Store) AgentToken(ctx context.Context, id int64) (string, error) {
 	return token, err
 }
 
+func (s *Store) SetAgentTransport(ctx context.Context, id int64, transport string, localPort int, tlsPin, listenAddr, state, lastError string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE frp_servers
+		SET agent_transport = ?, agent_local_port = ?, agent_tls_pin = ?,
+		    agent_listen_addr = ?, agent_transport_state = ?, agent_transport_error = ?,
+		    updated_at = datetime('now')
+		WHERE id = ?
+	`, transport, localPort, tlsPin, listenAddr, state, lastError, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return fmt.Errorf("FRP 服务端不存在")
+	}
+	return nil
+}
+
 func (s *Store) Token(ctx context.Context, id int64) (string, error) {
 	var token string
 	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(auth_token_enc, '') FROM frp_servers WHERE id = ?`, id).Scan(&token)
@@ -428,6 +446,8 @@ SELECT id, name, server_addr, server_port, tls_enabled, tls_server_name, enabled
        COALESCE(agent_url, ''), CASE WHEN COALESCE(agent_token_enc, '') != '' THEN 1 ELSE 0 END,
        COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''), COALESCE(ssh_auth, 'key'),
        CASE WHEN COALESCE(ssh_secret_enc, '') != '' THEN 1 ELSE 0 END, COALESCE(mgmt_enabled, 0),
+       COALESCE(agent_transport, 'http'), COALESCE(agent_local_port, 0), COALESCE(agent_tls_pin, ''),
+       COALESCE(agent_listen_addr, ''), COALESCE(agent_transport_state, 'unknown'), COALESCE(agent_transport_error, ''),
        COALESCE(config_json, '{}'), created_at, updated_at
 FROM frp_servers`
 
@@ -439,7 +459,7 @@ func scanServer(row interface{ Scan(dest ...any) error }) (Server, error) {
 	var server Server
 	var tls, enabled, token, oidcSecret, dashboardPwd, agentConfigured, sshConfigured, mgmtEnabled int
 	var configJSON, created, updated string
-	err := row.Scan(&server.ID, &server.Name, &server.ServerAddr, &server.ServerPort, &tls, &server.TLSServerName, &enabled, &token, &oidcSecret, &dashboardPwd, &server.AgentURL, &agentConfigured, &server.SSHHost, &server.SSHPort, &server.SSHUser, &server.SSHAuth, &sshConfigured, &mgmtEnabled, &configJSON, &created, &updated)
+	err := row.Scan(&server.ID, &server.Name, &server.ServerAddr, &server.ServerPort, &tls, &server.TLSServerName, &enabled, &token, &oidcSecret, &dashboardPwd, &server.AgentURL, &agentConfigured, &server.SSHHost, &server.SSHPort, &server.SSHUser, &server.SSHAuth, &sshConfigured, &mgmtEnabled, &server.AgentTransport, &server.AgentLocalPort, &server.AgentTLSPin, &server.AgentListenAddr, &server.AgentTransportState, &server.AgentTransportError, &configJSON, &created, &updated)
 	if err != nil {
 		return Server{}, err
 	}

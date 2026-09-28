@@ -37,6 +37,12 @@ if [ ! -f "$CONF_FILE" ]; then
   printf 'FONU_AGENT_TOKEN=%s\n' "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$CONF_FILE"
 fi
 
+# 默认只监听回环；显式删除旧公网监听，由中央 Fonu 通过 SSH 隧道访问。
+cp "$CONF_FILE" "$CONF_FILE.previous" 2>/dev/null || true
+touch "$CONF_FILE"
+sed -i '/^FONU_AGENT_LISTEN=/d; /^FONU_AGENT_ALLOW_REMOTE=/d' "$CONF_FILE"
+printf 'FONU_AGENT_LISTEN=127.0.0.1:7700\nFONU_AGENT_ALLOW_REMOTE=0\n' >> "$CONF_FILE"
+
 cat > "$UNIT" <<'UNIT'
 [Unit]
 Description=Fonu FRPS management agent
@@ -60,5 +66,5 @@ systemctl restart fonu-agent
 systemctl enable fonu-agent
 TOKEN=$(sed -n 's/^FONU_AGENT_TOKEN=//p' "$CONF_FILE")
 echo "fonu-agent 已安装并启动"
-echo "API: http://$(hostname -I 2>/dev/null | awk '{print $1}'):7700"
+echo "API: SSH tunnel -> 127.0.0.1:7700"
 echo "Token: $TOKEN"
