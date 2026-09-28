@@ -843,6 +843,8 @@ func ZoneName(prefix string, parts ...string) string
 
 ## 4.4 P1-4：补路由鉴权、配置回滚、Agent 版本兼容测试
 
+> 实施状态：2026-09-28 已完成（v1.5.3）。API 与 Agent 路由均收敛为可遍历路由表；新增 `router_auth_test.go` 遍历全部受保护路由验证匿名 401；补齐本机与 Agent 的配置回滚测试；新增 `agent_versions_compat_test.go` 与前端版本字段降级测试。
+
 ### 4.4.1 路由鉴权覆盖测试
 
 目标：防止新增 API 时漏掉 `protect()`。

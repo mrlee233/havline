@@ -88,7 +88,7 @@ func (s *Server) rollbackRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := s.reloadNginx(); err != nil {
+	if err := s.reloadRouteConfig(); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
@@ -107,7 +107,7 @@ func (s *Server) applyRouteContent(path string, content []byte) error {
 	if err := atomicWrite(path, content, 0o640); err != nil {
 		return err
 	}
-	if err := s.validateNginx(); err != nil {
+	if err := s.validateRouteConfig(); err != nil {
 		if readErr == nil {
 			_ = atomicWrite(path, previous, 0o640)
 		} else {

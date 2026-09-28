@@ -10,7 +10,19 @@ import (
 	"github.com/fonu/fonu/internal/auth"
 )
 
+// routeSpec 是一条 API 路由的注册信息；测试据此遍历全部路由验证鉴权覆盖。
+type routeSpec struct {
+	Pattern string
+	Handler http.HandlerFunc
+	Public  bool
+}
+
 func NewRouter(deps Deps) http.Handler {
+	handler, _ := newRouterWithSpecs(deps)
+	return handler
+}
+
+func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 	logsHandler := NewLogsHandler(deps.Config)
 	r := &Router{
 		authHandler:       NewAuthHandler(deps.Auth, deps.Notify),
@@ -33,17 +45,22 @@ func NewRouter(deps Deps) http.Handler {
 	}
 
 	mux := http.NewServeMux()
-
-	mux.HandleFunc("GET /api/version", Version(deps.Config))
-	// 唯一一个匿名只读接口：默认关闭、可设访问码、按 IP 限流
-	mux.HandleFunc("GET /api/status-page", r.statusPageHandler.Get)
-	mux.HandleFunc("GET /api/auth/status", r.authHandler.Status)
-	mux.HandleFunc("POST /api/auth/login", r.authHandler.Login)
-	mux.HandleFunc("POST /api/auth/logout", r.authHandler.Logout)
-
-	protect := func(pattern string, handler http.HandlerFunc) {
-		mux.Handle(pattern, SessionMiddleware(deps.Auth)(RequireAuth(deps.Auth)(http.HandlerFunc(handler))))
+	var specs []routeSpec
+	public := func(pattern string, handler http.HandlerFunc) {
+		specs = append(specs, routeSpec{Pattern: pattern, Handler: handler, Public: true})
 	}
+	protected := func(pattern string, handler http.HandlerFunc) {
+		specs = append(specs, routeSpec{Pattern: pattern, Handler: handler})
+	}
+
+	public("GET /api/version", Version(deps.Config))
+	// 唯一一个匿名只读接口：默认关闭、可设访问码、按 IP 限流
+	public("GET /api/status-page", r.statusPageHandler.Get)
+	public("GET /api/auth/status", r.authHandler.Status)
+	public("POST /api/auth/login", r.authHandler.Login)
+	public("POST /api/auth/logout", r.authHandler.Logout)
+
+	protect := protected
 
 	protect("POST /api/auth/password", r.authHandler.ChangePassword)
 	protect("GET /api/settings/tokens", r.authHandler.ListTokens)
@@ -177,11 +194,19 @@ func NewRouter(deps Deps) http.Handler {
 		mux.Handle("/", r.spaHandler())
 	}
 
+	for _, spec := range specs {
+		if spec.Public {
+			mux.HandleFunc(spec.Pattern, spec.Handler)
+			continue
+		}
+		mux.Handle(spec.Pattern, SessionMiddleware(deps.Auth)(RequireAuth(deps.Auth)(spec.Handler)))
+	}
+
 	logger := deps.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return loggingMiddleware(logger, SessionMiddleware(deps.Auth)(mux))
+	return loggingMiddleware(logger, SessionMiddleware(deps.Auth)(mux)), specs
 }
 
 type Router struct {

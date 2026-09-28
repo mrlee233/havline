@@ -8,11 +8,16 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/fonu/fonu/internal/fsutil"
 )
 
 func TestMigrateLegacyVersionDirs(t *testing.T) {
@@ -75,5 +80,103 @@ func TestCertificatePin(t *testing.T) {
 	sum := sha256.Sum256(der)
 	if want := hex.EncodeToString(sum[:]); got != want {
 		t.Fatalf("certificatePin() = %s, 期望 %s", got, want)
+	}
+}
+
+func TestApplyRouteContentSavesPreviousVersion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fonu-a.example.com.conf")
+	if err := os.WriteFile(path, []byte("old config"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{cfg: Config{NginxConfDir: dir}, validateNginxFn: func() error { return nil }}
+	if err := server.applyRouteContent(path, []byte("new config")); err != nil {
+		t.Fatal(err)
+	}
+	current, err := os.ReadFile(path)
+	if err != nil || string(current) != "new config" {
+		t.Fatalf("当前配置未更新：%q %v", current, err)
+	}
+	versions, err := fsutil.ListVersions(path)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("写 vhost 前应保存上一版本：%v %v", versions, err)
+	}
+	previous, err := fsutil.ReadVersion(path, versions[0].Name)
+	if err != nil || string(previous) != "old config" {
+		t.Fatalf("历史版本内容不符：%q %v", previous, err)
+	}
+}
+
+func TestApplyRouteContentRestoresOnValidationFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fonu-a.example.com.conf")
+	if err := os.WriteFile(path, []byte("old config"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{
+		cfg:             Config{NginxConfDir: dir},
+		validateNginxFn: func() error { return errors.New("nginx rejected") },
+	}
+	if err := server.applyRouteContent(path, []byte("new config")); err == nil {
+		t.Fatal("校验失败应返回错误")
+	}
+	current, err := os.ReadFile(path)
+	if err != nil || string(current) != "old config" {
+		t.Fatalf("校验失败后应恢复上一可用版本：%q %v", current, err)
+	}
+}
+
+func TestApplyRouteContentRemovesNewFileOnValidationFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fonu-new.example.com.conf")
+	server := &Server{
+		cfg:             Config{NginxConfDir: dir},
+		validateNginxFn: func() error { return errors.New("nginx rejected") },
+	}
+	if err := server.applyRouteContent(path, []byte("new config")); err == nil {
+		t.Fatal("校验失败应返回错误")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("首次部署失败应删除新文件，避免留下坏配置：%v", err)
+	}
+}
+
+func TestRollbackRouteReloadsAfterApply(t *testing.T) {
+	dir := t.TempDir()
+	reloaded := false
+	server := &Server{
+		cfg:             Config{NginxConfDir: dir},
+		validateNginxFn: func() error { return nil },
+		reloadNginxFn:   func() error { reloaded = true; return nil },
+	}
+	path := server.routePath("a.example.com")
+	if err := os.WriteFile(path, []byte("healthy"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fsutil.BackupVersioned(path, maxRouteVersions); err != nil {
+		t.Fatal(err)
+	}
+	versions, err := fsutil.ListVersions(path)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("准备版本失败：%v %v", versions, err)
+	}
+	if err := os.WriteFile(path, []byte("broken"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /api/v1/routes/{domain}/versions/{name}/rollback", server.rollbackRoute)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/routes/a.example.com/versions/"+versions[0].Name+"/rollback", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("回滚应成功：%d %s", rec.Code, rec.Body.String())
+	}
+	if !reloaded {
+		t.Fatal("回滚后应执行 nginx reload")
+	}
+	current, err := os.ReadFile(path)
+	if err != nil || string(current) != "healthy" {
+		t.Fatalf("回滚后内容不符：%q %v", current, err)
 	}
 }

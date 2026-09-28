@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.3] - 2026-09-28
+
+### 新增
+
+- **P1-4 路由鉴权覆盖测试**：API 路由收敛为可遍历路由表，新增 `internal/api/router_auth_test.go` 遍历 100+ 受保护路由，匿名请求必须返回 401，公开路由不被鉴权误拦；Agent 路由收敛为 `agentRoutes` 声明，新增 `internal/agent/router_auth_test.go` 遍历全部 `/api/v1/*` 验证无 Token 必须 401
+- **配置回滚测试**：本机新增 `internal/nginx/versions_test.go`，覆盖版本列表 / 读取、非法版本名拒绝路径上跳、语法校验失败不覆盖当前配置、成功回滚保留当前版本；Agent 新增写 vhost 前保存版本、校验失败恢复上一可用版本、首次部署失败删除新文件、回滚后执行 reload 的测试
+- **Agent 版本兼容测试**：新增 `internal/frp/agent_versions_compat_test.go`，覆盖 404 / 405 判定端点缺失并提示最低版本与「升级 Agent」、400 / 500 不误判、状态接口 `agent_version` 解析
+- **前端版本字段降级测试**：新增 `agentVersionText` 工具与测试，旧 Agent 缺少 `agent_version` 时显示占位符而不是空白
+
+### 变更
+
+- 版本号提升到 1.5.3；`AgentVersion` 保持 **0.14.1**，本次无 Agent 行为变化
+- Agent 的 nginx 校验与 reload 增加测试注入钩子；生产路径仍调用真实 nginx，行为不变
+
+### 测试
+
+- `go test ./...`、`go vet ./...` 通过
+- `npm run typecheck`、`npm test`（19 项）、`npm run build` 通过
+
 ## [v1.5.2] - 2026-09-28
 
 ### 修复

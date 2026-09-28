@@ -90,6 +90,9 @@ type Server struct {
 	nginxStatusMu sync.Mutex
 	nginxStatusAt time.Time
 	nginxStatus   nginxProbe
+	// 测试注入钩子；生产环境为 nil，走真实 nginx 校验与重载
+	validateNginxFn func() error
+	reloadNginxFn   func() error
 }
 
 // nginxProbe Nginx 可用性探测结果。
@@ -217,33 +220,48 @@ func transportSecurity(loopback bool) string {
 	return "plaintext-http"
 }
 
+type agentRoute struct {
+	Method  string
+	Pattern string
+	Handler http.HandlerFunc
+}
+
+// agentRoutes 集中声明 Agent API；Handler 统一包 auth，测试据此遍历验证无 Token 必须 401。
+func agentRoutes(s *Server) []agentRoute {
+	return []agentRoute{
+		{http.MethodGet, "/api/v1/ping", s.ping},
+		{http.MethodGet, "/api/v1/status", s.status},
+		{http.MethodGet, "/api/v1/routes", s.routes},
+		{http.MethodPut, "/api/v1/routes", s.putRoute},
+		{http.MethodGet, "/api/v1/routes/{domain}/conf", s.routeConf},
+		{http.MethodGet, "/api/v1/routes/{domain}/versions", s.routeVersions},
+		{http.MethodGet, "/api/v1/routes/{domain}/versions/{name}", s.routeVersion},
+		{http.MethodPost, "/api/v1/routes/{domain}/versions/{name}/rollback", s.rollbackRoute},
+		{http.MethodPut, "/api/v1/china-cidr", s.putChinaCIDR},
+		{http.MethodPost, "/api/v1/nginx/install", s.installNginx},
+		{http.MethodPut, "/api/v1/transport/https", s.putHTTPSProxy},
+		{http.MethodGet, "/api/v1/transport/https", s.getHTTPSProxy},
+		{http.MethodDelete, "/api/v1/transport/https", s.deleteHTTPSProxy},
+		{http.MethodGet, "/api/v1/firewall", s.firewallStatus},
+		{http.MethodPost, "/api/v1/firewall/allow", s.firewallAllow},
+		{http.MethodDelete, "/api/v1/routes/{domain}", s.deleteRoute},
+		{http.MethodPut, "/api/v1/frps/config", s.putFRPSConfig},
+		{http.MethodPost, "/api/v1/frps/install", s.installFRPS},
+		{http.MethodPost, "/api/v1/frps/action", s.frpsAction},
+		{http.MethodPost, "/api/v1/certs", s.putCertificate},
+		{http.MethodGet, "/api/v1/metrics", s.metrics},
+		{http.MethodGet, "/api/v1/logs/nginx", s.nginxLogs},
+		{http.MethodGet, "/api/v1/frps/config", s.frpsConfig},
+		{http.MethodGet, "/api/v1/certs", s.certs},
+		{http.MethodPost, "/api/v1/nginx/reload", s.nginxReload},
+	}
+}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/ping", s.auth(s.ping))
-	mux.HandleFunc("GET /api/v1/status", s.auth(s.status))
-	mux.HandleFunc("GET /api/v1/routes", s.auth(s.routes))
-	mux.HandleFunc("PUT /api/v1/routes", s.auth(s.putRoute))
-	mux.HandleFunc("GET /api/v1/routes/{domain}/conf", s.auth(s.routeConf))
-	mux.HandleFunc("GET /api/v1/routes/{domain}/versions", s.auth(s.routeVersions))
-	mux.HandleFunc("GET /api/v1/routes/{domain}/versions/{name}", s.auth(s.routeVersion))
-	mux.HandleFunc("POST /api/v1/routes/{domain}/versions/{name}/rollback", s.auth(s.rollbackRoute))
-	mux.HandleFunc("PUT /api/v1/china-cidr", s.auth(s.putChinaCIDR))
-	mux.HandleFunc("POST /api/v1/nginx/install", s.auth(s.installNginx))
-	mux.HandleFunc("PUT /api/v1/transport/https", s.auth(s.putHTTPSProxy))
-	mux.HandleFunc("GET /api/v1/transport/https", s.auth(s.getHTTPSProxy))
-	mux.HandleFunc("DELETE /api/v1/transport/https", s.auth(s.deleteHTTPSProxy))
-	mux.HandleFunc("GET /api/v1/firewall", s.auth(s.firewallStatus))
-	mux.HandleFunc("POST /api/v1/firewall/allow", s.auth(s.firewallAllow))
-	mux.HandleFunc("DELETE /api/v1/routes/{domain}", s.auth(s.deleteRoute))
-	mux.HandleFunc("PUT /api/v1/frps/config", s.auth(s.putFRPSConfig))
-	mux.HandleFunc("POST /api/v1/frps/install", s.auth(s.installFRPS))
-	mux.HandleFunc("POST /api/v1/frps/action", s.auth(s.frpsAction))
-	mux.HandleFunc("POST /api/v1/certs", s.auth(s.putCertificate))
-	mux.HandleFunc("GET /api/v1/metrics", s.auth(s.metrics))
-	mux.HandleFunc("GET /api/v1/logs/nginx", s.auth(s.nginxLogs))
-	mux.HandleFunc("GET /api/v1/frps/config", s.auth(s.frpsConfig))
-	mux.HandleFunc("GET /api/v1/certs", s.auth(s.certs))
-	mux.HandleFunc("POST /api/v1/nginx/reload", s.auth(s.nginxReload))
+	for _, route := range agentRoutes(s) {
+		mux.HandleFunc(route.Method+" "+route.Pattern, s.auth(route.Handler))
+	}
 	return mux
 }
 
@@ -1213,11 +1231,11 @@ func (s *Server) putChinaCIDR(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := s.validateNginx(); err != nil {
+	if err := s.validateRouteConfig(); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "nginx config rejected: " + err.Error()})
 		return
 	}
-	if err := s.reloadNginx(); err != nil {
+	if err := s.reloadRouteConfig(); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1297,6 +1315,20 @@ func (s *Server) routePath(domain string) string {
 func (s *Server) validateNginx() error {
 	migrateLegacyVersionDirs(s.cfg.NginxConfDir)
 	return runCommand(s.nginxPath(), "-t")
+}
+
+func (s *Server) validateRouteConfig() error {
+	if s.validateNginxFn != nil {
+		return s.validateNginxFn()
+	}
+	return s.validateNginx()
+}
+
+func (s *Server) reloadRouteConfig() error {
+	if s.reloadNginxFn != nil {
+		return s.reloadNginxFn()
+	}
+	return s.reloadNginx()
 }
 
 // migrateLegacyVersionDirs 把 conf 目录下的 <name>.versions 目录迁移为隐藏目录。

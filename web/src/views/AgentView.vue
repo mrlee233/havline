@@ -188,7 +188,7 @@
         <FonuCard class="section-card" title="Fonu Agent">
           <div class="section-body">
             <div class="field-grid">
-              <div><label>Agent 版本</label><span class="mono">{{ agentStatus?.agent_version || '—' }}</span></div>
+              <div><label>Agent 版本</label><span class="mono">{{ agentVersionText(agentStatus?.agent_version) }}</span></div>
               <div><label>凭据状态</label><span class="field-tags">
                 <StatusBadge :kind="server.agent_configured ? 'success' : 'warning'" :text="server.agent_configured ? '已配置' : '未配置'" />
               </span></div>
@@ -705,6 +705,7 @@ import type {
 import { formatBytes, formatDate, formatRelativeTime, formatUptime } from '../utils/format'
 import type { StatusKind } from '../utils/status'
 import { copyText } from '../utils/clipboard'
+import { agentVersionText } from '../utils/agent'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 
 use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
