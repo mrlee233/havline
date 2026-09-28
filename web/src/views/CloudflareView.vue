@@ -139,7 +139,7 @@
       <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
         {{ tokenTestResult }}
       </n-alert>
-      <p class="cf-hint">Fonu 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道，不再需要手工填写 Tunnel Token。</p>
+      <p class="cf-hint">Fonu 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道与 DNS。API Token 需要 Account: Cloudflare Tunnel: Edit、Zone: Zone: Read、Zone: DNS: Edit 权限。</p>
 
       <n-divider title-placement="left">默认网络设置</n-divider>
       <n-form label-placement="top">
@@ -310,13 +310,15 @@ async function saveTunnel() {
   }
   saving.value = true
   try {
-    if (editing.value) {
-      await api.updateCfTunnel(editing.value.id, payload)
-    } else {
-      await api.createCfTunnel(payload)
-    }
+    const result = editing.value
+      ? await api.updateCfTunnel(editing.value.id, payload)
+      : await api.createCfTunnel(payload)
     editorVisible.value = false
-    message.success('隧道已保存')
+    if (result.dns_warning) {
+      message.warning(result.dns_warning)
+    } else {
+      message.success('隧道已保存')
+    }
     await load()
   } catch (error) {
     message.error(error instanceof Error ? error.message : '保存隧道失败')

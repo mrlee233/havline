@@ -121,6 +121,10 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Tunnel, error) {
 		return Tunnel{}, err
 	}
 	_ = api.PutIngress(ctx, decodedID, ingress)
+	if err := s.ensureTunnelDNS(ctx, api, decodedID, in.Hostnames); err != nil {
+		s.logger.Warn("自动创建 Cloudflare DNS 失败", "tunnel_id", decodedID, "error", err.Error())
+		tunnel.DNSWarning = "隧道已创建，但 DNS 记录未自动创建：" + err.Error()
+	}
 	return tunnel, nil
 }
 
@@ -140,13 +144,23 @@ func (s *Service) Update(ctx context.Context, id int64, in CreateInput) (Tunnel,
 	if err := fsutil.WriteFileAtomic(current.ConfigPath, []byte(BuildConfig(current.TunnelID, current.CredsPath, in.Network, ingress)), 0o640); err != nil {
 		return Tunnel{}, err
 	}
+	dnsWarning := ""
 	if current.Mode == ModeAccountLocal && current.TunnelID != "" {
 		if api, err := s.cloudflareAPI(ctx); err == nil {
 			_ = api.PutIngress(ctx, current.TunnelID, ingress)
+			if err := s.ensureTunnelDNS(ctx, api, current.TunnelID, in.Hostnames); err != nil {
+				s.logger.Warn("同步 Cloudflare DNS 失败", "tunnel_id", current.TunnelID, "error", err.Error())
+				dnsWarning = "DNS 记录同步失败：" + err.Error()
+			}
 		}
 	}
-	return s.store.Update(ctx, id, in, current.TunnelID, current.AccountTag, current.CredentialsEnc, current.CertPEMEnc,
+	updated, err := s.store.Update(ctx, id, in, current.TunnelID, current.AccountTag, current.CredentialsEnc, current.CertPEMEnc,
 		current.ConfigPath, current.CredsPath, current.LogPath)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	updated.DNSWarning = dnsWarning
+	return updated, nil
 }
 
 func (s *Service) Delete(ctx context.Context, id int64) error {
@@ -294,6 +308,29 @@ func (s *Service) cloudflareAPI(ctx context.Context) (*CloudflareAPI, error) {
 		return nil, fmt.Errorf("API Token 解密失败: %w", err)
 	}
 	return NewCloudflareAPI(accountID, token), nil
+}
+
+// ensureTunnelDNS 为所有 hostname 幂等创建或更新指向隧道的 CNAME 记录。
+func (s *Service) ensureTunnelDNS(ctx context.Context, api *CloudflareAPI, tunnelID string, hostnames []string) error {
+	target := tunnelID + ".cfargotunnel.com"
+	var firstErr error
+	for _, raw := range hostnames {
+		hostname := strings.ToLower(strings.TrimSpace(raw))
+		if hostname == "" {
+			continue
+		}
+		zoneID, _, err := api.FindZone(ctx, hostname)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if err := api.EnsureCNAME(ctx, zoneID, hostname, target); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // VerifyAPIToken 用 Account ID + API Token 调用 Cloudflare 账号级 tokens/verify 接口。

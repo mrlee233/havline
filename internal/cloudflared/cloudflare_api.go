@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -146,4 +147,44 @@ func (a *CloudflareAPI) PutIngress(ctx context.Context, tunnelID string, ingress
 // DeleteTunnel 删除云端隧道。
 func (a *CloudflareAPI) DeleteTunnel(ctx context.Context, tunnelID string) error {
 	return a.do(ctx, http.MethodDelete, "/accounts/"+a.AccountID+"/cfd_tunnel/"+tunnelID+"?cascade=true", nil, nil)
+}
+
+// Zone 是 Cloudflare 的域名区域。
+type Zone struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// FindZone 从 hostname 逐级向上查找所属 Zone。
+func (a *CloudflareAPI) FindZone(ctx context.Context, hostname string) (string, string, error) {
+	labels := strings.Split(strings.Trim(hostname, "."), ".")
+	for i := 0; i < len(labels)-1; i++ {
+		candidate := strings.Join(labels[i:], ".")
+		var zones []Zone
+		if err := a.do(ctx, http.MethodGet, "/zones?name="+url.QueryEscape(candidate), nil, &zones); err != nil {
+			return "", "", err
+		}
+		if len(zones) > 0 {
+			return zones[0].ID, zones[0].Name, nil
+		}
+	}
+	return "", "", fmt.Errorf("未找到 %s 对应的 Cloudflare Zone；请确认 API Token 具备 Zone:Read 权限", hostname)
+}
+
+// EnsureCNAME 幂等创建或更新指向隧道的 CNAME 记录，并开启代理（橙云）。
+func (a *CloudflareAPI) EnsureCNAME(ctx context.Context, zoneID, hostname, target string) error {
+	var records []struct {
+		ID string `json:"id"`
+	}
+	path := "/zones/" + zoneID + "/dns_records?type=CNAME&name=" + url.QueryEscape(hostname)
+	if err := a.do(ctx, http.MethodGet, path, nil, &records); err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"type": "CNAME", "name": hostname, "content": target, "proxied": true, "ttl": 1,
+	}
+	if len(records) > 0 {
+		return a.do(ctx, http.MethodPut, "/zones/"+zoneID+"/dns_records/"+records[0].ID, payload, nil)
+	}
+	return a.do(ctx, http.MethodPost, "/zones/"+zoneID+"/dns_records", payload, nil)
 }

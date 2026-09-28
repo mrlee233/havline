@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.7.0] - 2026-09-28
+
+### 新增
+
+- **自动创建 Cloudflare DNS 记录**：创建隧道时，Fonu 会为每个暴露域名查找所属 Cloudflare Zone（从 hostname 逐级向上）并幂等创建 / 更新 CNAME：
+  - 目标为 `<tunnel-id>.cfargotunnel.com`
+  - 自动开启代理（橙云）
+  - 同名 CNAME 已存在时更新而不是重复创建
+  - 编辑隧道时同步 DNS；创建失败只在页面提示警告，不影响隧道本身
+- API Token 权限说明更新为：`Account: Cloudflare Tunnel: Edit`、`Zone: Zone: Read`、`Zone: DNS: Edit`
+
+### 变更
+
+- 版本号提升到 1.7.0；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.9] - 2026-09-28
 
 ### 修复
