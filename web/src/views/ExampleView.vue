@@ -8,10 +8,20 @@
     </template>
   </PageHeader>
 
-  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.6 示例页面验证标识已生效">
+  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.7 示例页面验证标识已生效">
     当前页面由 v{{ version }} 提供，验证标识为 <span class="mono">{{ verificationMarker }}</span>。
     如果你是在升级后首次看到这行内容，说明前端构建、镜像重建和服务重启均已成功。
   </n-alert>
+
+  <div class="example-proof">
+    <div>
+      <span class="example-proof__label">本次升级验证</span>
+      <strong class="example-proof__value">{{ verificationRound }}</strong>
+    </div>
+    <div class="example-proof__hint">
+      看到这个新区块，说明前端资源已经从旧版本切换到 v1.3.7。
+    </div>
+  </div>
 
   <div class="stats-row">
     <StatCard label="当前版本" :value="`v${version}`" sub="来自 /api/version" tone="brand">
@@ -30,9 +40,9 @@
 
   <FonuCard title="本次示例页变化" subtitle="用于确认升级后的页面内容确实发生变化">
     <ul class="example-changes">
-      <li>页面版本提示更新为 v1.3.5。</li>
-      <li>新增「页面状态」统计卡，显示 v1.3.5 前端资源已加载。</li>
-      <li>验证标识更新为 <span class="mono">v1.3.5-example-page</span>。</li>
+      <li>页面版本提示更新为 v1.3.7。</li>
+      <li>新增独立的「本次升级验证」区块，用于直观确认新页面已经加载。</li>
+      <li>验证标识更新为 <span class="mono">v1.3.7-example-page</span>。</li>
     </ul>
   </FonuCard>
 
@@ -77,7 +87,8 @@ const message = useMessage()
 const version = ref(__APP_VERSION__)
 const checkedAt = ref('')
 const refreshing = ref(false)
-const verificationMarker = 'v1.3.6-example-page'
+const verificationRound = 'v1.3.7'
+const verificationMarker = 'v1.3.7-example-page'
 
 async function refreshVersion() {
   refreshing.value = true
@@ -100,6 +111,39 @@ onMounted(() => {
 <style scoped>
 .example-alert {
   margin-bottom: var(--fonu-space-5);
+}
+
+.example-proof {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fonu-space-5);
+  margin-bottom: var(--fonu-space-5);
+  padding: var(--fonu-space-4) var(--fonu-space-5);
+  border: 1px solid var(--fonu-brand-soft);
+  border-radius: var(--fonu-radius);
+  background: var(--fonu-brand-soft);
+}
+
+.example-proof__label {
+  display: block;
+  font-size: 12px;
+  color: var(--fonu-text-secondary);
+}
+
+.example-proof__value {
+  display: block;
+  margin-top: 2px;
+  font-size: 28px;
+  line-height: 1.2;
+  color: var(--fonu-brand-text);
+}
+
+.example-proof__hint {
+  max-width: 360px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--fonu-text-secondary);
 }
 
 .stats-row {
@@ -148,6 +192,12 @@ onMounted(() => {
 }
 
 @media (max-width: 640px) {
+  .example-proof {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .example-result {
     grid-template-columns: 1fr;
   }
