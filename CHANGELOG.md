@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.4] - 2026-09-28
+
+### 变更
+
+- **P1-5 统一前端轮询组合式函数**：`useVisibilityPolling` 重写为支持 `enabled` / `immediate` / `onError` 选项，加入 in-flight 互斥，返回 `start` / `stop` / `busy` / `lastError`；核心逻辑抽成 `createVisibilityPoller`，可在无 DOM 环境下测试
+- Dashboard、Proxy、Logs、Settings、Frp、UpdateModal、Agent 的轮询全部迁移到组合式函数；仅 AppLayout 时钟保留原生计时器
+- 慢接口不再堆积：上一轮未结束时跳过下一轮；页面隐藏时暂停，回到前台立即补一次
+
+### 测试
+
+- 新增 6 项组合式函数单元测试：隐藏不执行、回到前台补一次、in-flight 互斥、`enabled=false`、卸载清理、`onError` 后继续轮询
+- `npm run typecheck`、`npm test`（25 项）、`npm run build` 通过
+
+### 变更
+
+- 版本号提升到 1.5.4；`AgentVersion` 保持 **0.14.1**，本次无 Agent 行为变化
+
 ## [v1.5.3] - 2026-09-28
 
 ### 新增

@@ -799,7 +799,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
   NIcon,
@@ -825,6 +825,7 @@ import {
   SunnyOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api/client'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type {
   ApiToken,
   BackupArchive,
@@ -1055,7 +1056,7 @@ const globalIPWhitelistText = ref('')
 const chinaCIDRHours = ref(24)
 const refreshingCIDR = ref(false)
 const chinaCIDR = ref<ChinaCIDRStatus>({ entry_count_v4: 0, entry_count_v6: 0 })
-let chinaCIDRPollTimer: ReturnType<typeof setInterval> | undefined
+const chinaCIDRPolling = ref(false)
 
 const globalNginxFramework = ref('')
 const globalNginxGeneratedSnippet = ref('')
@@ -1335,31 +1336,15 @@ async function resetGlobalNginxAuto() {
 async function loadChinaCIDRStatus() {
   try {
     chinaCIDR.value = await api.getChinaCIDRStatus()
-    if (chinaCIDR.value.updating) {
-      startChinaCIDRPoll()
-    } else {
-      stopChinaCIDRPoll()
-    }
+    chinaCIDRPolling.value = Boolean(chinaCIDR.value.updating)
   } catch {
     // optional on load
   }
 }
 
-function stopChinaCIDRPoll() {
-  if (chinaCIDRPollTimer) {
-    clearInterval(chinaCIDRPollTimer)
-    chinaCIDRPollTimer = undefined
-  }
-}
-
-function startChinaCIDRPoll() {
-  if (chinaCIDRPollTimer) return
-  chinaCIDRPollTimer = setInterval(() => void loadChinaCIDRStatus(), 2000)
-}
-
 async function refreshChinaCIDR() {
   refreshingCIDR.value = true
-  stopChinaCIDRPoll()
+  chinaCIDRPolling.value = false
   try {
     chinaCIDR.value = await api.refreshChinaCIDR()
     if (chinaCIDR.value.ready) {
@@ -1376,10 +1361,6 @@ async function refreshChinaCIDR() {
     refreshingCIDR.value = false
   }
 }
-
-onBeforeUnmount(() => {
-  stopChinaCIDRPoll()
-})
 
 function applyNotifySettings(settings: Record<string, string>) {
   notifyType.value = (settings.notify_type as NotifyType) || ''
@@ -1770,6 +1751,8 @@ onMounted(() => {
   void loadApiTokens()
   void loadBackupArchives()
 })
+
+useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 </script>
 
 <style scoped>

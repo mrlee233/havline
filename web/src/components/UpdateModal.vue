@@ -52,9 +52,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { NAlert, NButton, NModal, useMessage } from 'naive-ui'
 import { api } from '../api/client'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type { UpdateStatus } from '../api/types'
 
 const show = defineModel<boolean>('show', { required: true })
@@ -66,7 +67,6 @@ const appVersion = ref(__APP_VERSION__)
 const loading = ref(false)
 const applying = ref(false)
 const localMessage = ref('')
-let pollTimer: number | undefined
 
 const modeLabel = computed(() => {
   if (status.value?.mode === 'git') return 'Git 仓库构建'
@@ -115,16 +115,10 @@ async function startUpdate() {
   localMessage.value = '升级任务已启动，正在等待容器重建…'
   try {
     status.value = await api.applyUpdate()
-    startPolling()
   } catch (error) {
     applying.value = false
     localMessage.value = error instanceof Error ? error.message : '启动升级失败'
   }
-}
-
-function startPolling() {
-  stopPolling()
-  pollTimer = window.setInterval(() => void pollStatus(), 2000)
 }
 
 async function pollStatus() {
@@ -132,7 +126,6 @@ async function pollStatus() {
     status.value = await api.getUpdateStatus()
     localMessage.value = ''
     if (status.value.phase === 'success') {
-      stopPolling()
       applying.value = false
       message.success('Fonu 已升级完成')
       emit('updated')
@@ -140,7 +133,6 @@ async function pollStatus() {
       return
     }
     if (status.value.phase === 'failed') {
-      stopPolling()
       applying.value = false
       message.error(status.value.message || '升级失败')
     }
@@ -149,18 +141,12 @@ async function pollStatus() {
   }
 }
 
-function stopPolling() {
-  if (pollTimer === undefined) return
-  window.clearInterval(pollTimer)
-  pollTimer = undefined
-}
-
 watch(show, (visible) => {
   if (!visible) return
   void loadStatus()
 })
 
-onBeforeUnmount(stopPolling)
+useVisibilityPolling(pollStatus, 2000, { enabled: applying })
 </script>
 
 <style scoped>

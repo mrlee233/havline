@@ -860,6 +860,7 @@ import {
 } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
 import type { ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import EmptyState from '../components/EmptyState.vue'
 import FonuCard from '../components/FonuCard.vue'
 import ProxyAccessLogBox from '../components/ProxyAccessLogBox.vue'
@@ -912,8 +913,6 @@ const clientsLoading = ref(false)
 type RatePoint = { at: number; upload: number; download: number }
 const rateHistory = ref<RatePoint[]>([])
 const RATE_HISTORY_MS = 5 * 60 * 1000
-let trafficTimer: ReturnType<typeof setInterval> | null = null
-let clientsTimer: ReturnType<typeof setInterval> | null = null
 
 const nginxHttpPort = ref(80)
 const nginxHttpsPort = ref(443)
@@ -1794,18 +1793,6 @@ async function refreshAll() {
   await Promise.all([load(), refreshTraffic()])
 }
 
-function startTrafficPoll() {
-  stopTrafficPoll()
-  trafficTimer = setInterval(refreshTraffic, 2000)
-}
-
-function stopTrafficPoll() {
-  if (trafficTimer) {
-    clearInterval(trafficTimer)
-    trafficTimer = null
-  }
-}
-
 async function loadClients() {
   const rule = selectedRule.value
   if (!rule) return
@@ -1819,25 +1806,8 @@ async function loadClients() {
   }
 }
 
-function startClientsPoll() {
-  stopClientsPoll()
-  void loadClients()
-  clientsTimer = setInterval(loadClients, 5000)
-}
-
-function stopClientsPoll() {
-  if (clientsTimer) {
-    clearInterval(clientsTimer)
-    clientsTimer = null
-  }
-}
-
 watch([showDetailPanel, selectedRuleId, detailTab], ([visible, id, tab]) => {
-  if (!visible || !id || tab !== 'overview') {
-    stopClientsPoll()
-    return
-  }
-  startClientsPoll()
+  if (visible && id && tab === 'overview') void loadClients()
 })
 
 async function loadDefaults() {
@@ -2191,17 +2161,17 @@ watch(
 onMounted(async () => {
   await loadDefaults()
   await load()
-  await refreshTraffic()
-  startTrafficPoll()
 })
 onUnmounted(() => {
   destroyRowSortable()
   stopLogStream()
-  stopTrafficPoll()
-  stopClientsPoll()
   document.removeEventListener('keydown', onLogFullscreenKeydown)
   document.body.style.overflow = ''
 })
+
+const clientsPolling = computed(() => showDetailPanel.value && !!selectedRuleId.value && detailTab.value === 'overview')
+useVisibilityPolling(refreshTraffic, 2000, { immediate: true })
+useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 </script>
 
 <style scoped>

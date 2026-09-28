@@ -353,7 +353,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { NButton, NDataTable, NIcon, NSpin, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import {
   AlertCircleOutline,
@@ -375,6 +375,7 @@ import {
 } from '@vicons/ionicons5'
 import bannerImg from '../assets/brand/banner.png'
 import { api, asList } from '../api/client'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type {
   AccessLogEntry,
   CertificateRecord,
@@ -440,8 +441,6 @@ const trafficByRule = ref<Record<number, ProxyTraffic>>({})
 type RatePoint = { at: number; upload: number; download: number }
 const rateHistory = ref<RatePoint[]>([])
 const RATE_HISTORY_MS = 5 * 60 * 1000
-let trafficTimer: ReturnType<typeof setInterval> | null = null
-let statusTimer: ReturnType<typeof setInterval> | null = null
 
 // 实时流量的数据源：本机（Fonu 管理的本机 Nginx 访问日志）或公网（frps 侧的逐规则计数）
 type TrafficSource = 'local' | 'public'
@@ -898,18 +897,6 @@ async function ensureFrpProxyNames() {
   }
 }
 
-function startTrafficPoll() {
-  stopTrafficPoll()
-  trafficTimer = setInterval(refreshTraffic, 2000)
-}
-
-function stopTrafficPoll() {
-  if (trafficTimer) {
-    clearInterval(trafficTimer)
-    trafficTimer = null
-  }
-}
-
 // CPU 占用率需要两次采样才有意义，因此 /api/status 每 15 秒刷新一次
 async function refreshStatus() {
   try {
@@ -917,29 +904,6 @@ async function refreshStatus() {
   } catch {
     // 静默失败：保留上一次快照
   }
-}
-
-function startStatusPoll() {
-  stopStatusPoll()
-  statusTimer = setInterval(refreshStatus, 15000)
-}
-
-function stopStatusPoll() {
-  if (statusTimer) {
-    clearInterval(statusTimer)
-    statusTimer = null
-  }
-}
-
-// 页面隐藏时暂停轮询，避免后台标签页持续请求
-function handleVisibilityChange() {
-  if (document.hidden) {
-    stopTrafficPoll()
-    stopStatusPoll()
-    return
-  }
-  startTrafficPoll()
-  startStatusPoll()
 }
 
 // 系统资源：/api/status 返回的宿主机 CPU / 内存 / 磁盘（容器内为宿主机视角）
@@ -1033,27 +997,20 @@ async function loadChinaCIDR() {
 }
 
 // 中国 IP 段更新是后端后台任务：刷新后按 2 秒轮询直到就绪或结束
-let cidrPollTimer: ReturnType<typeof setInterval> | null = null
-
-function stopCIDRPoll() {
-  if (cidrPollTimer) {
-    clearInterval(cidrPollTimer)
-    cidrPollTimer = null
-  }
-}
+const cidrPolling = ref(false)
 
 async function pollCIDR() {
   await loadChinaCIDR()
   const data = chinaCIDR.value
   if (!data || data.ready || !data.updating) {
-    stopCIDRPoll()
+    cidrPolling.value = false
     if (data?.ready) message.success('中国 IP 段已更新')
   }
 }
 
 async function refreshCIDR() {
   refreshingCIDR.value = true
-  stopCIDRPoll()
+  cidrPolling.value = false
   try {
     chinaCIDR.value = await api.refreshChinaCIDR()
     if (chinaCIDR.value.ready) {
@@ -1061,7 +1018,7 @@ async function refreshCIDR() {
         `中国 IP 段已更新：IPv4 ${chinaCIDR.value.entry_count_v4} 条，IPv6 ${chinaCIDR.value.entry_count_v6} 条`,
       )
     } else if (chinaCIDR.value.updating) {
-      cidrPollTimer = setInterval(() => void pollCIDR(), 2000)
+      cidrPolling.value = true
     } else {
       message.warning('更新完成，但数据尚未就绪，请查看错误信息')
     }
@@ -1188,18 +1145,11 @@ async function load() {
 
 onMounted(() => {
   load()
-  refreshTraffic()
-  startTrafficPoll()
-  startStatusPoll()
-  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
-onUnmounted(() => {
-  stopTrafficPoll()
-  stopStatusPoll()
-  stopCIDRPoll()
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-})
+useVisibilityPolling(refreshTraffic, 2000, { immediate: true })
+useVisibilityPolling(refreshStatus, 15000, { immediate: true })
+useVisibilityPolling(pollCIDR, 2000, { enabled: cidrPolling })
 </script>
 
 <style scoped>

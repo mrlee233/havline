@@ -642,7 +642,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, reactive, ref, type VNode } from 'vue'
+import { computed, h, onMounted, reactive, ref, type VNode } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import type { FrpProxyTraffic, FrpProxiesTraffic } from '../api/types'
 import { NButton, NIcon, NSpace, NSwitch, NTag, useDialog, useMessage } from 'naive-ui'
@@ -652,12 +652,12 @@ import {
 } from '@vicons/ionicons5'
 import { RouterLink } from 'vue-router'
 import { api, asList } from '../api/client'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import { formatBytes, formatDate, formatRate } from '../utils/format'
 
 import type { FrpBinary, FrpDownloadTask, FrpProxy, FrpProxyOptions, FrpProxyPayload, FrpRelease, FrpRuntimeInfo, FrpServer, FrpStatus } from '../api/types'
 import FonuCard from '../components/FonuCard.vue'
 import EmptyState from '../components/EmptyState.vue'
-import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -699,7 +699,7 @@ const downloadProxyOptions = [
   { label: 'cdn.gh-proxy.org', value: 'https://cdn.gh-proxy.org/' },
 ]
 const editingProxy = ref<FrpProxy | null>(null)
-let downloadTimer: number | undefined
+const downloadPolling = ref(false)
 
 function defaultProxyOptions(): FrpProxyOptions & { allow_ips_text?: string } {
   return { transport: {}, health_check: {}, load_balancer: {}, nat_traversal: { disable_assisted_addrs: false }, allow_ips_text: '' }
@@ -865,7 +865,7 @@ const proxyLogsLoading = ref(false)
 
 // 详情弹窗的实时速率采样，复用列表页 5 秒轮询更新的 proxyTraffic 快照
 const proxyRateHistory = ref<Array<{ at: number; upload: number; download: number }>>([])
-let proxyRateTimer: ReturnType<typeof setInterval> | null = null
+const proxyRatePolling = computed(() => showProxyDetail.value)
 
 const proxyRateChart = computed(() => {
   const now = Date.now()
@@ -909,14 +909,10 @@ function openProxyDetail(proxy: FrpProxy, tab: 'overview' | 'logs' = 'overview')
   proxyRateHistory.value = []
   recordProxyRateSample()
   if (tab === 'logs') void loadProxyLogs(proxy.id)
-  // 弹窗打开期间每 5 秒补一个速率采样点，支撑最近 5 分钟实时流量图
-  if (proxyRateTimer) window.clearInterval(proxyRateTimer)
-  proxyRateTimer = window.setInterval(recordProxyRateSample, 5_000)
 }
 
 function closeProxyDetail() {
   showProxyDetail.value = false
-  if (proxyRateTimer) { window.clearInterval(proxyRateTimer); proxyRateTimer = null }
 }
 
 async function loadProxyLogs(proxyID: number) {
@@ -1045,7 +1041,7 @@ async function loadRuntimeConfig() {
     binaries.value = asList(nextBinaries)
     releases.value = asList(nextReleases)
     downloadTask.value = nextDownloadTask.status === 'completed' ? emptyDownloadTask() : nextDownloadTask
-    ensureDownloadPolling()
+    downloadPolling.value = downloadInProgress.value
   } catch (error) { message.error(error instanceof Error ? error.message : '读取 FRP 应用配置失败') }
   finally { runtimeLoading.value = false }
 }
@@ -1078,21 +1074,16 @@ async function downloadRelease(version: string) {
   downloadingVersion.value = version
   try {
     downloadTask.value = await api.downloadFrpRelease(version)
-    ensureDownloadPolling()
+    downloadPolling.value = downloadInProgress.value
   } catch (error) { message.error(error instanceof Error ? error.message : '下载 FRP 客户端失败') }
   finally { downloadingVersion.value = null }
-}
-
-function ensureDownloadPolling() {
-  if (!downloadInProgress.value || downloadTimer) return
-  downloadTimer = window.setInterval(refreshDownloadTask, 500)
 }
 
 async function refreshDownloadTask() {
   try {
     downloadTask.value = await api.getFrpDownloadStatus()
     if (downloadInProgress.value) return
-    stopDownloadPolling()
+    downloadPolling.value = false
     if (downloadTask.value.status === 'completed') {
       message.success(`${downloadTask.value.version} 已下载并完成校验`)
       await loadRuntimeConfig()
@@ -1101,15 +1092,9 @@ async function refreshDownloadTask() {
     }
     if (downloadTask.value.status === 'failed') message.error(downloadTask.value.error || '下载 FRP 客户端失败')
   } catch (error) {
-    stopDownloadPolling()
+    downloadPolling.value = false
     message.error(error instanceof Error ? error.message : '读取下载进度失败')
   }
-}
-
-function stopDownloadPolling() {
-  if (!downloadTimer) return
-  window.clearInterval(downloadTimer)
-  downloadTimer = undefined
 }
 
 function emptyDownloadTask(): FrpDownloadTask {
@@ -1211,7 +1196,9 @@ function proxyTransportTags(proxy: FrpProxy) {
 useVisibilityPolling(() => load(), 5_000)
 
 onMounted(async () => { await load() })
-onUnmounted(() => { if (proxyRateTimer) { window.clearInterval(proxyRateTimer); proxyRateTimer = null } stopDownloadPolling() })
+
+useVisibilityPolling(recordProxyRateSample, 5000, { enabled: proxyRatePolling })
+useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 </script>
 
 <style scoped>

@@ -936,6 +936,8 @@ internal/frp/agent_versions_compat_test.go
 
 ## 4.5 P1-5：统一前端轮询组合式函数
 
+> 实施状态：2026-09-28 已完成（v1.5.4）。`useVisibilityPolling` 增加 in-flight 互斥、`enabled` / `immediate` / `onError` 选项与 `busy` / `lastError` 返回值；Dashboard、Proxy、Logs、Settings、Frp、UpdateModal、Agent 的轮询已全部迁移，仅 AppLayout 时钟保留原生计时器。
+
 ### 4.5.1 现状
 
 已有 `web/src/composables/useVisibilityPolling.ts`，并被：

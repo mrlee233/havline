@@ -162,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineComponent, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, defineComponent, h, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NButton,
@@ -177,6 +177,7 @@ import {
   type DataTableColumns,
 } from 'naive-ui'
 import { api, asList } from '../api/client'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type { AccessLogEntry, ProxyRule, SystemLogEntry } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
 import FonuCard from '../components/FonuCard.vue'
@@ -296,7 +297,6 @@ function resolveTab(queryTab: unknown): LogTab {
 const tab = ref(resolveTab(route.query.tab))
 const pageError = ref('')
 const autoRefresh = ref(false)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
 
 const accessLogs = ref<AccessLogEntry[]>([])
 const proxyRules = ref<ProxyRule[]>([])
@@ -802,10 +802,7 @@ watch([frpKeyword, frpLevel], () => {
   frpPage.value = 1
 })
 
-watch(autoRefresh, (on) => {
-  if (refreshTimer) clearInterval(refreshTimer)
-  if (on) refreshTimer = setInterval(() => loadAccess(), 10000)
-})
+useVisibilityPolling(() => loadAccess(), 10000, { enabled: autoRefresh })
 
 watch(
   () => route.query.tab,
@@ -823,9 +820,6 @@ watch(tab, (name) => {
 onMounted(() => {
   tab.value = resolveTab(route.query.tab)
   loadAll()
-})
-onUnmounted(() => {
-  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
