@@ -130,6 +130,15 @@ mkdir -p "$CONF_DIR" /var/lib/fonu-agent/certs
 # 先停服务，再原子替换；安装后必须确认目标存在、可执行且能输出版本
 systemctl stop fonu-agent 2>/dev/null || true
 TMP_PREFIX="${PREFIX}.new"
+# 迁移旧版 Agent 留在 nginx include 范围内的 <配置>.versions 目录（保留历史版本内容）
+for NGINX_DIR in /etc/nginx/sites-enabled /etc/nginx/conf.d; do
+  [ -d "$NGINX_DIR" ] || continue
+  for LEGACY in "$NGINX_DIR"/*.versions; do
+    [ -d "$LEGACY" ] || continue
+    TARGET="$NGINX_DIR/.$(basename "$LEGACY")"
+    [ -e "$TARGET" ] || mv "$LEGACY" "$TARGET" || true
+  done
+done
 install -m 0755 "$AGENT_BINARY" "$TMP_PREFIX"
 if [ ! -x "$TMP_PREFIX" ]; then
   echo "agent 二进制安装失败：$TMP_PREFIX 不存在或不可执行" >&2

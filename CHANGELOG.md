@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.5] - 2026-09-28
+
+### 修复
+
+- **Agent 探测阶段无法自愈 nginx 残留目录**：0.13.1 的迁移只在配置目录已知或 `nginx -t` 校验前执行；当 `nginx -T` 在探测目录阶段就因 `.versions` 目录失败时，Agent 仍返回 `nginx -T 执行失败: exit status 1`。现在会先从 `nginx -T` 报错文本解析出 `<配置>.versions` 路径并迁移，再重试一次；安装 / 升级 Agent 的脚本也会先把 `sites-enabled`、`conf.d` 下的旧 `.versions` 目录移出 include 范围
+
+### 变更
+
+- 版本号提升到 1.4.5；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.13.1 → **0.13.2**，内嵌 amd64 / arm64 二进制已重编；VPS 上需重新点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/agent`：新增从 nginx 报错文本解析并迁移旧版本目录的测试
+- `scripts/agent-install.sh`：`bash -n` 语法校验通过
+
 ## [v1.4.4] - 2026-09-28
 
 ### 修复

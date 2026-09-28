@@ -28,3 +28,18 @@ func TestMigrateLegacyVersionDirs(t *testing.T) {
 		t.Fatalf("隐藏版本目录应保留 1 个版本：%v %v", entries, err)
 	}
 }
+
+func TestMigrateVersionDirsFromNginxOutput(t *testing.T) {
+	dir := t.TempDir()
+	legacy := filepath.Join(dir, "fonuagent-https.conf.versions")
+	if err := os.MkdirAll(legacy, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	output := "2026/09/28 14:38:16 [crit] 6053#6053: pread() \"" + legacy + "\" failed (21: Is a directory)"
+	if !migrateVersionDirsFromNginxOutput(output) {
+		t.Fatal("应从 nginx 报错文本中识别并迁移旧版本目录")
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatalf("旧版本目录应被移出 include 范围：%v", err)
+	}
+}

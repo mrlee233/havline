@@ -54,7 +54,9 @@ import (
 // 0.13.0：默认只监听回环地址，非回环监听必须显式允许；状态接口暴露监听范围与传输安全。
 // 0.13.1：nginx 版本备份目录改为隐藏目录（.<name>.versions）并自动迁移旧目录，
 // 修掉旧 <name>.versions 目录被 include * 当配置文件读取、nginx -t 报 pread() "Is a directory" 的问题。
-const AgentVersion = "0.13.1"
+// 0.13.2：nginx -T 探测失败时先从报错文本解析旧 <name>.versions 目录并迁移后重试，
+// 修掉「配置目录还没探测出来、迁移逻辑没机会执行」导致 HTTPS 直连持续失败的问题。
+const AgentVersion = "0.13.2"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -728,7 +730,14 @@ func detectNginxConfDir(binary string) (string, error) {
 	if nginx == "" {
 		return "", fmt.Errorf("未找到可用的 nginx 可执行文件；请先在 VPS 安装 Nginx（apt install nginx / yum install nginx），或用 FONU_AGENT_NGINX_BIN 显式指定路径")
 	}
+	// 旧版 Agent 可能把 <配置>.versions 目录留在 include 范围内，先按常见目录清理，避免 nginx -T 直接失败。
+	for _, dir := range []string{"/etc/nginx/sites-enabled", "/etc/nginx/conf.d", "/etc/nginx"} {
+		migrateLegacyVersionDirs(dir)
+	}
 	out, err := exec.Command(nginx, "-T").CombinedOutput()
+	if err != nil && migrateVersionDirsFromNginxOutput(string(out)) {
+		out, err = exec.Command(nginx, "-T").CombinedOutput()
+	}
 	if err != nil {
 		return "", fmt.Errorf("nginx -T 执行失败: %w", err)
 	}
@@ -1300,6 +1309,32 @@ func migrateLegacyVersionDirs(dir string) {
 		base := strings.TrimSuffix(filepath.Join(dir, entry.Name()), ".versions")
 		_ = fsutil.MigrateLegacyVersions(base)
 	}
+}
+
+// migrateVersionDirsFromNginxOutput 从 nginx 报错文本里解析被误当配置文件读取的 .versions 目录并迁移。
+// nginx -T 在探测目录前就失败时，这是拿到具体路径的唯一线索。
+func migrateVersionDirsFromNginxOutput(output string) bool {
+	changed := false
+	for _, line := range strings.Split(output, "\n") {
+		idx := strings.Index(line, ".versions")
+		if idx < 0 {
+			continue
+		}
+		start := strings.LastIndex(line[:idx], "\"")
+		if start < 0 {
+			start = strings.LastIndexAny(line[:idx], " '")
+		}
+		path := line[start+1 : idx+len(".versions")]
+		if !filepath.IsAbs(path) {
+			continue
+		}
+		base := strings.TrimSuffix(path, ".versions")
+		if err := fsutil.MigrateLegacyVersions(base); err != nil {
+			continue
+		}
+		changed = true
+	}
+	return changed
 }
 
 func (s *Server) reloadNginx() error {
