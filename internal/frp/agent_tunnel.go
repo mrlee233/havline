@@ -13,6 +13,12 @@ import (
 
 const agentRemoteAddr = "127.0.0.1:7700"
 
+const (
+	agentTunnelKeepalive  = 30 * time.Second
+	agentTunnelBackoffMin = time.Second
+	agentTunnelBackoffMax = 60 * time.Second
+)
+
 type agentTunnel struct {
 	serverID  int64
 	localPort int
@@ -59,9 +65,53 @@ func (t *agentTunnel) Start() error {
 	t.state = "connected"
 	t.lastError = ""
 	t.mu.Unlock()
-	t.wg.Add(1)
+	t.wg.Add(2)
 	go t.acceptLoop()
+	go t.monitorLoop()
 	return nil
+}
+
+// monitorLoop 主动保活并在断开后按指数退避重建 SSH 连接，避免只在有流量时才尝试重连。
+func (t *agentTunnel) monitorLoop() {
+	defer t.wg.Done()
+	backoff := agentTunnelBackoffMin
+	for {
+		_, err := t.ensureClient()
+		wait := agentTunnelKeepalive
+		if err != nil {
+			t.setState("reconnecting", err)
+			backoff = nextTunnelBackoff(backoff)
+			wait = backoff
+		} else {
+			t.setState("connected", nil)
+			backoff = agentTunnelBackoffMin
+		}
+		if !t.sleep(wait) {
+			return
+		}
+	}
+}
+
+func (t *agentTunnel) sleep(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-t.ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func nextTunnelBackoff(current time.Duration) time.Duration {
+	if current < agentTunnelBackoffMin {
+		return agentTunnelBackoffMin
+	}
+	next := current * 2
+	if next > agentTunnelBackoffMax {
+		return agentTunnelBackoffMax
+	}
+	return next
 }
 
 func (t *agentTunnel) acceptLoop() {

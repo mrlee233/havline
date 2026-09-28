@@ -297,6 +297,54 @@ func (s *Store) SetAgentTransport(ctx context.Context, id int64, agentURL, trans
 	return nil
 }
 
+// SetAgentTLSPinRotation 更新当前证书 pin、过渡期旧 pin 与证书到期时间。
+func (s *Store) SetAgentTLSPinRotation(ctx context.Context, id int64, pin, prevPin, prevUntil, notAfter string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE frp_servers
+		SET agent_tls_pin = ?, agent_tls_pin_prev = ?, agent_tls_pin_prev_until = ?, agent_tls_not_after = ?,
+		    updated_at = datetime('now')
+		WHERE id = ?
+	`, pin, prevPin, prevUntil, notAfter, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return fmt.Errorf("FRP 服务端不存在")
+	}
+	return nil
+}
+
+// SetAgentFirewallState 记录最近一次主机防火墙检测 / 放行结果，供前端展示。
+func (s *Store) SetAgentFirewallState(ctx context.Context, id int64, state string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE frp_servers SET agent_firewall_state = ?, updated_at = datetime('now') WHERE id = ?
+	`, state, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return fmt.Errorf("FRP 服务端不存在")
+	}
+	return nil
+}
+
+// SetAgentTLSNotAfter 只同步证书到期时间，不改动 pin（用于旧记录补齐）。
+func (s *Store) SetAgentTLSNotAfter(ctx context.Context, id int64, notAfter string) error {
+	result, err := s.db.ExecContext(ctx, `
+		UPDATE frp_servers SET agent_tls_not_after = ?, updated_at = datetime('now') WHERE id = ?
+	`, notAfter, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return fmt.Errorf("FRP 服务端不存在")
+	}
+	return nil
+}
+
 func (s *Store) Token(ctx context.Context, id int64) (string, error) {
 	var token string
 	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(auth_token_enc, '') FROM frp_servers WHERE id = ?`, id).Scan(&token)
@@ -447,6 +495,8 @@ SELECT id, name, server_addr, server_port, tls_enabled, tls_server_name, enabled
        COALESCE(ssh_host, ''), COALESCE(ssh_port, 22), COALESCE(ssh_user, ''), COALESCE(ssh_auth, 'key'),
        CASE WHEN COALESCE(ssh_secret_enc, '') != '' THEN 1 ELSE 0 END, COALESCE(mgmt_enabled, 0),
        COALESCE(agent_transport, 'http'), COALESCE(agent_local_port, 0), COALESCE(agent_tls_pin, ''),
+       COALESCE(agent_tls_pin_prev, ''), COALESCE(agent_tls_pin_prev_until, ''), COALESCE(agent_tls_not_after, ''),
+       COALESCE(agent_firewall_state, ''),
        COALESCE(agent_listen_addr, ''), COALESCE(agent_transport_state, 'unknown'), COALESCE(agent_transport_error, ''),
        COALESCE(config_json, '{}'), created_at, updated_at
 FROM frp_servers`
@@ -459,7 +509,7 @@ func scanServer(row interface{ Scan(dest ...any) error }) (Server, error) {
 	var server Server
 	var tls, enabled, token, oidcSecret, dashboardPwd, agentConfigured, sshConfigured, mgmtEnabled int
 	var configJSON, created, updated string
-	err := row.Scan(&server.ID, &server.Name, &server.ServerAddr, &server.ServerPort, &tls, &server.TLSServerName, &enabled, &token, &oidcSecret, &dashboardPwd, &server.AgentURL, &agentConfigured, &server.SSHHost, &server.SSHPort, &server.SSHUser, &server.SSHAuth, &sshConfigured, &mgmtEnabled, &server.AgentTransport, &server.AgentLocalPort, &server.AgentTLSPin, &server.AgentListenAddr, &server.AgentTransportState, &server.AgentTransportError, &configJSON, &created, &updated)
+	err := row.Scan(&server.ID, &server.Name, &server.ServerAddr, &server.ServerPort, &tls, &server.TLSServerName, &enabled, &token, &oidcSecret, &dashboardPwd, &server.AgentURL, &agentConfigured, &server.SSHHost, &server.SSHPort, &server.SSHUser, &server.SSHAuth, &sshConfigured, &mgmtEnabled, &server.AgentTransport, &server.AgentLocalPort, &server.AgentTLSPin, &server.AgentTLSPinPrev, &server.AgentTLSPinPrevUntil, &server.AgentTLSNotAfter, &server.AgentFirewallState, &server.AgentListenAddr, &server.AgentTransportState, &server.AgentTransportError, &configJSON, &created, &updated)
 	if err != nil {
 		return Server{}, err
 	}

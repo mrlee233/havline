@@ -4,7 +4,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"net"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestGenerateAgentCertificate(t *testing.T) {
@@ -37,13 +39,43 @@ func TestPinTLSConfigVerification(t *testing.T) {
 	if block == nil {
 		t.Fatal("证书 PEM 解码失败")
 	}
-	verify := pinTLSConfig(cert.Pin).VerifyPeerCertificate
+	verify := pinTLSConfig("agent.example.com", cert.Pin).VerifyPeerCertificate
 	if err := verify([][]byte{block.Bytes}, nil); err != nil {
 		t.Fatalf("正确 pin 校验失败: %v", err)
 	}
-	wrong := pinTLSConfig("0000000000000000000000000000000000000000000000000000000000000000").VerifyPeerCertificate
+	wrong := pinTLSConfig("agent.example.com", strings.Repeat("0", 64)).VerifyPeerCertificate
 	if err := wrong([][]byte{block.Bytes}, nil); err == nil {
 		t.Fatal("错误 pin 应校验失败")
+	}
+}
+
+func TestPinTLSConfigAcceptsGracePins(t *testing.T) {
+	cert, err := generateAgentCertificate("agent.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode([]byte(cert.CertPEM))
+	if block == nil {
+		t.Fatal("证书 PEM 解码失败")
+	}
+	verify := pinTLSConfig("agent.example.com", strings.Repeat("1", 64), cert.Pin).VerifyPeerCertificate
+	if err := verify([][]byte{block.Bytes}, nil); err != nil {
+		t.Fatalf("轮换过渡期应同时接受旧 pin 与新 pin: %v", err)
+	}
+}
+
+func TestPinTLSConfigRejectsHostMismatch(t *testing.T) {
+	cert, err := generateAgentCertificate("agent.example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode([]byte(cert.CertPEM))
+	if block == nil {
+		t.Fatal("证书 PEM 解码失败")
+	}
+	verify := pinTLSConfig("other.example.com", cert.Pin).VerifyPeerCertificate
+	if err := verify([][]byte{block.Bytes}, nil); err == nil {
+		t.Fatal("证书 SAN 与连接主机不一致时应拒绝")
 	}
 }
 
@@ -80,5 +112,37 @@ func TestAgentHTTPSBaseURL(t *testing.T) {
 				t.Fatalf("agentHTTPSBaseURL() = %q, 期望 %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestAgentTransportPins(t *testing.T) {
+	active := Server{
+		AgentTLSPin:          "new",
+		AgentTLSPinPrev:      "old",
+		AgentTLSPinPrevUntil: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	}
+	pins := agentTransportPins(active)
+	if len(pins) != 2 || pins[0] != "new" || pins[1] != "old" {
+		t.Fatalf("过渡期应同时返回新旧 pin：%v", pins)
+	}
+	expired := active
+	expired.AgentTLSPinPrevUntil = time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
+	if pins := agentTransportPins(expired); len(pins) != 1 || pins[0] != "new" {
+		t.Fatalf("过渡期结束后只应保留新 pin：%v", pins)
+	}
+}
+
+func TestResultPortAndListenPort(t *testing.T) {
+	if got := resultPort(map[string]any{"port": float64(8443)}, 0); got != 8443 {
+		t.Fatalf("resultPort() = %d, 期望 8443", got)
+	}
+	if got := resultPort(nil, 7443); got != 7443 {
+		t.Fatalf("resultPort() 回退值 = %d, 期望 7443", got)
+	}
+	if got := listenPort("0.0.0.0:9443", 7443); got != 9443 {
+		t.Fatalf("listenPort() = %d, 期望 9443", got)
+	}
+	if got := listenPort("", 7443); got != 7443 {
+		t.Fatalf("listenPort() 回退值 = %d, 期望 7443", got)
 	}
 }

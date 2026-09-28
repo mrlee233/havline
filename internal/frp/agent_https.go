@@ -16,9 +16,10 @@ import (
 )
 
 type agentCertificate struct {
-	CertPEM string
-	KeyPEM  string
-	Pin     string
+	CertPEM  string
+	KeyPEM   string
+	Pin      string
+	NotAfter time.Time
 }
 
 func generateAgentCertificate(host string) (agentCertificate, error) {
@@ -55,9 +56,10 @@ func generateAgentCertificate(host string) (agentCertificate, error) {
 	}
 	sum := sha256.Sum256(der)
 	return agentCertificate{
-		CertPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
-		KeyPEM:  string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})),
-		Pin:     hex.EncodeToString(sum[:]),
+		CertPEM:  string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
+		KeyPEM:   string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})),
+		Pin:      hex.EncodeToString(sum[:]),
+		NotAfter: template.NotAfter,
 	}, nil
 }
 

@@ -399,6 +399,10 @@ export interface FrpServer {
   agent_transport: 'tunnel' | 'https-pin' | 'http' | string
   agent_local_port?: number
   agent_tls_pin?: string
+  agent_tls_pin_prev?: string
+  agent_tls_pin_prev_until?: string
+  agent_tls_not_after?: string
+  agent_firewall_state?: string
   agent_listen_addr?: string
   agent_transport_state: string
   agent_transport_error?: string

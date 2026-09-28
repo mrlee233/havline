@@ -2,10 +2,10 @@
 
 > 方案编号：P0-5  
 > 制定日期：2026-09-28  
-> 当前 AgentVersion：0.13.3  
+> 当前 AgentVersion：0.14.0  
 > 目标：默认不暴露 Agent 管理接口，安装和升级过程自动建立安全连接，不要求用户手工配置端口、隧道或证书
 
-> 实施状态（2026-09-28）：阶段 1-4 已随 v1.4.0 实施；0.13.1 / 0.13.2 修复 nginx 版本目录被 `include *` 误加载及探测阶段无法自愈的问题，0.13.3 增加 HTTPS reload 后本机证书自检；仅剩 2.0.0 的旧 HTTP 兼容清理和可选主机防火墙辅助。
+> 实施状态（2026-09-28）：阶段 1-5 主体已在 v1.5.0 完成，包括回环监听、SSH 隧道与后台重连、旧 HTTP 迁移、HTTPS 端口自动选择、证书自动轮换与双 pin 过渡、主机防火墙辅助、传输状态接口与审计记录。剩余：2.0.0 移除旧 HTTP 兼容分支，以及 Debian/Ubuntu/CentOS、宝塔、端口占用、云安全组受限等真机矩阵验证。
 
 ---
 
@@ -483,11 +483,13 @@ VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 
 ### 9.4 防火墙
 
-首版不自动修改主机防火墙。阶段 4 之后，在用户明确确认时可以辅助生成并执行主机防火墙命令：
+> 实施更新（v1.5.0 / Agent 0.14.0）：已支持检测 ufw / firewalld / nftables / iptables；对 ufw 与 firewalld 可在用户明确确认后自动放行，nftables / iptables 仅检测和提示，不会自动改规则。
+
+自动放行仅在用户明确确认后执行，支持的工具：
 
 - ufw；
 - firewalld；
-- nftables / iptables。
+- nftables / iptables（只提示，不自动改规则）。
 
 云厂商安全组始终不能自动修改。UI 必须提示：
 

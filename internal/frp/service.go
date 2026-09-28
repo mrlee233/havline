@@ -941,6 +941,83 @@ func (s *Service) RestartAgentTunnel(ctx context.Context, serverID int64) (Serve
 	return server, nil
 }
 
+// AgentTransportStatus 返回传输方式的详细状态，供前端与诊断使用。
+func (s *Service) AgentTransportStatus(ctx context.Context, serverID int64) (map[string]any, error) {
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return nil, err
+	}
+	state := server.AgentTransportState
+	lastError := server.AgentTransportError
+	if server.AgentTransport == "tunnel" {
+		if tunnelState, tunnelError, ok := s.tunnelState(serverID); ok {
+			state, lastError = tunnelState, tunnelError
+		}
+	}
+	return map[string]any{
+		"transport":      server.AgentTransport,
+		"state":          state,
+		"agent_url":      server.AgentURL,
+		"local_port":     server.AgentLocalPort,
+		"listen_addr":    server.AgentListenAddr,
+		"tls_pin":        server.AgentTLSPin,
+		"tls_not_after":  server.AgentTLSNotAfter,
+		"pin_prev_until": server.AgentTLSPinPrevUntil,
+		"firewall_state": server.AgentFirewallState,
+		"last_error":     lastError,
+	}, nil
+}
+
+// AgentFirewallStatus 检测 VPS 主机防火墙，并把结果缓存到服务端记录供 UI 展示。
+func (s *Service) AgentFirewallStatus(ctx context.Context, serverID int64, port int) (map[string]any, error) {
+	if port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("端口无效")
+	}
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return nil, fmt.Errorf("当前 Agent 连接不可用")
+	}
+	status, err := client.FirewallStatus(ctx, port)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.SetAgentFirewallState(ctx, serverID, firewallSummary(status))
+	return status, nil
+}
+
+// AllowAgentFirewallPort 由用户显式触发，Agent 仅对 ufw / firewalld 执行放行。
+func (s *Service) AllowAgentFirewallPort(ctx context.Context, serverID int64, port int) (map[string]any, error) {
+	if port <= 0 || port > 65535 {
+		return nil, fmt.Errorf("端口无效")
+	}
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return nil, fmt.Errorf("当前 Agent 连接不可用")
+	}
+	result, err := client.AllowFirewallPort(ctx, port)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.store.SetAgentFirewallState(ctx, serverID, firewallSummary(result))
+	return result, nil
+}
+
+func firewallSummary(result map[string]any) string {
+	status := result
+	if nested, ok := result["status"].(map[string]any); ok {
+		status = nested
+	}
+	tool, _ := status["tool"].(string)
+	open, _ := status["port_open"].(bool)
+	if tool == "" {
+		return ""
+	}
+	if open {
+		return tool + ":已放行"
+	}
+	return tool + ":未放行"
+}
+
 func (s *Service) agentToken(ctx context.Context, serverID int64) (string, error) {
 	encoded, err := s.store.AgentToken(ctx, serverID)
 	if err != nil || encoded == "" {
@@ -954,10 +1031,7 @@ func (s *Service) agentToken(ctx context.Context, serverID int64) (string, error
 }
 
 func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int) (Server, error) {
-	if port == 0 {
-		port = 7443
-	}
-	if port <= 0 || port > 65535 {
+	if port < 0 || port > 65535 {
 		return Server{}, fmt.Errorf("HTTPS 端口无效")
 	}
 	server, err := s.store.GetServer(ctx, serverID)
@@ -983,16 +1057,23 @@ func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int
 	if err != nil {
 		return Server{}, err
 	}
-	baseURL := fmt.Sprintf("https://%s:%d", server.SSHHost, port)
+	actualPort := resultPort(result, port)
+	if actualPort <= 0 {
+		return Server{}, fmt.Errorf("Agent 未返回可用的 HTTPS 端口")
+	}
+	baseURL := fmt.Sprintf("https://%s:%d", server.SSHHost, actualPort)
 	pinned := NewAgentClientWithPin(baseURL, token, cert.Pin)
 	if err := pinned.Ping(ctx); err != nil {
 		_ = currentClient.DisableHTTPS(ctx)
 		if result["self_check"] == "ok" {
-			return Server{}, fmt.Errorf("HTTPS 直连验证失败：Agent 本机 7443 自检通过，但公网 %s 返回的证书不一致，请检查该端口是否被其他服务、端口转发或防火墙接管: %w", baseURL, err)
+			return Server{}, fmt.Errorf("HTTPS 直连验证失败：Agent 本机 %d 端口自检通过，但公网 %s 返回的证书不一致，请检查该端口是否被其他服务、端口转发或防火墙接管: %w", actualPort, baseURL, err)
 		}
 		return Server{}, fmt.Errorf("HTTPS 直连验证失败: %w", err)
 	}
-	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", port), "connected", ""); err != nil {
+	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", actualPort), "connected", ""); err != nil {
+		return Server{}, err
+	}
+	if err := s.store.SetAgentTLSPinRotation(ctx, serverID, cert.Pin, "", "", cert.NotAfter.UTC().Format(time.RFC3339)); err != nil {
 		return Server{}, err
 	}
 	s.invalidateAgentClient(serverID)
@@ -1002,6 +1083,128 @@ func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int
 		return Server{}, err
 	}
 	return updated, nil
+}
+
+const (
+	agentCertRenewBefore = 30 * 24 * time.Hour
+	agentCertPinGrace    = 7 * 24 * time.Hour
+)
+
+// StartAgentCertificateRenewal 后台巡检 HTTPS 直连证书，剩余不足 30 天时自动轮换。
+func (s *Service) StartAgentCertificateRenewal(ctx context.Context) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	s.renewAgentCertificates(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.renewAgentCertificates(ctx)
+		}
+	}
+}
+
+func (s *Service) renewAgentCertificates(ctx context.Context) {
+	servers, err := s.store.ListServers(ctx)
+	if err != nil {
+		s.logger.Warn("巡检 Agent 证书失败", "error", err.Error())
+		return
+	}
+	for _, server := range servers {
+		if !server.MgmtEnabled || server.AgentTransport != "https-pin" {
+			continue
+		}
+		notAfter, ok := s.agentCertificateExpiry(ctx, server)
+		if !ok || time.Until(notAfter) > agentCertRenewBefore {
+			continue
+		}
+		if _, err := s.RotateAgentCertificate(ctx, server.ID); err != nil {
+			s.logger.Warn("Agent 证书自动轮换失败", "server_id", server.ID, "error", err.Error())
+		}
+	}
+}
+
+// agentCertificateExpiry 优先使用数据库缓存；旧记录缺少到期时间时从 Agent 补齐。
+func (s *Service) agentCertificateExpiry(ctx context.Context, server Server) (time.Time, bool) {
+	if raw := strings.TrimSpace(server.AgentTLSNotAfter); raw != "" {
+		if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+			return parsed, true
+		}
+	}
+	client, ok := s.agentClient(ctx, server.ID)
+	if !ok {
+		return time.Time{}, false
+	}
+	state, err := client.HTTPSState(ctx)
+	if err != nil {
+		return time.Time{}, false
+	}
+	raw, _ := state["not_after"].(string)
+	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(raw))
+	if err != nil {
+		return time.Time{}, false
+	}
+	_ = s.store.SetAgentTLSNotAfter(ctx, server.ID, parsed.UTC().Format(time.RFC3339))
+	return parsed, true
+}
+
+// RotateAgentCertificate 安装新证书；过渡期内客户端同时接受新 pin 与旧 pin。
+func (s *Service) RotateAgentCertificate(ctx context.Context, serverID int64) (Server, error) {
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	if server.AgentTransport != "https-pin" {
+		return Server{}, fmt.Errorf("仅 HTTPS 直连模式支持证书轮换")
+	}
+	token, err := s.agentToken(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	cert, err := generateAgentCertificate(server.SSHHost)
+	if err != nil {
+		return Server{}, err
+	}
+	oldPin := strings.TrimSpace(server.AgentTLSPin)
+	port := listenPort(server.AgentListenAddr, 7443)
+	configureClient := NewAgentClientWithPins(agentHTTPSBaseURL(server), token, cert.Pin, oldPin)
+	result, err := configureClient.ConfigureHTTPS(ctx, cert.CertPEM, cert.KeyPEM, port)
+	if err != nil {
+		return Server{}, err
+	}
+	actualPort := resultPort(result, port)
+	baseURL := fmt.Sprintf("https://%s:%d", server.SSHHost, actualPort)
+	graceUntil := time.Now().Add(agentCertPinGrace).UTC().Format(time.RFC3339)
+	notAfter := cert.NotAfter.UTC().Format(time.RFC3339)
+	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", actualPort), "connected", ""); err != nil {
+		return Server{}, err
+	}
+	if err := s.store.SetAgentTLSPinRotation(ctx, serverID, cert.Pin, oldPin, graceUntil, notAfter); err != nil {
+		return Server{}, err
+	}
+	s.invalidateAgentClient(serverID)
+	dual := NewAgentClientWithPins(baseURL, token, cert.Pin, oldPin)
+	if err := dual.Ping(ctx); err != nil {
+		return Server{}, fmt.Errorf("证书轮换后公网校验失败（旧 pin 在过渡期仍可用）: %w", err)
+	}
+	return s.store.GetServer(ctx, serverID)
+}
+
+func resultPort(result map[string]any, fallback int) int {
+	if raw, ok := result["port"].(float64); ok && raw > 0 && raw <= 65535 {
+		return int(raw)
+	}
+	return fallback
+}
+
+func listenPort(listenAddr string, fallback int) int {
+	if _, rawPort, err := net.SplitHostPort(strings.TrimSpace(listenAddr)); err == nil {
+		if parsed, err := strconv.Atoi(rawPort); err == nil && parsed > 0 && parsed <= 65535 {
+			return parsed
+		}
+	}
+	return fallback
 }
 
 func (s *Service) SwitchAgentToTunnel(ctx context.Context, serverID int64) (Server, error) {
@@ -1609,13 +1812,33 @@ func agentHTTPSBaseURL(server Server) string {
 	if host == "" {
 		return current
 	}
-	port := 7443
-	if _, rawPort, err := net.SplitHostPort(strings.TrimSpace(server.AgentListenAddr)); err == nil {
-		if parsed, err := strconv.Atoi(rawPort); err == nil && parsed > 0 {
-			port = parsed
-		}
-	}
+	port := listenPort(server.AgentListenAddr, 7443)
 	return fmt.Sprintf("https://%s:%d", host, port)
+}
+
+// agentTransportPins 返回当前应接受的证书 pin；轮换过渡期内同时包含旧 pin。
+func agentTransportPins(server Server) []string {
+	out := make([]string, 0, 2)
+	if pin := strings.TrimSpace(server.AgentTLSPin); pin != "" {
+		out = append(out, pin)
+	}
+	prev := strings.TrimSpace(server.AgentTLSPinPrev)
+	if prev == "" || !pinGraceActive(server.AgentTLSPinPrevUntil) {
+		return out
+	}
+	return append(out, prev)
+}
+
+func pinGraceActive(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	deadline, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return false
+	}
+	return time.Now().Before(deadline)
 }
 
 func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient, bool) {
@@ -1632,7 +1855,7 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		return nil, false
 	}
 	baseURL := server.AgentURL
-	pin := ""
+	var pins []string
 	if server.AgentTransport == "tunnel" {
 		tunnel, err := s.ensureAgentTunnel(ctx, serverID)
 		if err != nil {
@@ -1640,8 +1863,8 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		}
 		baseURL = fmt.Sprintf("http://127.0.0.1:%d", tunnel.localPort)
 	} else if server.AgentTransport == "https-pin" {
-		pin = strings.TrimSpace(server.AgentTLSPin)
-		if pin == "" {
+		pins = agentTransportPins(server)
+		if len(pins) == 0 {
 			return nil, false
 		}
 		baseURL = agentHTTPSBaseURL(server)
@@ -1650,7 +1873,7 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		}
 		if baseURL != strings.TrimRight(strings.TrimSpace(server.AgentURL), "/") {
 			err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort,
-				pin, server.AgentListenAddr, server.AgentTransportState, server.AgentTransportError)
+				server.AgentTLSPin, server.AgentListenAddr, server.AgentTransportState, server.AgentTransportError)
 			if err != nil {
 				s.logger.Warn("agent https url repair failed", "server_id", serverID, "error", err)
 			}
@@ -1659,7 +1882,7 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		return nil, false
 	}
 	// 复用同一个 http.Client：批量同步 N 条路由时不再每次新建 Transport 与 TLS 握手
-	fingerprint := baseURL + "|" + encoded + "|" + pin
+	fingerprint := baseURL + "|" + encoded + "|" + strings.Join(pins, ",")
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
 	if s.agentClients == nil {
@@ -1669,8 +1892,8 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		return cached.client, true
 	}
 	var client *AgentClient
-	if pin != "" {
-		client = NewAgentClientWithPin(baseURL, token, pin)
+	if len(pins) > 0 {
+		client = NewAgentClientWithPins(baseURL, token, pins...)
 	} else {
 		client = NewAgentClient(baseURL, token)
 	}

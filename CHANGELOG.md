@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.0] - 2026-09-28
+
+### 新增
+
+- **HTTPS 直连端口自动选择**：Agent 在 `7443` / `8443` / `9443` 中逐个尝试可用端口，每轮都会写配置、reload 并做本机证书自检；全部失败时返回每个端口的具体原因。显式传入端口时仍按指定值执行，`443` 可通过接口显式指定
+- **证书自动轮换**：证书有效期 365 天，剩余 30 天时后台自动生成新证书并通过当前连接安装；过渡期 7 天内客户端同时接受新旧 pin，避免轮换瞬间连接失败。旧记录缺少到期信息时，先从 Agent 读取当前证书到期时间再决定是否轮换
+- **主机防火墙辅助**：Agent 新增防火墙检测与显式放行接口，支持 `ufw` / `firewalld` 自动放行；`nftables` / `iptables` 只检测和提示，不自动修改规则。Agent 页增加「检测主机防火墙 / 放行主机防火墙」
+- **隧道后台保活与重连**：隧道启动后每 30 秒保活，断线按 1 秒到 60 秒指数退避重建，不再只在有流量时才尝试重连
+- **传输详细状态接口**：`GET /api/frpmulti/servers/{id}/agent/transport` 返回 transport、状态、端口、pin、证书到期时间与防火墙状态
+- **审计记录**：transport 切换、证书轮换、防火墙放行写入 AUDIT 日志，包含 admin_id、server_id 与来源地址
+- **证书 SAN 校验**：pin 校验同时校验证书 SAN 与连接主机一致
+
+### 变更
+
+- 版本号提升到 1.5.0；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.13.3 → **0.14.0**，内嵌 amd64 / arm64 二进制已重编；VPS 上需点一次「升级 Agent」才会生效
+- Agent 页轮询改用 `useVisibilityPolling`，页面隐藏时暂停
+
+### 测试
+
+- `internal/frp`：新增多 pin 过渡、SAN 拒绝、端口解析与轮换兼容测试
+- `internal/agent`：新增 ufw 解析与候选端口测试
+- `internal/frp`：隧道退避策略单元测试
+
 ## [v1.4.6] - 2026-09-28
 
 ### 修复

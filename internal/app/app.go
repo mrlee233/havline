@@ -147,6 +147,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	ctx, cancel := context.WithCancel(context.Background())
 	frpMultiSvc.SetBaseContext(ctx)
 	go frpMultiSvc.StartAgentTunnels(ctx)
+	go frpMultiSvc.StartAgentCertificateRenewal(ctx)
 	intervalMinutes, _ := settingsStore.GetInt(ctx, settings.KeyDDNSCheckInterval)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 5

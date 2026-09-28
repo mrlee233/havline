@@ -58,7 +58,8 @@ import (
 // 修掉「配置目录还没探测出来、迁移逻辑没机会执行」导致 HTTPS 直连持续失败的问题。
 // 0.13.3：HTTPS 反代改用 default_server 并在 reload 后做本机证书指纹自检，
 // 证书不匹配时回滚并回报实际指纹与端口占用进程，区分「nginx 未生效」与「公网链路被接管」。
-const AgentVersion = "0.13.3"
+// 0.14.0：HTTPS 端口自动选择（7443/8443/9443）、当前证书信息查询、主机防火墙检测与 ufw/firewalld 显式放行。
+const AgentVersion = "0.14.0"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -227,7 +228,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/china-cidr", s.auth(s.putChinaCIDR))
 	mux.HandleFunc("POST /api/v1/nginx/install", s.auth(s.installNginx))
 	mux.HandleFunc("PUT /api/v1/transport/https", s.auth(s.putHTTPSProxy))
+	mux.HandleFunc("GET /api/v1/transport/https", s.auth(s.getHTTPSProxy))
 	mux.HandleFunc("DELETE /api/v1/transport/https", s.auth(s.deleteHTTPSProxy))
+	mux.HandleFunc("GET /api/v1/firewall", s.auth(s.firewallStatus))
+	mux.HandleFunc("POST /api/v1/firewall/allow", s.auth(s.firewallAllow))
 	mux.HandleFunc("DELETE /api/v1/routes/{domain}", s.auth(s.deleteRoute))
 	mux.HandleFunc("PUT /api/v1/frps/config", s.auth(s.putFRPSConfig))
 	mux.HandleFunc("POST /api/v1/frps/install", s.auth(s.installFRPS))

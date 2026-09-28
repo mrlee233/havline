@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -35,21 +36,47 @@ func NewAgentClientWithPin(baseURL, token, pin string) *AgentClient {
 	return newAgentClient(baseURL, token, pin)
 }
 
-func newAgentClient(baseURL, token, pin string) *AgentClient {
+// NewAgentClientWithPins 支持证书轮换过渡期同时接受旧 pin 与新 pin。
+func NewAgentClientWithPins(baseURL, token string, pins ...string) *AgentClient {
+	return newAgentClient(baseURL, token, pins...)
+}
+
+func newAgentClient(baseURL, token string, pins ...string) *AgentClient {
+	normalized := normalizePins(pins)
 	client := &AgentClient{
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		token:   token,
-		pin:     strings.ToLower(strings.TrimSpace(pin)),
+		pin:     strings.Join(normalized, ","),
 		// 路由写入链路含 nginx -T 自省 + -t 校验 + reload（宝塔带 lua/waf 模块时各步可达数秒），15s 会超时
 		http: &http.Client{Timeout: 60 * time.Second},
 	}
-	if client.pin != "" {
-		client.http.Transport = &http.Transport{TLSClientConfig: pinTLSConfig(client.pin)}
+	if len(normalized) > 0 {
+		client.http.Transport = &http.Transport{TLSClientConfig: pinTLSConfig(hostFromBaseURL(client.baseURL), normalized...)}
 	}
 	return client
 }
 
-func pinTLSConfig(pin string) *tls.Config {
+func normalizePins(pins []string) []string {
+	out := make([]string, 0, len(pins))
+	for _, pin := range pins {
+		pin = strings.ToLower(strings.TrimSpace(pin))
+		if pin == "" {
+			continue
+		}
+		out = append(out, pin)
+	}
+	return out
+}
+
+func hostFromBaseURL(baseURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+func pinTLSConfig(host string, pins ...string) *tls.Config {
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: true,
@@ -65,14 +92,39 @@ func pinTLSConfig(pin string) *tls.Config {
 			if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
 				return fmt.Errorf("Agent HTTPS 证书不在有效期内")
 			}
+			if err := verifyCertificateHost(cert, host); err != nil {
+				return err
+			}
 			sum := sha256.Sum256(rawCerts[0])
 			got := hex.EncodeToString(sum[:])
-			if subtle.ConstantTimeCompare([]byte(got), []byte(pin)) != 1 {
-				return fmt.Errorf("Agent HTTPS 证书指纹不匹配")
+			for _, pin := range pins {
+				if subtle.ConstantTimeCompare([]byte(got), []byte(pin)) == 1 {
+					return nil
+				}
 			}
-			return nil
+			return fmt.Errorf("Agent HTTPS 证书指纹不匹配")
 		},
 	}
+}
+
+// verifyCertificateHost 校验证书 SAN 是否匹配连接主机，避免 pin 正确但证书属于其他主机。
+func verifyCertificateHost(cert *x509.Certificate, host string) error {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return nil
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		for _, candidate := range cert.IPAddresses {
+			if candidate.Equal(ip) {
+				return nil
+			}
+		}
+		return fmt.Errorf("Agent HTTPS 证书不包含 IP %s", host)
+	}
+	if err := cert.VerifyHostname(host); err != nil {
+		return fmt.Errorf("Agent HTTPS 证书 SAN 不匹配 %s", host)
+	}
+	return nil
 }
 
 func (c *AgentClient) request(ctx context.Context, method, path string, payload any, result any) error {
@@ -134,9 +186,30 @@ func (c *AgentClient) DisableHTTPS(ctx context.Context) error {
 	return c.request(ctx, http.MethodDelete, "/api/v1/transport/https", nil, &result)
 }
 
+// HTTPSState 读取 Agent 当前 HTTPS 反代状态与证书到期时间。
+func (c *AgentClient) HTTPSState(ctx context.Context) (map[string]any, error) {
+	var result map[string]any
+	err := c.request(ctx, http.MethodGet, "/api/v1/transport/https", nil, &result)
+	return result, err
+}
+
 func (c *AgentClient) Status(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	err := c.request(ctx, http.MethodGet, "/api/v1/status", nil, &result)
+	return result, err
+}
+
+// FirewallStatus 读取 VPS 主机防火墙类型与目标端口放行状态。
+func (c *AgentClient) FirewallStatus(ctx context.Context, port int) (map[string]any, error) {
+	var result map[string]any
+	err := c.request(ctx, http.MethodGet, "/api/v1/firewall?port="+strconv.Itoa(port), nil, &result)
+	return result, err
+}
+
+// AllowFirewallPort 请求 Agent 显式放行主机防火墙端口（仅 ufw / firewalld）。
+func (c *AgentClient) AllowFirewallPort(ctx context.Context, port int) (map[string]any, error) {
+	var result map[string]any
+	err := c.request(ctx, http.MethodPost, "/api/v1/firewall/allow", map[string]any{"port": port}, &result)
 	return result, err
 }
 

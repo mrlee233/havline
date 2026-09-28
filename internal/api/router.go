@@ -26,7 +26,7 @@ func NewRouter(deps Deps) http.Handler {
 		statusPageHandler: NewStatusPageHandler(deps.Settings, deps.FRPMulti),
 		metricsHandler:    NewMetricsHandler(deps.Metrics),
 		discoveryHandler:  NewDiscoveryHandler(deps.Discovery),
-		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti),
+		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti, deps.Auth),
 		updateHandler:     NewUpdateHandler(deps.Updater),
 		authSvc:           deps.Auth,
 		staticFS:          deps.StaticFS,
@@ -133,6 +133,10 @@ func NewRouter(deps Deps) http.Handler {
 		protect("POST /api/frpmulti/servers/{id}/agent/test", frpHandler.AgentTest)
 		protect("POST /api/frpmulti/servers/{id}/agent/tunnel/restart", frpHandler.AgentTunnelRestart)
 		protect("POST /api/frpmulti/servers/{id}/agent/transport", frpHandler.SetAgentTransport)
+		protect("GET /api/frpmulti/servers/{id}/agent/transport", frpHandler.AgentTransportStatus)
+		protect("POST /api/frpmulti/servers/{id}/agent/transport/rotate", frpHandler.AgentTransportRotateCert)
+		protect("GET /api/frpmulti/servers/{id}/agent/firewall", frpHandler.AgentFirewallStatus)
+		protect("POST /api/frpmulti/servers/{id}/agent/firewall/allow", frpHandler.AgentFirewallAllow)
 		protect("GET /api/frpmulti/servers/{id}/agent/status", frpHandler.AgentStatus)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes", frpHandler.AgentRoutes)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/health", frpHandler.AgentRouteHealth)

@@ -4,18 +4,21 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fonu/fonu/internal/auth"
 	"github.com/fonu/fonu/internal/frp"
 )
 
 // FRPMultiHandler 承载多服务端 FRP 模块的 HTTP 接口（/api/frpmulti/*），
 // 包装 internal/frp 的 Service（0.1.25 核心迁移版）。
 type FRPMultiHandler struct {
-	svc *frp.Service
+	svc  *frp.Service
+	auth *auth.Service
 }
 
 type frpServerRequest struct {
@@ -68,8 +71,8 @@ type frpDownloadProxyRequest struct {
 	Proxy string `json:"proxy"`
 }
 
-func NewFRPMultiHandler(svc *frp.Service) *FRPMultiHandler {
-	return &FRPMultiHandler{svc: svc}
+func NewFRPMultiHandler(svc *frp.Service, authSvc *auth.Service) *FRPMultiHandler {
+	return &FRPMultiHandler{svc: svc, auth: authSvc}
 }
 
 func (h *FRPMultiHandler) Status(w http.ResponseWriter, r *http.Request) {
@@ -366,7 +369,92 @@ func (h *FRPMultiHandler) SetAgentTransport(w http.ResponseWriter, r *http.Reque
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return
 	}
+	h.audit(r, id, "transport", "切换为 "+server.AgentTransport)
 	writeJSON(w, http.StatusOK, server)
+}
+
+func (h *FRPMultiHandler) AgentTransportStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	status, err := h.svc.AgentTransportStatus(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *FRPMultiHandler) AgentTransportRotateCert(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	server, err := h.svc.RotateAgentCertificate(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	h.audit(r, id, "rotate-tls-cert", server.AgentTLSPin)
+	writeJSON(w, http.StatusOK, server)
+}
+
+func (h *FRPMultiHandler) AgentFirewallStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	port, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("port")))
+	status, err := h.svc.AgentFirewallStatus(r.Context(), id, port)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (h *FRPMultiHandler) AgentFirewallAllow(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	var request struct {
+		Port int `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	result, err := h.svc.AllowAgentFirewallPort(r.Context(), id, request.Port)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	h.audit(r, id, "firewall-allow", strconv.Itoa(request.Port))
+	writeJSON(w, http.StatusOK, result)
+}
+
+// audit 记录 Agent 传输配置变更；admin_id 取自登录会话，API Token 调用没有会话时记为 0。
+func (h *FRPMultiHandler) audit(r *http.Request, serverID int64, action, detail string) {
+	adminID := 0
+	if sessionID, ok := r.Context().Value(sessionContextKey).(string); ok && sessionID != "" && h.auth != nil {
+		if id, err := h.auth.AdminIDForSession(r.Context(), sessionID); err == nil {
+			adminID = id
+		}
+	}
+	slog.Default().Info("审计：Agent 配置变更",
+		"module", "AUDIT",
+		"action", action,
+		"server_id", serverID,
+		"admin_id", adminID,
+		"detail", detail,
+		"remote_addr", r.RemoteAddr,
+	)
 }
 
 func (h *FRPMultiHandler) AgentStatus(w http.ResponseWriter, r *http.Request) {

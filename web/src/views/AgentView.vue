@@ -249,13 +249,16 @@
             <div><label>隧道状态</label><span>{{ agentTransportStateText(server) }}</span></div>
             <div><label>本地入口</label><span class="mono">{{ server.agent_transport === 'tunnel' && server.agent_local_port ? `127.0.0.1:${server.agent_local_port}` : '—' }}</span></div>
             <div><label>Agent 监听</label><span class="mono">{{ server.agent_listen_addr || '—' }}</span></div>
+            <div v-if="server.agent_transport === 'https-pin'"><label>HTTPS 端口</label><span class="mono">{{ agentHTTPSPort(server) || '—' }}</span></div>
+            <div v-if="server.agent_transport === 'https-pin'"><label>证书到期</label><span>{{ server.agent_tls_not_after ? formatDate(server.agent_tls_not_after) : '—' }}</span></div>
           </div>
           <n-alert v-if="server.agent_transport === 'http'" type="warning" :bordered="false" class="agent-transport-warning">
             当前仍是公网明文 HTTP。点击「升级 Agent」可自动迁移到 SSH 隧道安全模式。
           </n-alert>
           <n-alert v-if="server.agent_transport === 'https-pin'" type="info" :bordered="false" class="agent-transport-warning">
-            HTTPS 直连使用证书指纹校验。请确认云安全组已放行配置的 TCP 端口，Fonu 不会自动修改云安全组。
+            HTTPS 直连使用证书指纹校验，证书到期前 30 天会自动轮换。请确认云安全组已放行 {{ agentHTTPSPort(server) || 'HTTPS' }} 端口，Fonu 不会自动修改云安全组。
           </n-alert>
+          <p v-if="server.agent_transport === 'https-pin' && server.agent_firewall_state" class="form-hint">主机防火墙：{{ server.agent_firewall_state }}</p>
           <p v-if="server.agent_transport_error" class="form-hint agent-transport-error">{{ server.agent_transport_error }}</p>
           <div class="agent-actions">
             <n-button size="small" :loading="busy === 'agent-install'" :disabled="busy !== null && busy !== 'agent-install'" @click="installAgent(server)">{{ server.agent_configured ? '升级 Agent' : '安装 Agent' }}</n-button>
@@ -264,7 +267,15 @@
               <template #trigger>
                 <n-button size="small" :loading="busy === 'transport-https'" :disabled="busy !== null && busy !== 'transport-https'">切换 HTTPS 直连</n-button>
               </template>
-              将使用自签名证书启用 TCP 7443。请确保云安全组已放行该端口，否则切换后 Agent 会不可达。继续？
+              将自动从 TCP 7443 / 8443 / 9443 中选择可用端口启用自签名 HTTPS。请确保云安全组已放行其中之一，否则切换后 Agent 会不可达。继续？
+            </n-popconfirm>
+            <n-button v-if="server.agent_transport === 'https-pin'" size="small" :loading="busy === 'tls-rotate'" :disabled="busy !== null && busy !== 'tls-rotate'" @click="rotateAgentCert(server)">轮换证书</n-button>
+            <n-button v-if="server.agent_transport === 'https-pin'" size="small" :loading="busy === 'firewall-check'" :disabled="busy !== null && busy !== 'firewall-check'" @click="checkAgentFirewall(server)">检测主机防火墙</n-button>
+            <n-popconfirm v-if="server.agent_transport === 'https-pin' && firewallInfo && firewallInfo.serverId === server.id && !firewallInfo.data.port_open" @positive-click="allowAgentFirewall(server)">
+              <template #trigger>
+                <n-button size="small" :loading="busy === 'firewall-allow'" :disabled="busy !== null && busy !== 'firewall-allow'">放行主机防火墙</n-button>
+              </template>
+              只会对 ufw / firewalld 执行放行，不会修改云安全组。继续？
             </n-popconfirm>
             <n-popconfirm v-if="server.agent_transport === 'https-pin'" @positive-click="switchAgentToTunnel(server)">
               <template #trigger>
@@ -666,7 +677,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { DataTableColumns } from 'naive-ui'
 import { NButton, NIcon, NTag, useDialog, useMessage } from 'naive-ui'
@@ -694,6 +705,7 @@ import type {
 import { formatBytes, formatDate, formatRelativeTime, formatUptime } from '../utils/format'
 import type { StatusKind } from '../utils/status'
 import { copyText } from '../utils/clipboard'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 
 use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
 
@@ -701,6 +713,7 @@ use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
 type Action =
   | 'probe' | 'agent-install' | 'agent-uninstall' | 'diagnose'
   | 'tunnel-restart' | 'transport-https' | 'transport-tunnel'
+  | 'tls-rotate' | 'firewall-check' | 'firewall-allow'
   | 'frps-start' | 'frps-stop' | 'frps-restart' | 'frps-install' | 'push-config'
 
 interface OpOutput { at: string; source: string; text: string; ok: boolean }
@@ -722,6 +735,7 @@ const agentStatusOk = ref(false)
 const statusLoaded = ref(false)
 const statusLoading = ref(false)
 const busy = ref<Action | null>(null)
+const firewallInfo = ref<{ serverId: number; data: Record<string, any> } | null>(null)
 const opOutput = ref<OpOutput[]>([])
 const frpsInstallVersion = ref<string | null>(null)
 const releases = ref<FrpRelease[]>([])
@@ -729,7 +743,6 @@ const releasesLoading = ref(false)
 const configModal = ref(false)
 const configContent = ref('')
 const configLoading = ref(false)
-let timer: number | undefined
 
 const watchedPorts = ['80', '443', '7000', '8080'] as const
 
@@ -1430,9 +1443,50 @@ function restartAgentTunnel(target: FrpServer) {
 }
 
 function enableAgentHTTPS(target: FrpServer) {
-  return run('transport-https', '切换 HTTPS 直连', () => api.setFrpAgentTransport(target.id, 'https-pin', 7443),
-    () => ({ text: 'HTTPS 直连已启用并通过证书指纹验证', ok: true }))
+  return run('transport-https', '切换 HTTPS 直连', () => api.setFrpAgentTransport(target.id, 'https-pin', 0),
+    () => ({ text: 'HTTPS 直连已启用并通过证书指纹验证（已自动选择端口）', ok: true }))
     .then(async (result) => { if (result !== undefined) await load() })
+}
+
+function agentHTTPSPort(server: FrpServer): number {
+  const addr = server.agent_listen_addr ?? ''
+  const index = addr.lastIndexOf(':')
+  if (index < 0) return 0
+  const port = Number(addr.slice(index + 1))
+  return Number.isInteger(port) && port > 0 ? port : 0
+}
+
+function rotateAgentCert(target: FrpServer) {
+  return run('tls-rotate', '轮换 HTTPS 证书', () => api.rotateFrpAgentTLSCert(target.id),
+    () => ({ text: 'HTTPS 证书已轮换，过渡期内同时接受新旧指纹', ok: true }))
+    .then(async (result) => { if (result !== undefined) await load() })
+}
+
+function checkAgentFirewall(target: FrpServer) {
+  const port = agentHTTPSPort(target)
+  if (!port) {
+    message.warning('请先切换到 HTTPS 直连')
+    return
+  }
+  return run('firewall-check', '检测主机防火墙', () => api.getFrpAgentFirewall(target.id, port),
+    (result) => ({ text: `主机防火墙：${result.tool ?? '未知'}，端口${result.port_open ? '已放行' : '未放行'}`, ok: true }))
+    .then(async (result) => {
+      if (result) firewallInfo.value = { serverId: target.id, data: result }
+    })
+}
+
+function allowAgentFirewall(target: FrpServer) {
+  const port = agentHTTPSPort(target)
+  if (!port) {
+    message.warning('请先切换到 HTTPS 直连')
+    return
+  }
+  return run('firewall-allow', '放行主机防火墙', () => api.allowFrpAgentFirewallPort(target.id, port),
+    () => ({ text: `已在主机防火墙放行 TCP ${port}`, ok: true }))
+    .then(async (result) => {
+      if (result) firewallInfo.value = { serverId: target.id, data: result.status ?? result }
+      await load()
+    })
 }
 
 function switchAgentToTunnel(target: FrpServer) {
@@ -1453,11 +1507,11 @@ function agentTransportKind(server: FrpServer): StatusKind {
 }
 
 function agentTransportStateText(server: FrpServer) {
-  if (server.agent_transport !== 'tunnel') return '不适用'
+  if (server.agent_transport === 'http') return '不适用'
   if (server.agent_transport_state === 'connected') return '已连接'
   if (server.agent_transport_state === 'reconnecting') return '重连中'
   if (server.agent_transport_state === 'failed') return '连接失败'
-  return '未建立'
+  return server.agent_transport === 'https-pin' ? '待验证' : '未建立'
 }
 
 function processStateText(server: FrpServer) {
@@ -1610,14 +1664,12 @@ async function loadTLSFile(target: 'certificate' | 'key' | 'ca', event: Event) {
 onMounted(() => {
   void load()
   void loadReleases()
-  timer = window.setInterval(() => {
-    if (!server.value) return
-    if (document.visibilityState === 'hidden') return // 页面不可见时暂停轮询
-    void refreshAll()
-  }, 10000)
 })
 
-onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
+useVisibilityPolling(() => {
+  if (!server.value) return
+  void refreshAll()
+}, 10_000)
 </script>
 
 <style scoped>

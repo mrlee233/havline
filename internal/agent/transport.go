@@ -20,7 +20,11 @@ import (
 	"github.com/fonu/fonu/internal/fsutil"
 )
 
-const httpsProxyConfigName = "fonuagent-https.conf"
+const (
+	httpsProxyConfigName = "fonuagent-https.conf"
+	httpsProxyCertPath   = "/etc/fonu-agent/tls/agent.crt"
+	httpsProxyKeyPath    = "/etc/fonu-agent/tls/agent.key"
+)
 
 type httpsProxyRequest struct {
 	CertPEM string `json:"cert_pem"`
@@ -38,8 +42,8 @@ func (s *Server) putHTTPSProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if req.Port <= 0 || req.Port > 65535 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "端口需在 1-65535 之间"})
+	if req.Port < 0 || req.Port > 65535 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "端口需在 0-65535 之间，0 表示自动选择"})
 		return
 	}
 	if _, err := tls.X509KeyPair([]byte(req.CertPEM), []byte(req.KeyPEM)); err != nil {
@@ -52,11 +56,12 @@ func (s *Server) putHTTPSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.configureHTTPSProxy(req); err != nil {
+	port, err := s.configureHTTPSProxy(req)
+	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "port": req.Port, "self_check": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "port": port, "self_check": "ok"})
 }
 
 func (s *Server) deleteHTTPSProxy(w http.ResponseWriter, _ *http.Request) {
@@ -69,7 +74,46 @@ func (s *Server) deleteHTTPSProxy(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
-func (s *Server) configureHTTPSProxy(req httpsProxyRequest) error {
+// getHTTPSProxy 返回当前 HTTPS 反代状态与证书到期时间，供中央端同步轮换计划。
+func (s *Server) getHTTPSProxy(w http.ResponseWriter, _ *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, enabled := readHTTPSProxyState(s.cfg.DataDir)
+	notAfter := ""
+	if t, err := readCertificateNotAfter(httpsProxyCertPath); err == nil {
+		notAfter = t.UTC().Format(time.RFC3339)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled":   enabled,
+		"port":      state.Port,
+		"not_after": notAfter,
+	})
+}
+
+// configureHTTPSProxy 按候选端口逐个尝试；请求端口为 0 时自动选择 7443 / 8443 / 9443。
+func (s *Server) configureHTTPSProxy(req httpsProxyRequest) (int, error) {
+	var lastErr error
+	for _, port := range candidateHTTPSPorts(req.Port) {
+		if err := s.applyHTTPSProxy(req, port); err != nil {
+			lastErr = fmt.Errorf("端口 %d 不可用: %w", port, err)
+			continue
+		}
+		return port, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("没有可用的 HTTPS 端口")
+	}
+	return 0, lastErr
+}
+
+func candidateHTTPSPorts(requested int) []int {
+	if requested > 0 {
+		return []int{requested}
+	}
+	return []int{7443, 8443, 9443}
+}
+
+func (s *Server) applyHTTPSProxy(req httpsProxyRequest, port int) error {
 	dir, err := s.ensureNginxDir()
 	if err != nil {
 		return err
@@ -78,12 +122,10 @@ func (s *Server) configureHTTPSProxy(req httpsProxyRequest) error {
 	if err := os.MkdirAll(tlsDir, 0o750); err != nil {
 		return err
 	}
-	certPath := filepath.Join(tlsDir, "agent.crt")
-	keyPath := filepath.Join(tlsDir, "agent.key")
-	if err := atomicWrite(certPath, []byte(req.CertPEM), 0o640); err != nil {
+	if err := atomicWrite(httpsProxyCertPath, []byte(req.CertPEM), 0o640); err != nil {
 		return err
 	}
-	if err := atomicWrite(keyPath, []byte(req.KeyPEM), 0o600); err != nil {
+	if err := atomicWrite(httpsProxyKeyPath, []byte(req.KeyPEM), 0o600); err != nil {
 		return err
 	}
 	path := filepath.Join(dir, httpsProxyConfigName)
@@ -91,7 +133,7 @@ func (s *Server) configureHTTPSProxy(req httpsProxyRequest) error {
 	if _, err := fsutil.BackupVersioned(path, 10); err != nil {
 		return err
 	}
-	content := renderHTTPSProxy(req.Port, certPath, keyPath)
+	content := renderHTTPSProxy(port, httpsProxyCertPath, httpsProxyKeyPath)
 	if err := atomicWrite(path, []byte(content), 0o640); err != nil {
 		return err
 	}
@@ -107,11 +149,11 @@ func (s *Server) configureHTTPSProxy(req httpsProxyRequest) error {
 	if err != nil {
 		return err
 	}
-	if err := s.verifyHTTPSProxy(req.Port, pin); err != nil {
+	if err := s.verifyHTTPSProxy(port, pin); err != nil {
 		s.restoreHTTPSConfig(path, previous, readErr)
 		return err
 	}
-	return writeHTTPSProxyState(s.cfg.DataDir, httpsProxyState{Port: req.Port})
+	return writeHTTPSProxyState(s.cfg.DataDir, httpsProxyState{Port: port})
 }
 
 func (s *Server) removeHTTPSProxy() error {
