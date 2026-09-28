@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.3] - 2026-09-28
+
+### 修复
+
+- **HTTPS 直连旧地址自愈**：从 SSH 隧道切换到「HTTPS + 证书固定」后，历史实例的 `agent_url` 可能仍为已失效的 `http://127.0.0.1:17701`，隧道关闭后直接报 `connection refused`。现在读取 HTTPS transport 时会依据 `ssh_host` 与 `agent_listen_addr` 自动重建 `https://<host>:<port>`，并在地址变化时回写数据库；切回 SSH 隧道也使用同一重建逻辑，无需手工修改地址
+
+### 变更
+
+- 版本号提升到 1.4.3；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.13.0
+
+### 测试
+
+- `internal/frp`：新增 `TestAgentHTTPSBaseURL`，覆盖旧隧道地址重建、已是 HTTPS 地址保持、默认端口回退与缺少 SSH 主机的情况
+
 ## [v1.4.2] - 2026-09-28
 
 ### 修复

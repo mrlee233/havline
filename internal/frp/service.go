@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1009,7 +1010,7 @@ func (s *Service) SwitchAgentToTunnel(ctx context.Context, serverID int64) (Serv
 		if err != nil {
 			return Server{}, err
 		}
-		client := NewAgentClientWithPin(server.AgentURL, token, server.AgentTLSPin)
+		client := NewAgentClientWithPin(agentHTTPSBaseURL(server), token, server.AgentTLSPin)
 		if err := client.DisableHTTPS(ctx); err != nil {
 			return Server{}, fmt.Errorf("关闭 HTTPS 直连失败: %w", err)
 		}
@@ -1595,6 +1596,24 @@ func (s *Service) invalidateAgentClient(serverID int64) {
 	s.agentMu.Unlock()
 }
 
+func agentHTTPSBaseURL(server Server) string {
+	current := strings.TrimRight(strings.TrimSpace(server.AgentURL), "/")
+	if strings.HasPrefix(strings.ToLower(current), "https://") {
+		return current
+	}
+	host := strings.TrimSpace(server.SSHHost)
+	if host == "" {
+		return current
+	}
+	port := 7443
+	if _, rawPort, err := net.SplitHostPort(strings.TrimSpace(server.AgentListenAddr)); err == nil {
+		if parsed, err := strconv.Atoi(rawPort); err == nil && parsed > 0 {
+			port = parsed
+		}
+	}
+	return fmt.Sprintf("https://%s:%d", host, port)
+}
+
 func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient, bool) {
 	server, err := s.store.GetServer(ctx, serverID)
 	if err != nil || !server.MgmtEnabled || !server.AgentConfigured {
@@ -1618,8 +1637,19 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		baseURL = fmt.Sprintf("http://127.0.0.1:%d", tunnel.localPort)
 	} else if server.AgentTransport == "https-pin" {
 		pin = strings.TrimSpace(server.AgentTLSPin)
-		if baseURL == "" || pin == "" {
+		if pin == "" {
 			return nil, false
+		}
+		baseURL = agentHTTPSBaseURL(server)
+		if !strings.HasPrefix(strings.ToLower(baseURL), "https://") {
+			return nil, false
+		}
+		if baseURL != strings.TrimRight(strings.TrimSpace(server.AgentURL), "/") {
+			err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort,
+				pin, server.AgentListenAddr, server.AgentTransportState, server.AgentTransportError)
+			if err != nil {
+				s.logger.Warn("agent https url repair failed", "server_id", serverID, "error", err)
+			}
 		}
 	} else if baseURL == "" {
 		return nil, false
