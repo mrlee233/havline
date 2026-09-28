@@ -31,6 +31,7 @@ type Config struct {
 	Branch         string
 	AppURL         string
 	HostProjectDir string
+	ProjectName    string
 	SelfImage      string
 	DockerSocket   string
 	BuildTimeout   time.Duration
@@ -49,6 +50,7 @@ type Server struct {
 
 type composePlan struct {
 	helper            bool
+	projectName       string
 	containerCompose  string
 	hostProjectDir    string
 	hostComposePath   string
@@ -83,6 +85,7 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 		cfg.DockerSocket = "/var/run/docker.sock"
 	}
 	cfg.HostProjectDir = strings.TrimSpace(cfg.HostProjectDir)
+	cfg.ProjectName = strings.TrimSpace(cfg.ProjectName)
 	cfg.SelfImage = strings.TrimSpace(cfg.SelfImage)
 	if cfg.BuildTimeout <= 0 {
 		cfg.BuildTimeout = 30 * time.Minute
@@ -184,9 +187,13 @@ func (s *Server) ensureComposeFile(ctx context.Context) error {
 }
 
 func (s *Server) resolveComposePlan(ctx context.Context) (composePlan, error) {
+	projectName, err := s.composeProjectName(ctx)
+	if err != nil {
+		return composePlan{}, err
+	}
 	info, err := os.Stat(s.composePath)
 	if err == nil && !info.IsDir() {
-		return composePlan{containerCompose: s.composePath}, nil
+		return composePlan{projectName: projectName, containerCompose: s.composePath}, nil
 	}
 	if err == nil && info.IsDir() {
 		return composePlan{}, fmt.Errorf("Compose 路径是目录而不是文件：%s", s.composePath)
@@ -197,6 +204,7 @@ func (s *Server) resolveComposePlan(ctx context.Context) (composePlan, error) {
 		if pathErr == nil {
 			return composePlan{
 				helper:            true,
+				projectName:       projectName,
 				hostProjectDir:    hostDir,
 				hostComposePath:   hostComposePath,
 				helperComposePath: helperPath,
@@ -204,6 +212,21 @@ func (s *Server) resolveComposePlan(ctx context.Context) (composePlan, error) {
 		}
 	}
 	return composePlan{}, fmt.Errorf("找不到 Compose 文件 %s，且无法自动定位宿主机目录；请设置 FONU_UPDATE_HOST_DIR", s.composePath)
+}
+
+func (s *Server) composeProjectName(ctx context.Context) (string, error) {
+	projectName, err := s.dockerLabel(ctx, "com.docker.compose.project")
+	projectName = strings.TrimSpace(projectName)
+	if projectName != "" {
+		return projectName, nil
+	}
+	if s.cfg.ProjectName != "" {
+		return s.cfg.ProjectName, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("无法读取现有容器的 Compose 项目标签：%w", err)
+	}
+	return "", fmt.Errorf("现有 fonu 容器不是由 Compose 管理，无法安全一键升级；请按 Compose 方式重新部署")
 }
 
 func (s *Server) discoverHostCompose(ctx context.Context) (string, string, error) {

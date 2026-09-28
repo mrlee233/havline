@@ -46,7 +46,7 @@ func TestNewServerDefaultsAndValidation(t *testing.T) {
 
 func TestEnsureComposeFile(t *testing.T) {
 	dir := t.TempDir()
-	server, err := NewServer(Config{ProjectDir: dir, ComposeFile: "docker-compose.yml"}, nil)
+	server, err := NewServer(Config{ProjectDir: dir, ComposeFile: "docker-compose.yml", ProjectName: "fonu"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,6 +69,7 @@ func TestResolveComposePlanUsesHostProjectDir(t *testing.T) {
 		ProjectDir:     containerDir,
 		ComposeFile:    "docker-compose.hub.yml",
 		HostProjectDir: hostDir,
+		ProjectName:    "fonu",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)

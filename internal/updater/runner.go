@@ -323,7 +323,7 @@ func (s *Server) compose(ctx context.Context, version string, args ...string) (s
 	if plan.helper {
 		return s.composeViaHelper(ctx, plan, version, args...)
 	}
-	fullArgs := append([]string{"compose", "-f", plan.containerCompose}, args...)
+	fullArgs := append([]string{"compose", "--project-name", plan.projectName, "-f", plan.containerCompose}, args...)
 	env := []string{"FONU_VERSION=" + version}
 	return runCommand(ctx, s.cfg.ProjectDir, env, "docker", fullArgs...)
 }
@@ -340,7 +340,7 @@ func (s *Server) composeViaHelper(ctx context.Context, plan composePlan, version
 		"-w", "/workspace",
 		"-e", "FONU_VERSION=" + version,
 		image,
-		"compose", "-f", plan.helperComposePath,
+		"compose", "--project-name", plan.projectName, "-f", plan.helperComposePath,
 	}
 	helperArgs = append(helperArgs, args...)
 	return runCommand(ctx, "", nil, "docker", helperArgs...)

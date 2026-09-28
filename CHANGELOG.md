@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - **示例页面新增独立升级验证区块**：页面增加「本次升级验证」高亮区块，显示 `v1.3.7`，验证标识更新为 `v1.3.7-example-page`，用于直观确认升级后的前端资源已切换
 
+### 修复
+
+- **复用原 Compose 项目名重建容器**：updater 在通过 helper 容器执行 `docker compose` 时，先从现有 `fonu` 容器读取 `com.docker.compose.project` 标签，并显式传入同一个项目名，避免 Compose 将现有容器视为另一个项目后重新创建网络、数据卷并撞上 `/fonu` 容器名冲突。现有容器不是 Compose 管理时，updater 会拒绝升级并提示按 Compose 方式重新部署，避免误建空数据卷
+
 ### 变更
 
 - 版本号提升到 1.3.7；`web/package.json` 与 `web/package-lock.json` 同步对齐

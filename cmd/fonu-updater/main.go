@@ -21,6 +21,7 @@ func main() {
 		Branch:         envOr("FONU_UPDATE_BRANCH", "main"),
 		AppURL:         envOr("FONU_UPDATE_APP_URL", "http://fonu:6893"),
 		HostProjectDir: envOr("FONU_UPDATE_HOST_DIR", ""),
+		ProjectName:    envOr("FONU_UPDATE_PROJECT_NAME", ""),
 		SelfImage:      envOr("FONU_UPDATE_SELF_IMAGE", ""),
 		DockerSocket:   envOr("FONU_UPDATE_DOCKER_SOCK", "/var/run/docker.sock"),
 	}, nil)
