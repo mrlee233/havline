@@ -56,7 +56,9 @@ import (
 // 修掉旧 <name>.versions 目录被 include * 当配置文件读取、nginx -t 报 pread() "Is a directory" 的问题。
 // 0.13.2：nginx -T 探测失败时先从报错文本解析旧 <name>.versions 目录并迁移后重试，
 // 修掉「配置目录还没探测出来、迁移逻辑没机会执行」导致 HTTPS 直连持续失败的问题。
-const AgentVersion = "0.13.2"
+// 0.13.3：HTTPS 反代改用 default_server 并在 reload 后做本机证书指纹自检，
+// 证书不匹配时回滚并回报实际指纹与端口占用进程，区分「nginx 未生效」与「公网链路被接管」。
+const AgentVersion = "0.13.3"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {

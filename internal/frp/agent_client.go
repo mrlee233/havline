@@ -119,13 +119,14 @@ func (c *AgentClient) Ping(ctx context.Context) error {
 	return c.request(ctx, http.MethodGet, "/api/v1/ping", nil, nil)
 }
 
-func (c *AgentClient) ConfigureHTTPS(ctx context.Context, certPEM, keyPEM string, port int) error {
+func (c *AgentClient) ConfigureHTTPS(ctx context.Context, certPEM, keyPEM string, port int) (map[string]any, error) {
 	var result map[string]any
-	return c.request(ctx, http.MethodPut, "/api/v1/transport/https", map[string]any{
+	err := c.request(ctx, http.MethodPut, "/api/v1/transport/https", map[string]any{
 		"cert_pem": certPEM,
 		"key_pem":  keyPEM,
 		"port":     port,
 	}, &result)
+	return result, err
 }
 
 func (c *AgentClient) DisableHTTPS(ctx context.Context) error {

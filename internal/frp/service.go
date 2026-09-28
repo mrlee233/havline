@@ -979,13 +979,17 @@ func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int
 	if err != nil {
 		return Server{}, err
 	}
-	if err := currentClient.ConfigureHTTPS(ctx, cert.CertPEM, cert.KeyPEM, port); err != nil {
+	result, err := currentClient.ConfigureHTTPS(ctx, cert.CertPEM, cert.KeyPEM, port)
+	if err != nil {
 		return Server{}, err
 	}
 	baseURL := fmt.Sprintf("https://%s:%d", server.SSHHost, port)
 	pinned := NewAgentClientWithPin(baseURL, token, cert.Pin)
 	if err := pinned.Ping(ctx); err != nil {
 		_ = currentClient.DisableHTTPS(ctx)
+		if result["self_check"] == "ok" {
+			return Server{}, fmt.Errorf("HTTPS 直连验证失败：Agent 本机 7443 自检通过，但公网 %s 返回的证书不一致，请检查该端口是否被其他服务、端口转发或防火墙接管: %w", baseURL, err)
+		}
 		return Server{}, fmt.Errorf("HTTPS 直连验证失败: %w", err)
 	}
 	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", port), "connected", ""); err != nil {

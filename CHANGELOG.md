@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.6] - 2026-09-28
+
+### 修复
+
+- **HTTPS 直连证书指纹不匹配可定位**：nginx 配置校验通过、但公网 `7443` 返回的证书与刚写入的不一致时，原来只提示“证书指纹不匹配”，无法判断是 nginx 未生效还是端口被其他服务接管。现在 HTTPS server 使用 `default_server` 绑定，Agent 会在 reload 后从本机 `127.0.0.1:<端口>` 握手自检并重试 5 秒；指纹不一致时回滚，并回报实际指纹与 `ss -tlnp` 端口占用进程
+- **公网链路错误提示**：主程序在 Agent 本机自检通过、但公网地址校验失败时，会明确提示检查 `7443` 的端口转发、防火墙或其他服务接管
+
+### 变更
+
+- 版本号提升到 1.4.6；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.13.2 → **0.13.3**，内嵌 amd64 / arm64 二进制已重编；VPS 上需重新点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/agent`：新增证书 PEM 指纹计算测试
+
 ## [v1.4.5] - 2026-09-28
 
 ### 修复

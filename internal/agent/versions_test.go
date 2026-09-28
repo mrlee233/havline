@@ -1,9 +1,18 @@
 package agent
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestMigrateLegacyVersionDirs(t *testing.T) {
@@ -41,5 +50,30 @@ func TestMigrateVersionDirsFromNginxOutput(t *testing.T) {
 	}
 	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
 		t.Fatalf("旧版本目录应被移出 include 范围：%v", err)
+	}
+}
+
+func TestCertificatePin(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now().Add(-time.Minute),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	got, err := certificatePin(string(block))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(der)
+	if want := hex.EncodeToString(sum[:]); got != want {
+		t.Fatalf("certificatePin() = %s, 期望 %s", got, want)
 	}
 }

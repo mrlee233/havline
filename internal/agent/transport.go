@@ -1,14 +1,21 @@
 package agent
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fonu/fonu/internal/fsutil"
 )
@@ -49,7 +56,7 @@ func (s *Server) putHTTPSProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "port": req.Port})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "port": req.Port, "self_check": "ok"})
 }
 
 func (s *Server) deleteHTTPSProxy(w http.ResponseWriter, _ *http.Request) {
@@ -93,6 +100,14 @@ func (s *Server) configureHTTPSProxy(req httpsProxyRequest) error {
 		return fmt.Errorf("nginx config rejected: %w", err)
 	}
 	if err := s.reloadNginx(); err != nil {
+		s.restoreHTTPSConfig(path, previous, readErr)
+		return err
+	}
+	pin, err := certificatePin(req.CertPEM)
+	if err != nil {
+		return err
+	}
+	if err := s.verifyHTTPSProxy(req.Port, pin); err != nil {
 		s.restoreHTTPSConfig(path, previous, readErr)
 		return err
 	}
@@ -150,7 +165,7 @@ func (s *Server) ensureNginxDir() (string, error) {
 func renderHTTPSProxy(port int, certPath, keyPath string) string {
 	return fmt.Sprintf(`# Managed by fonu-agent. Do not edit.
 server {
-    listen %d ssl;
+    listen %d ssl default_server;
     server_name _;
     ssl_certificate %s;
     ssl_certificate_key %s;
@@ -166,6 +181,71 @@ server {
     }
 }
 `, port, certPath, keyPath)
+}
+
+func certificatePin(certPEM string) (string, error) {
+	block, _ := pem.Decode([]byte(certPEM))
+	if block == nil {
+		return "", errors.New("证书 PEM 解码失败")
+	}
+	sum := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// verifyHTTPSProxy 在 reload 后从本机回环地址握手，确认 7443 上真正返回的就是刚写入的证书。
+// nginx reload 是异步的，这里留出短暂重试窗口，避免旧 worker 造成的瞬时误判。
+func (s *Server) verifyHTTPSProxy(port int, want string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	var lastErr error
+	for {
+		lastErr = probeHTTPSPin(port, want)
+		if lastErr == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return lastErr
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func probeHTTPSPin(port int, want string) error {
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	dialer := &net.Dialer{Timeout: 3 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12})
+	if err != nil {
+		return fmt.Errorf("本机 https://%s 自检失败：%w；%s", addr, err, portListenerHint(port))
+	}
+	defer conn.Close()
+	certs := conn.ConnectionState().PeerCertificates
+	if len(certs) == 0 {
+		return fmt.Errorf("本机 https://%s 未返回证书；%s", addr, portListenerHint(port))
+	}
+	sum := sha256.Sum256(certs[0].Raw)
+	got := hex.EncodeToString(sum[:])
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("本机 https://%s 证书指纹不匹配：期望 %s，实际 %s；%s", addr, want, got, portListenerHint(port))
+	}
+	return nil
+}
+
+// portListenerHint 把监听该端口的进程信息带进错误里，便于区分 nginx 未生效与端口被其他服务占用。
+func portListenerHint(port int) string {
+	out, err := exec.Command("ss", "-tlnp").CombinedOutput()
+	if err != nil {
+		return "无法读取端口监听信息"
+	}
+	suffix := ":" + strconv.Itoa(port)
+	lines := make([]string, 0, 2)
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.Contains(line, suffix+" ") || strings.HasSuffix(strings.TrimSpace(line), suffix) {
+			lines = append(lines, strings.TrimSpace(line))
+		}
+	}
+	if len(lines) == 0 {
+		return "未发现监听 " + suffix + " 的进程"
+	}
+	return "监听 " + suffix + "：" + strings.Join(lines, " | ")
 }
 
 func httpsProxyStatePath(dataDir string) string {
