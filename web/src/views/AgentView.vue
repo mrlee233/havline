@@ -253,10 +253,25 @@
           <n-alert v-if="server.agent_transport === 'http'" type="warning" :bordered="false" class="agent-transport-warning">
             当前仍是公网明文 HTTP。点击「升级 Agent」可自动迁移到 SSH 隧道安全模式。
           </n-alert>
+          <n-alert v-if="server.agent_transport === 'https-pin'" type="info" :bordered="false" class="agent-transport-warning">
+            HTTPS 直连使用证书指纹校验。请确认云安全组已放行配置的 TCP 端口，Fonu 不会自动修改云安全组。
+          </n-alert>
           <p v-if="server.agent_transport_error" class="form-hint agent-transport-error">{{ server.agent_transport_error }}</p>
           <div class="agent-actions">
             <n-button size="small" :loading="busy === 'agent-install'" :disabled="busy !== null && busy !== 'agent-install'" @click="installAgent(server)">{{ server.agent_configured ? '升级 Agent' : '安装 Agent' }}</n-button>
             <n-button v-if="server.agent_transport === 'tunnel'" size="small" :loading="busy === 'tunnel-restart'" :disabled="busy !== null && busy !== 'tunnel-restart'" @click="restartAgentTunnel(server)">重启隧道</n-button>
+            <n-popconfirm v-if="server.agent_transport === 'tunnel'" @positive-click="enableAgentHTTPS(server)">
+              <template #trigger>
+                <n-button size="small" :loading="busy === 'transport-https'" :disabled="busy !== null && busy !== 'transport-https'">切换 HTTPS 直连</n-button>
+              </template>
+              将使用自签名证书启用 TCP 7443。请确保云安全组已放行该端口，否则切换后 Agent 会不可达。继续？
+            </n-popconfirm>
+            <n-popconfirm v-if="server.agent_transport === 'https-pin'" @positive-click="switchAgentToTunnel(server)">
+              <template #trigger>
+                <n-button size="small" :loading="busy === 'transport-tunnel'" :disabled="busy !== null && busy !== 'transport-tunnel'">切回 SSH 隧道</n-button>
+              </template>
+              将关闭 VPS 上的 HTTPS Agent 入口并恢复 SSH 隧道。继续？
+            </n-popconfirm>
             <n-button size="small" :loading="busy === 'diagnose'" :disabled="busy !== null && busy !== 'diagnose'" @click="diagnoseAgent(server)">SSH 诊断</n-button>
             <n-button size="small" quaternary :loading="busy === 'agent-uninstall'" :disabled="busy !== null && busy !== 'agent-uninstall'" @click="uninstallAgent(server, true)">卸载（保留路由/证书）</n-button>
             <n-popconfirm @positive-click="uninstallAgent(server, false)">
@@ -685,7 +700,8 @@ use([CanvasRenderer, LineChart, ScatterChart, GridComponent, TooltipComponent])
 // 操作动作：按动作粒度控制 loading，保证"只有被点的按钮转圈"
 type Action =
   | 'probe' | 'agent-install' | 'agent-uninstall' | 'diagnose'
-  | 'tunnel-restart' | 'frps-start' | 'frps-stop' | 'frps-restart' | 'frps-install' | 'push-config'
+  | 'tunnel-restart' | 'transport-https' | 'transport-tunnel'
+  | 'frps-start' | 'frps-stop' | 'frps-restart' | 'frps-install' | 'push-config'
 
 interface OpOutput { at: string; source: string; text: string; ok: boolean }
 
@@ -1410,6 +1426,18 @@ function serverStartupKind(server: FrpServer): StatusKind {
 function restartAgentTunnel(target: FrpServer) {
   return run('tunnel-restart', '重启 SSH 隧道', () => api.restartFrpAgentTunnel(target.id),
     () => ({ text: 'SSH 隧道已重建并完成连接检查', ok: true }))
+    .then(async (result) => { if (result !== undefined) await load() })
+}
+
+function enableAgentHTTPS(target: FrpServer) {
+  return run('transport-https', '切换 HTTPS 直连', () => api.setFrpAgentTransport(target.id, 'https-pin', 7443),
+    () => ({ text: 'HTTPS 直连已启用并通过证书指纹验证', ok: true }))
+    .then(async (result) => { if (result !== undefined) await load() })
+}
+
+function switchAgentToTunnel(target: FrpServer) {
+  return run('transport-tunnel', '切回 SSH 隧道', () => api.setFrpAgentTransport(target.id, 'tunnel'),
+    () => ({ text: '已关闭 HTTPS 直连并恢复 SSH 隧道', ok: true }))
     .then(async (result) => { if (result !== undefined) await load() })
 }
 

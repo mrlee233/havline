@@ -338,6 +338,37 @@ func (h *FRPMultiHandler) AgentTunnelRestart(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, server)
 }
 
+func (h *FRPMultiHandler) SetAgentTransport(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	var request struct {
+		Transport string `json:"transport"`
+		Port      int    `json:"port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	var server frp.Server
+	switch strings.TrimSpace(request.Transport) {
+	case "tunnel":
+		server, err = h.svc.SwitchAgentToTunnel(r.Context(), id)
+	case "https-pin":
+		server, err = h.svc.EnableAgentHTTPS(r.Context(), id, request.Port)
+	default:
+		writeError(r, w, http.StatusBadRequest, "不支持的传输方式")
+		return
+	}
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, server)
+}
+
 func (h *FRPMultiHandler) AgentStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {

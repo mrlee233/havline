@@ -30,6 +30,10 @@ type agentTunnel struct {
 }
 
 func newAgentTunnel(parent context.Context, serverID int64, localPort int, installer SSHInstaller) *agentTunnel {
+	return newAgentTunnelWithListener(parent, serverID, localPort, installer, nil)
+}
+
+func newAgentTunnelWithListener(parent context.Context, serverID int64, localPort int, installer SSHInstaller, listener net.Listener) *agentTunnel {
 	ctx, cancel := context.WithCancel(parent)
 	return &agentTunnel{
 		serverID:  serverID,
@@ -37,18 +41,21 @@ func newAgentTunnel(parent context.Context, serverID int64, localPort int, insta
 		ssh:       installer,
 		ctx:       ctx,
 		cancel:    cancel,
+		listener:  listener,
 		state:     "connecting",
 	}
 }
 
 func (t *agentTunnel) Start() error {
-	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", t.localPort))
-	if err != nil {
-		t.setState("failed", err)
-		return fmt.Errorf("监听隧道本地端口失败: %w", err)
+	if t.listener == nil {
+		listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", t.localPort))
+		if err != nil {
+			t.setState("failed", err)
+			return fmt.Errorf("监听隧道本地端口失败: %w", err)
+		}
+		t.listener = listener
 	}
 	t.mu.Lock()
-	t.listener = listener
 	t.state = "connected"
 	t.lastError = ""
 	t.mu.Unlock()

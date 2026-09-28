@@ -220,6 +220,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/routes/{domain}/versions/{name}/rollback", s.auth(s.rollbackRoute))
 	mux.HandleFunc("PUT /api/v1/china-cidr", s.auth(s.putChinaCIDR))
 	mux.HandleFunc("POST /api/v1/nginx/install", s.auth(s.installNginx))
+	mux.HandleFunc("PUT /api/v1/transport/https", s.auth(s.putHTTPSProxy))
+	mux.HandleFunc("DELETE /api/v1/transport/https", s.auth(s.deleteHTTPSProxy))
 	mux.HandleFunc("DELETE /api/v1/routes/{domain}", s.auth(s.deleteRoute))
 	mux.HandleFunc("PUT /api/v1/frps/config", s.auth(s.putFRPSConfig))
 	mux.HandleFunc("POST /api/v1/frps/install", s.auth(s.installFRPS))
@@ -278,33 +280,36 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	ports := map[string]bool{"80": portListening(80), "443": portListening(443), "7000": portListening(7000), "8080": portListening(8080)}
 	nginxProbe := s.probeNginx()
 	frpsActive := exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil
+	httpsState, httpsConfigured := readHTTPSProxyState(s.cfg.DataDir)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service":               "fonu-agent",
-		"agent_version":         AgentVersion,
-		"listen_addr":           s.cfg.ListenAddr,
-		"listen_scope":          listenScope(s.listenLoopback),
-		"remote_access_enabled": s.cfg.AllowRemote,
-		"transport_security":    transportSecurity(s.listenLoopback),
-		"nginx_binary":          s.cfg.NginxBinary,
-		"nginx_conf_dir":        s.cfg.NginxConfDir,
-		"nginx_ok":              nginxProbe.OK,
-		"nginx_missing":         nginxProbe.Missing,
-		"nginx_running":         nginxProbe.Running,
-		"nginx_path":            nginxProbe.Path,
-		"nginx_version":         nginxProbe.Version,
-		"nginx_error":           nginxProbe.Error,
-		"frps_binary":           s.cfg.FrpsBinary,
-		"frps_config_path":      s.cfg.FrpsConfigPath,
-		"ports":                 ports,
-		"frps_active":           frpsActive,
-		"frps_vhost_hint":       "curl -H 'Host: 你的域名' http://127.0.0.1:8080 可测试 frps vhost 是否通",
-		"frps_unit_exec":        strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
-		"frps_enabled":          exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
-		"frps_version":          strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
-		"frps_log_tail":         strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
-		"dashboard_addr":        strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
-		"routes":                s.routeNames(),
-		"checked_at":            time.Now().UTC().Format(time.RFC3339),
+		"service":                "fonu-agent",
+		"agent_version":          AgentVersion,
+		"listen_addr":            s.cfg.ListenAddr,
+		"listen_scope":           listenScope(s.listenLoopback),
+		"remote_access_enabled":  s.cfg.AllowRemote,
+		"transport_security":     transportSecurity(s.listenLoopback),
+		"https_proxy_configured": httpsConfigured,
+		"https_proxy_port":       httpsState.Port,
+		"nginx_binary":           s.cfg.NginxBinary,
+		"nginx_conf_dir":         s.cfg.NginxConfDir,
+		"nginx_ok":               nginxProbe.OK,
+		"nginx_missing":          nginxProbe.Missing,
+		"nginx_running":          nginxProbe.Running,
+		"nginx_path":             nginxProbe.Path,
+		"nginx_version":          nginxProbe.Version,
+		"nginx_error":            nginxProbe.Error,
+		"frps_binary":            s.cfg.FrpsBinary,
+		"frps_config_path":       s.cfg.FrpsConfigPath,
+		"ports":                  ports,
+		"frps_active":            frpsActive,
+		"frps_vhost_hint":        "curl -H 'Host: 你的域名' http://127.0.0.1:8080 可测试 frps vhost 是否通",
+		"frps_unit_exec":         strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
+		"frps_enabled":           exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
+		"frps_version":           strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
+		"frps_log_tail":          strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
+		"dashboard_addr":         strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
+		"routes":                 s.routeNames(),
+		"checked_at":             time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

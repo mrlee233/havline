@@ -3,6 +3,11 @@ package frp
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,15 +23,55 @@ import (
 type AgentClient struct {
 	baseURL string
 	token   string
+	pin     string
 	http    *http.Client
 }
 
 func NewAgentClient(baseURL, token string) *AgentClient {
-	return &AgentClient{
+	return newAgentClient(baseURL, token, "")
+}
+
+func NewAgentClientWithPin(baseURL, token, pin string) *AgentClient {
+	return newAgentClient(baseURL, token, pin)
+}
+
+func newAgentClient(baseURL, token, pin string) *AgentClient {
+	client := &AgentClient{
 		baseURL: strings.TrimRight(strings.TrimSpace(baseURL), "/"),
 		token:   token,
+		pin:     strings.ToLower(strings.TrimSpace(pin)),
 		// 路由写入链路含 nginx -T 自省 + -t 校验 + reload（宝塔带 lua/waf 模块时各步可达数秒），15s 会超时
 		http: &http.Client{Timeout: 60 * time.Second},
+	}
+	if client.pin != "" {
+		client.http.Transport = &http.Transport{TLSClientConfig: pinTLSConfig(client.pin)}
+	}
+	return client
+}
+
+func pinTLSConfig(pin string) *tls.Config {
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true,
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			if len(rawCerts) == 0 {
+				return fmt.Errorf("服务器未返回证书")
+			}
+			cert, err := x509.ParseCertificate(rawCerts[0])
+			if err != nil {
+				return err
+			}
+			now := time.Now()
+			if now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
+				return fmt.Errorf("Agent HTTPS 证书不在有效期内")
+			}
+			sum := sha256.Sum256(rawCerts[0])
+			got := hex.EncodeToString(sum[:])
+			if subtle.ConstantTimeCompare([]byte(got), []byte(pin)) != 1 {
+				return fmt.Errorf("Agent HTTPS 证书指纹不匹配")
+			}
+			return nil
+		},
 	}
 }
 
@@ -55,7 +100,10 @@ func (c *AgentClient) request(ctx context.Context, method, path string, payload 
 		return err
 	}
 	defer resp.Body.Close()
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return &statusError{code: resp.StatusCode, body: strings.TrimSpace(string(data))}
 	}
@@ -69,6 +117,20 @@ func (c *AgentClient) request(ctx context.Context, method, path string, payload 
 
 func (c *AgentClient) Ping(ctx context.Context) error {
 	return c.request(ctx, http.MethodGet, "/api/v1/ping", nil, nil)
+}
+
+func (c *AgentClient) ConfigureHTTPS(ctx context.Context, certPEM, keyPEM string, port int) error {
+	var result map[string]any
+	return c.request(ctx, http.MethodPut, "/api/v1/transport/https", map[string]any{
+		"cert_pem": certPEM,
+		"key_pem":  keyPEM,
+		"port":     port,
+	}, &result)
+}
+
+func (c *AgentClient) DisableHTTPS(ctx context.Context) error {
+	var result map[string]any
+	return c.request(ctx, http.MethodDelete, "/api/v1/transport/https", nil, &result)
 }
 
 func (c *AgentClient) Status(ctx context.Context) (map[string]any, error) {

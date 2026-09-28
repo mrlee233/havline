@@ -307,6 +307,11 @@ export const api = {
   testFrpAgent: (id: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/test`, { method: 'POST' }),
   restartFrpAgentTunnel: (id: number) =>
     request<FrpServer>(`/api/frpmulti/servers/${id}/agent/tunnel/restart`, { method: 'POST' }),
+  setFrpAgentTransport: (id: number, transport: 'tunnel' | 'https-pin', port = 7443) =>
+    request<FrpServer>(`/api/frpmulti/servers/${id}/agent/transport`, {
+      method: 'POST',
+      body: JSON.stringify({ transport, port }),
+    }),
   probeFrpAgent: (id: number) => request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/probe`, { method: 'POST' }),
   installFrpAgent: (id: number) => request<FrpServer>(`/api/frpmulti/servers/${id}/agent/install`, { method: 'POST' }),
   uninstallFrpAgent: (id: number, keepData: boolean) => request<{ ok: boolean; output: string }>(`/api/frpmulti/servers/${id}/agent/uninstall?keep_data=${keepData}`, { method: 'POST' }),

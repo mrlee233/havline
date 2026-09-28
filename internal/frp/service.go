@@ -744,15 +744,13 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	if err != nil {
 		return Server{}, err
 	}
-	localPort := server.AgentLocalPort
-	if localPort == 0 {
-		localPort, err = s.allocateAgentTunnelPort(ctx)
-		if err != nil {
-			return Server{}, err
-		}
+	localPort, listener, err := s.reserveAgentTunnelPort(ctx, serverID, server.AgentLocalPort)
+	if err != nil {
+		return Server{}, err
 	}
-	tunnel := newAgentTunnel(s.tunnelContext(ctx), serverID, localPort, installer)
+	tunnel := newAgentTunnelWithListener(s.tunnelContext(ctx), serverID, localPort, installer, listener)
 	if err := tunnel.Start(); err != nil {
+		_ = listener.Close()
 		return Server{}, err
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", localPort)
@@ -803,17 +801,22 @@ func (s *Service) tunnelContext(fallback context.Context) context.Context {
 	return context.Background()
 }
 
-func (s *Service) allocateAgentTunnelPort(ctx context.Context) (int, error) {
+func (s *Service) reserveAgentTunnelPort(ctx context.Context, ownerID int64, preferred int) (int, net.Listener, error) {
 	s.tunnelMu.Lock()
 	defer s.tunnelMu.Unlock()
 	servers, err := s.store.ListServers(ctx)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	used := map[int]bool{}
 	for _, server := range servers {
-		if server.AgentLocalPort > 0 {
+		if server.ID != ownerID && server.AgentLocalPort > 0 {
 			used[server.AgentLocalPort] = true
+		}
+	}
+	if preferred > 0 && !used[preferred] {
+		if listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", preferred)); err == nil {
+			return preferred, listener, nil
 		}
 	}
 	for port := 17700; port <= 18700; port++ {
@@ -824,10 +827,9 @@ func (s *Service) allocateAgentTunnelPort(ctx context.Context) (int, error) {
 		if err != nil {
 			continue
 		}
-		_ = listener.Close()
-		return port, nil
+		return port, listener, nil
 	}
-	return 0, fmt.Errorf("SSH 隧道本地端口 17700-18700 已耗尽")
+	return 0, nil, fmt.Errorf("SSH 隧道本地端口 17700-18700 已耗尽")
 }
 
 func (s *Service) ensureAgentTunnel(ctx context.Context, serverID int64) (*agentTunnel, error) {
@@ -842,15 +844,13 @@ func (s *Service) ensureAgentTunnel(ctx context.Context, serverID int64) (*agent
 	if err != nil {
 		return nil, err
 	}
-	localPort := server.AgentLocalPort
-	if localPort == 0 {
-		localPort, err = s.allocateAgentTunnelPort(ctx)
-		if err != nil {
-			return nil, err
-		}
+	localPort, listener, err := s.reserveAgentTunnelPort(ctx, serverID, server.AgentLocalPort)
+	if err != nil {
+		return nil, err
 	}
-	tunnel := newAgentTunnel(s.tunnelContext(ctx), serverID, localPort, installer)
+	tunnel := newAgentTunnelWithListener(s.tunnelContext(ctx), serverID, localPort, installer, listener)
 	if err := tunnel.Start(); err != nil {
+		_ = listener.Close()
 		return nil, err
 	}
 	s.tunnelMu.Lock()
@@ -935,6 +935,90 @@ func (s *Service) RestartAgentTunnel(ctx context.Context, serverID int64) (Serve
 	}
 	s.enrichServerRuntime(ctx, &server)
 	return server, nil
+}
+
+func (s *Service) agentToken(ctx context.Context, serverID int64) (string, error) {
+	encoded, err := s.store.AgentToken(ctx, serverID)
+	if err != nil || encoded == "" {
+		return "", fmt.Errorf("Agent Token 未保存")
+	}
+	token, err := s.secretBox.Decrypt(encoded)
+	if err != nil || token == "" {
+		return "", fmt.Errorf("Agent Token 无法解密")
+	}
+	return token, nil
+}
+
+func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int) (Server, error) {
+	if port == 0 {
+		port = 7443
+	}
+	if port <= 0 || port > 65535 {
+		return Server{}, fmt.Errorf("HTTPS 端口无效")
+	}
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	if server.AgentTransport == "http" {
+		return Server{}, fmt.Errorf("请先通过「升级 Agent」迁移到 SSH 隧道，再切换 HTTPS 直连")
+	}
+	currentClient, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return Server{}, fmt.Errorf("当前 Agent 连接不可用")
+	}
+	token, err := s.agentToken(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	cert, err := generateAgentCertificate(server.SSHHost)
+	if err != nil {
+		return Server{}, err
+	}
+	if err := currentClient.ConfigureHTTPS(ctx, cert.CertPEM, cert.KeyPEM, port); err != nil {
+		return Server{}, err
+	}
+	baseURL := fmt.Sprintf("https://%s:%d", server.SSHHost, port)
+	pinned := NewAgentClientWithPin(baseURL, token, cert.Pin)
+	if err := pinned.Ping(ctx); err != nil {
+		_ = currentClient.DisableHTTPS(ctx)
+		return Server{}, fmt.Errorf("HTTPS 直连验证失败: %w", err)
+	}
+	if err := s.store.SetAgentTransport(ctx, serverID, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", port), "connected", ""); err != nil {
+		return Server{}, err
+	}
+	s.stopAgentTunnel(serverID)
+	updated, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	return updated, nil
+}
+
+func (s *Service) SwitchAgentToTunnel(ctx context.Context, serverID int64) (Server, error) {
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	if server.AgentTransport == "https-pin" {
+		token, err := s.agentToken(ctx, serverID)
+		if err != nil {
+			return Server{}, err
+		}
+		client := NewAgentClientWithPin(server.AgentURL, token, server.AgentTLSPin)
+		if err := client.DisableHTTPS(ctx); err != nil {
+			return Server{}, fmt.Errorf("关闭 HTTPS 直连失败: %w", err)
+		}
+	}
+	if _, err := s.ensureAgentTunnel(ctx, serverID); err != nil {
+		return Server{}, err
+	}
+	updated, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return Server{}, err
+	}
+	s.enrichServerRuntime(ctx, &updated)
+	return updated, nil
 }
 
 func (s *Service) AgentUninstall(ctx context.Context, serverID int64, keepData bool) (string, error) {
@@ -1515,17 +1599,23 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 		return nil, false
 	}
 	baseURL := server.AgentURL
+	pin := ""
 	if server.AgentTransport == "tunnel" {
 		tunnel, err := s.ensureAgentTunnel(ctx, serverID)
 		if err != nil {
 			return nil, false
 		}
 		baseURL = fmt.Sprintf("http://127.0.0.1:%d", tunnel.localPort)
+	} else if server.AgentTransport == "https-pin" {
+		pin = strings.TrimSpace(server.AgentTLSPin)
+		if baseURL == "" || pin == "" {
+			return nil, false
+		}
 	} else if baseURL == "" {
 		return nil, false
 	}
 	// 复用同一个 http.Client：批量同步 N 条路由时不再每次新建 Transport 与 TLS 握手
-	fingerprint := baseURL + "|" + encoded
+	fingerprint := baseURL + "|" + encoded + "|" + pin
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
 	if s.agentClients == nil {
@@ -1534,7 +1624,12 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	if cached, ok := s.agentClients[serverID]; ok && cached.fingerprint == fingerprint {
 		return cached.client, true
 	}
-	client := NewAgentClient(baseURL, token)
+	var client *AgentClient
+	if pin != "" {
+		client = NewAgentClientWithPin(baseURL, token, pin)
+	} else {
+		client = NewAgentClient(baseURL, token)
+	}
 	s.agentClients[serverID] = cachedAgentClient{fingerprint: fingerprint, client: client}
 	return client, true
 }

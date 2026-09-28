@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.1] - 2026-09-28
+
+### 修复
+
+- **SSH 隧道端口分配竞态**：原来先探测端口再关闭 listener，随后才真正启动隧道，两个安装动作或残留占用可能在两步之间抢到同一端口，报 `bind: Only one usage of each socket address`。现在改为分配端口时直接持有 listener 并交给隧道使用；17700 被占用时自动尝试后续端口
+
+### 变更
+
+- 版本号提升到 1.4.1；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.13.0
+
+### 测试
+
+- `internal/frp`：隧道 listener 复用、端口占用与释放回归测试
+
 ## [v1.4.0] - 2026-09-28
 
 ### 新增
@@ -10,6 +25,8 @@ All notable changes to this project will be documented in this file.
 - **SSH 隧道自动接入**：中央 Fonu 安装或升级 Agent 后自动分配 `17700-18700` 范围内的本地回环端口，通过现有 SSH 凭据建立隧道访问 VPS 的 `127.0.0.1:7700`，无需新增公网端口、证书或防火墙规则
 - **隧道生命周期管理**：应用启动后自动恢复 tunnel transport；应用退出时统一关闭；每个服务端支持单独的「重启隧道」操作
 - **旧公网 HTTP 自动迁移**：旧 Agent 点击「升级 Agent」后安装脚本会备份旧 `agent.env`、改写为回环监听并自动建立隧道；隧道验证失败时恢复旧监听配置
+- **可选 HTTPS 直连 + 证书指纹固定**：安装后可从 SSH 隧道切换到 HTTPS 直连。Fonu 自动生成 ECDSA 自签名证书、通过现有安全连接下发，VPS Agent 自动写入独立 Nginx TLS 反代；后续连接按证书 SHA-256 pin 校验，不使用 `InsecureSkipVerify` 裸跳过
+- **防火墙提示边界**：HTTPS 模式明确提示云安全组需放行 TCP 7443；Fonu 不自动修改云安全组，主机防火墙自动处理仍留在后续阶段
 
 ### 变更
 
@@ -21,7 +38,7 @@ All notable changes to this project will be documented in this file.
 ### 测试
 
 - `internal/agent`：回环默认值与远程监听保护
-- `internal/frp` / `internal/app`：隧道生命周期、transport 存储与启动恢复编译验证
+- `internal/frp` / `internal/app`：隧道生命周期、transport 存储、证书生成与 pin 校验测试
 
 ## [v1.3.9] - 2026-09-28
 

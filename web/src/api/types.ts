@@ -854,6 +854,12 @@ export interface FrpAgentRouteDetail {
 
 export interface FrpAgentStatus {
   agent_version?: string
+  listen_addr?: string
+  listen_scope?: string
+  remote_access_enabled?: boolean
+  transport_security?: string
+  https_proxy_configured?: boolean
+  https_proxy_port?: number
   ports?: Record<string, boolean>
   frps_active?: boolean
   frps_enabled?: boolean
