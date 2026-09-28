@@ -42,18 +42,13 @@
       <n-alert :type="form.mode === 'token-remote' ? 'warning' : 'info'" :bordered="false" class="cf-mode-alert">
         {{ modeHint }}
       </n-alert>
+      <n-alert v-if="!appSettings.default_token_configured" type="warning" :bordered="false" class="cf-mode-alert">
+        还没有默认 Token，请先到「应用配置」保存，再创建隧道。
+      </n-alert>
       <n-divider title-placement="left">基本信息</n-divider>
       <n-form label-placement="top">
         <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
         <n-form-item label="模式"><n-select v-model:value="form.mode" :options="modeOptions" /></n-form-item>
-        <n-form-item :label="editing ? 'Token（留空保留原值）' : 'Token'">
-          <n-input
-            v-model:value="form.token"
-            type="password"
-            show-password-on="click"
-            :placeholder="appSettings.default_token_configured ? '留空使用应用配置中的默认 token' : 'Cloudflare 面板生成的隧道 token'"
-          />
-        </n-form-item>
       </n-form>
       <n-divider title-placement="left">暴露规则</n-divider>
       <n-form v-if="form.mode === 'token-local'" label-placement="top">
@@ -67,14 +62,11 @@
       <n-alert v-else type="warning" :bordered="false" class="cf-mode-alert">
         云端规则模式下，本地域名与回源配置不生效，请在 Cloudflare 面板管理 ingress。
       </n-alert>
-      <n-divider title-placement="left">网络调优</n-divider>
+      <n-divider title-placement="left">运行</n-divider>
       <n-form label-placement="top">
-        <n-form-item label="传输协议"><n-select v-model:value="form.network.transport_protocol" :options="protocolOptions" /></n-form-item>
-        <n-form-item label="边缘地址族"><n-select v-model:value="form.network.edge_ip_version" :options="edgeOptions" /></n-form-item>
-        <n-form-item label="HA 连接数"><n-input-number v-model:value="form.network.ha_connections" :min="1" :max="4" /></n-form-item>
-        <n-form-item label="代理模式"><n-select v-model:value="form.network.proxy_mode" :options="proxyOptions" /></n-form-item>
         <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
       </n-form>
+      <p class="cf-hint">Token 与网络调优统一在「应用配置」中管理，保存后会应用到新建隧道。</p>
     </div>
     <template #footer>
       <div class="cf-modal__footer">
@@ -287,7 +279,7 @@ function openEdit(item: CfTunnel) {
     token: '',
     hostnames: [...(item.hostnames || [])],
     origin_service: item.origin_service || 'http://127.0.0.1:80',
-    network: { ...item.network },
+    network: emptyNetwork(),
     auto_start: item.auto_start,
   }
   editorVisible.value = true
@@ -298,20 +290,25 @@ async function saveTunnel() {
     message.warning('请填写隧道名称')
     return
   }
-  if (!editing.value && !(form.value.token || '').trim() && !appSettings.value.default_token_configured) {
-    message.warning('请填写 token，或先在「应用配置」中保存默认 token')
+  if (!editing.value && !appSettings.value.default_token_configured) {
+    message.warning('请先在「应用配置」中保存默认 Token')
     return
   }
   if (form.value.mode === 'token-local' && !form.value.hostnames.length) {
     message.warning('本地规则模式至少需要一个暴露域名')
     return
   }
+  const payload: CfTunnelPayload = {
+    ...form.value,
+    token: '',
+    network: { ...appSettings.value.network },
+  }
   saving.value = true
   try {
     if (editing.value) {
-      await api.updateCfTunnel(editing.value.id, form.value)
+      await api.updateCfTunnel(editing.value.id, payload)
     } else {
-      await api.createCfTunnel(form.value)
+      await api.createCfTunnel(payload)
     }
     editorVisible.value = false
     message.success('隧道已保存')

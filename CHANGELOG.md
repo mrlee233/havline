@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.4] - 2026-09-28
+
+### 变更
+
+- **新建 / 编辑隧道弹窗去重**：移除与应用配置重复的 Token 输入与网络调优字段；Token、传输协议、边缘地址族、HA 连接数、代理模式统一在「应用配置」中维护，保存时自动应用到新建或编辑的隧道
+- 新建隧道前若未配置默认 Token，弹窗内直接提示并阻止提交；编辑已有隧道不受影响
+- 隧道弹窗现在只保留名称、模式、暴露域名、回源 service 与自动启动
+
+### 变更
+
+- 版本号提升到 1.6.4；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.3] - 2026-09-28
 
 ### 新增
