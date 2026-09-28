@@ -50,7 +50,8 @@ import (
 // 0.12.7：vhost 目录探测不再要求被加载文件带 .conf 后缀（Debian 的 sites-enabled/default 不带），
 // 并在失败信息里带上最后一次的具体原因与常见的显式指定目录。
 // 0.12.8：Agent Bearer Token 改为常量时间比较，避免认证路径上的长度/内容时序泄漏。
-const AgentVersion = "0.12.8"
+// 0.12.9：限流状态文件损坏时拒绝覆盖，避免保存单条规则时清空其他域名的限流配置。
+const AgentVersion = "0.12.9"
 
 // Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -1520,14 +1521,29 @@ type routeLimit struct {
 	Conn  int `json:"conn,omitempty"`
 }
 
-func readLimitState() map[string]routeLimit {
+func readLimitState() (map[string]routeLimit, error) {
+	return readLimitStateFile(limitsStatePath())
+}
+
+func readLimitStateFile(path string) (map[string]routeLimit, error) {
 	state := map[string]routeLimit{}
-	data, err := os.ReadFile(limitsStatePath())
-	if err != nil {
-		return state
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return state, nil
 	}
-	_ = json.Unmarshal(data, &state)
-	return state
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		return nil, fmt.Errorf("限流状态文件为空: %s", path)
+	}
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("解析限流状态失败: %w", err)
+	}
+	if state == nil {
+		return nil, fmt.Errorf("限流状态文件内容为空对象: %s", path)
+	}
+	return state, nil
 }
 
 // writeLimitState 落盘限流参数并重生成 zone 定义文件；无限流时删除该文件。
@@ -1568,7 +1584,10 @@ func (s *Server) writeLimitState(state map[string]routeLimit) error {
 
 // applyLimitState 记录本次路由的限流参数并刷新 zone 文件（必须在写 vhost 之前完成）。
 func (s *Server) applyLimitState(req routeRequest) error {
-	state := readLimitState()
+	state, err := readLimitState()
+	if err != nil {
+		return fmt.Errorf("读取限流状态失败，已保留原文件: %w", err)
+	}
 	if req.RateLimitRate > 0 || req.ConnLimitMax > 0 {
 		state[req.Domain] = routeLimit{Rate: req.RateLimitRate, Burst: req.RateLimitBurst, Conn: req.ConnLimitMax}
 	} else {
@@ -1579,7 +1598,10 @@ func (s *Server) applyLimitState(req routeRequest) error {
 
 // clearLimitState 删除该域名的限流参数并刷新 zone 文件。
 func (s *Server) clearLimitState(domain string) error {
-	state := readLimitState()
+	state, err := readLimitState()
+	if err != nil {
+		return fmt.Errorf("读取限流状态失败，已保留原文件: %w", err)
+	}
 	if _, ok := state[domain]; !ok {
 		return nil
 	}

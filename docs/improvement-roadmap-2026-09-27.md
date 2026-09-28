@@ -384,6 +384,8 @@ if token == "" || !secureEqual(token, s.cfg.Token) {
 
 ## 3.4 P0-4：限流状态解析失败时拒绝覆盖原状态
 
+> 实施状态：2026-09-28 已完成。
+
 ### 3.4.1 现状
 
 `internal/agent/server.go` 的 `readLimitState`：
@@ -442,6 +444,15 @@ func (s *Server) clearLimitState(domain string) error
 - 损坏状态不会导致其他域名限流配置被清空。
 - 错误能显示在“应用配置”或路由保存响应中。
 - `nginx -t` 仍以真实生成结果为准。
+
+### 3.4.6 实施记录
+
+- `readLimitState` 改为返回 `(map[string]routeLimit, error)`，新增可测试的 `readLimitStateFile`。
+- 文件不存在返回空状态；读取失败、空文件、`null` 或 JSON 损坏返回错误。
+- `applyLimitState` / `clearLimitState` 传播错误并保留原文件，不再用空状态覆盖。
+- 新增 `internal/agent/limits_test.go`，覆盖缺失、正常、空文件、截断 JSON、null 和原文件不变。
+- `AgentVersion` 提升到 `0.12.9`，双架构内嵌二进制已重编。
+- 验证通过：`go test ./internal/agent -count=1`、`go test ./... -count=1`、`go vet ./...`、`npm test`。
 
 ---
 

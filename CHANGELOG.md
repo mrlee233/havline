@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.9] - 2026-09-28
+
+### 修复
+
+- **限流状态损坏时拒绝覆盖**：`readLimitState` 原来忽略 JSON 解析错误并返回空 map，保存任一规则时可能把其他域名的限流配置清空。现在文件不存在仍视为空状态，读取失败、空文件或 JSON 损坏则返回错误，`applyLimitState` / `clearLimitState` 会保留原文件与现有 Nginx zone，不再覆盖
+
+### 变更
+
+- 版本号提升到 1.3.9；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 0.12.8 → **0.12.9**，内嵌 amd64 / arm64 二进制已重编；VPS 上需点一次「升级 Agent」才会生效
+
+### 测试
+
+- `internal/agent`：新增限流状态文件缺失、正常解析、空文件、截断 JSON、null 内容与失败后原文件不变的测试
+
 ## [v1.3.8] - 2026-09-28
 
 ### 新增
