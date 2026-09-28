@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.5] - 2026-09-28
+
+### 新增
+
+- **Token 配置连接入口**：应用配置的 Token 区域新增两个入口：
+  - 「测试连接」：后端用 cloudflared 临时启动一次连接，最多等待 25 秒，确认 token 能注册到 Cloudflare 边缘；成功后显示隧道 ID，失败给出明确原因
+  - 「获取 Token」：直达 Cloudflare Zero Trust 面板
+- 新增 `POST /api/cloudflare/settings/test` 接口；请求体 token 留空时使用已保存的默认 token
+
+### 变更
+
+- 版本号提升到 1.6.5；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.4] - 2026-09-28
 
 ### 变更

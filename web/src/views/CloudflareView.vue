@@ -133,6 +133,13 @@
           />
         </n-form-item>
       </n-form>
+      <div class="cf-code-toolbar">
+        <n-button size="small" :loading="tokenTesting" @click="testToken">测试连接</n-button>
+        <n-button size="small" tag="a" href="https://one.dash.cloudflare.com/" target="_blank" rel="noopener">获取 Token</n-button>
+      </div>
+      <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
+        {{ tokenTestResult }}
+      </n-alert>
       <p class="cf-hint">保存后，新建隧道时可以留空 token，直接使用这里的默认值。</p>
 
       <n-divider title-placement="left">默认网络设置</n-divider>
@@ -175,6 +182,9 @@ const binaryLoading = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
+const tokenTesting = ref(false)
+const tokenTestResult = ref('')
+const tokenTestOk = ref(false)
 const appSettings = ref<CfAppSettings>({
   default_token_configured: false,
   default_token_masked: '',
@@ -395,6 +405,7 @@ async function openSettings() {
 
 async function loadAppSettings() {
   settingsLoading.value = true
+  tokenTestResult.value = ''
   try {
     const result = await api.getCfSettings()
     appSettings.value = result
@@ -403,6 +414,21 @@ async function loadAppSettings() {
     message.error(error instanceof Error ? error.message : '读取应用配置失败')
   } finally {
     settingsLoading.value = false
+  }
+}
+
+async function testToken() {
+  tokenTesting.value = true
+  tokenTestResult.value = ''
+  try {
+    const result = await api.testCfToken(settingsForm.value.token)
+    tokenTestOk.value = true
+    tokenTestResult.value = result.message || '连接成功'
+  } catch (error) {
+    tokenTestOk.value = false
+    tokenTestResult.value = error instanceof Error ? error.message : '连接失败'
+  } finally {
+    tokenTesting.value = false
   }
 }
 

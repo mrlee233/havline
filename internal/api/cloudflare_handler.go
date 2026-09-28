@@ -189,6 +189,22 @@ func (h *CloudflareHandler) SaveAppSettings(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, settings)
 }
 
+func (h *CloudflareHandler) TestToken(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	message, err := h.svc.TestToken(r.Context(), request.Token)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": message})
+}
+
 func (h *CloudflareHandler) DownloadBinary(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Mirror string `json:"mirror"`

@@ -512,4 +512,9 @@ export const api = {
   getCfSettings: () => request<CfAppSettings>('/api/cloudflare/settings'),
   saveCfSettings: (payload: CfAppSettingsInput) =>
     request<CfAppSettings>('/api/cloudflare/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  testCfToken: (token: string) =>
+    request<{ ok: boolean; message: string }>('/api/cloudflare/settings/test', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }, 60_000),
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/fonu/fonu/internal/config"
 	"github.com/fonu/fonu/internal/fsutil"
@@ -274,6 +275,60 @@ func (s *Service) resolveToken(ctx context.Context, input string) (string, error
 		return "", fmt.Errorf("默认 token 解密失败: %w", err)
 	}
 	return plain, nil
+}
+
+// TestToken 用 cloudflared 临时启动一次连接，验证 token 能否注册到 Cloudflare 边缘。
+func (s *Service) TestToken(ctx context.Context, input string) (string, error) {
+	token, err := s.resolveToken(ctx, input)
+	if err != nil {
+		return "", err
+	}
+	accountTag, tunnelID, tunnelSecret, err := DecodeToken(token)
+	if err != nil {
+		return "", err
+	}
+	binaryPath := s.binaryPath()
+	if _, err := os.Stat(binaryPath); err != nil {
+		return "", fmt.Errorf("cloudflared 未安装，请先在应用配置中下载")
+	}
+	baseDir := filepath.Join(s.cfg.DataDir, "cloudflared")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		return "", err
+	}
+	dir, err := os.MkdirTemp(baseDir, "token-test-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+	credsPath := filepath.Join(dir, "creds.json")
+	configPath := filepath.Join(dir, "config.yml")
+	if err := fsutil.WriteFileAtomic(credsPath, []byte(CredentialsJSON(accountTag, tunnelID, tunnelSecret)), 0o600); err != nil {
+		return "", err
+	}
+	ingress := BuildIngress(nil, defaultOriginService)
+	if err := fsutil.WriteFileAtomic(configPath, []byte(BuildConfig(tunnelID, credsPath, DefaultNetworkSettings(), ingress)), 0o640); err != nil {
+		return "", err
+	}
+	temp := Tunnel{
+		ID: -1, Name: "token-test", Mode: ModeTokenLocal,
+		Network: DefaultNetworkSettings(), LogPath: filepath.Join(dir, "cloudflared.log"),
+	}
+	if err := s.manager.Start(temp, binaryPath, configPath, ""); err != nil {
+		return "", err
+	}
+	defer func() { _ = s.manager.Stop(-1) }()
+	deadline := time.Now().Add(25 * time.Second)
+	for time.Now().Before(deadline) {
+		status := s.manager.Status(-1)
+		if status.Status == "connected" {
+			return fmt.Sprintf("连接成功，隧道 %s 已注册到 Cloudflare 边缘", tunnelID), nil
+		}
+		if status.Status == "failed" {
+			return "", fmt.Errorf("连接失败: %s", status.LastError)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return "", fmt.Errorf("连接超时：25 秒内未注册到 Cloudflare 边缘，请检查网络或 token")
 }
 
 // attachConfig 从 config.yml 回填域名与回源 service，供编辑弹窗使用。
