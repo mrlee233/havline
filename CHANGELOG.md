@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.2] - 2026-09-28
+
+### 修复
+
+- **Cloudflare 隧道弹窗宽度**：`n-modal` 的宽度原先写在 scoped class 上，没有传到 naive-ui 的 modal 根节点，部分视口下弹窗被拉成 100%。现在改为与其他页面一致的 `:style` 写法：编辑弹窗 `min(720px, 96vw)`、详情弹窗 `min(760px, 96vw)`、二进制弹窗 `min(560px, 94vw)`
+
+### 变更
+
+- 版本号提升到 1.6.2；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `npm run typecheck`、`npm run build` 通过
+
 ## [v1.6.1] - 2026-09-28
 
 ### 修复

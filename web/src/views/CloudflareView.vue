@@ -37,7 +37,7 @@
     </div>
   </FonuCard>
 
-  <n-modal v-model:show="editorVisible" preset="card" class="cf-modal" :title="editing ? '编辑隧道' : '新建隧道'">
+  <n-modal v-model:show="editorVisible" preset="card" :style="{ width: 'min(720px, 96vw)' }" :title="editing ? '编辑隧道' : '新建隧道'">
     <div class="cf-modal__body">
       <n-alert :type="form.mode === 'token-remote' ? 'warning' : 'info'" :bordered="false" class="cf-mode-alert">
         {{ modeHint }}
@@ -79,7 +79,7 @@
     </template>
   </n-modal>
 
-  <n-modal v-model:show="detailVisible" preset="card" class="cf-modal cf-modal--wide" :title="detailTunnel?.name || '隧道详情'">
+  <n-modal v-model:show="detailVisible" preset="card" :style="{ width: 'min(760px, 96vw)' }" :title="detailTunnel?.name || '隧道详情'">
     <div v-if="detailTunnel" class="cf-detail">
       <div class="cf-detail__stats">
         <div class="cf-stat"><label>状态</label><StatusBadge :kind="statusKind(detailStatus?.status || detailTunnel.status)" :text="statusText(detailStatus?.status || detailTunnel.status)" /></div>
@@ -108,7 +108,7 @@
     </template>
   </n-modal>
 
-  <n-modal v-model:show="binaryVisible" preset="card" class="cf-modal" title="cloudflared 二进制">
+  <n-modal v-model:show="binaryVisible" preset="card" :style="{ width: 'min(560px, 94vw)' }" title="cloudflared 二进制">
     <div class="cf-modal__body">
       <div class="cf-binary">
         <div><label>当前版本</label><strong class="mono">{{ binaryVersion || '未安装' }}</strong></div>
@@ -414,8 +414,6 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
 .cf-row__main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cf-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .cf-meta { font-size: 12px; color: var(--fonu-text-secondary); }
-.cf-modal { width: 720px; max-width: 94vw; }
-.cf-modal--wide { width: 780px; }
 .cf-modal__body { max-height: 68vh; overflow: auto; padding-right: 4px; }
 .cf-modal__footer { display: flex; justify-content: flex-end; gap: 8px; }
 .cf-mode-alert { margin-bottom: 4px; }
