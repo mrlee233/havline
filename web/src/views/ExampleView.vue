@@ -8,7 +8,7 @@
     </template>
   </PageHeader>
 
-  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.4 示例页面验证标识已生效">
+  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.5 示例页面验证标识已生效">
     当前页面由 v{{ version }} 提供，验证标识为 <span class="mono">{{ verificationMarker }}</span>。
     如果你是在升级后首次看到这行内容，说明前端构建、镜像重建和服务重启均已成功。
   </n-alert>
@@ -23,7 +23,18 @@
     <StatCard label="本次验证标识" :value="verificationMarker" sub="用于区分升级前后的前端资源" tone="blue" value-small>
       <template #icon><n-icon :component="FlashOutline" /></template>
     </StatCard>
+    <StatCard label="页面状态" value="已更新" sub="v1.3.5 前端资源已加载" tone="teal">
+      <template #icon><n-icon :component="CheckmarkCircleOutline" /></template>
+    </StatCard>
   </div>
+
+  <FonuCard title="本次示例页变化" subtitle="用于确认升级后的页面内容确实发生变化">
+    <ul class="example-changes">
+      <li>页面版本提示更新为 v1.3.5。</li>
+      <li>新增「页面状态」统计卡，显示 v1.3.5 前端资源已加载。</li>
+      <li>验证标识更新为 <span class="mono">v1.3.5-example-page</span>。</li>
+    </ul>
+  </FonuCard>
 
   <FonuCard title="验证步骤" subtitle="用这个页面确认线上实例已经更新到目标版本">
     <ol class="example-steps">
@@ -66,7 +77,7 @@ const message = useMessage()
 const version = ref(__APP_VERSION__)
 const checkedAt = ref('')
 const refreshing = ref(false)
-const verificationMarker = 'v1.3.4-example-page'
+const verificationMarker = 'v1.3.5-example-page'
 
 async function refreshVersion() {
   refreshing.value = true
@@ -99,6 +110,15 @@ onMounted(() => {
 }
 
 .example-steps {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--fonu-text-secondary);
+  line-height: 1.7;
+}
+
+.example-changes {
   display: grid;
   gap: 10px;
   margin: 0;
