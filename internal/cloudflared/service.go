@@ -72,7 +72,12 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Tunnel, error) {
 	if err := validateInput(in); err != nil {
 		return Tunnel{}, err
 	}
-	accountTag, tunnelID, tunnelSecret, err := DecodeToken(in.Token)
+	in.Network = s.applyDefaultNetwork(ctx, in.Network)
+	token, err := s.resolveToken(ctx, in.Token)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	accountTag, tunnelID, tunnelSecret, err := DecodeToken(token)
 	if err != nil {
 		return Tunnel{}, err
 	}
@@ -95,7 +100,7 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Tunnel, error) {
 	if err := fsutil.WriteFileAtomic(configPath, []byte(configContent), 0o640); err != nil {
 		return Tunnel{}, err
 	}
-	encrypted, err := s.secretBox.Encrypt(in.Token)
+	encrypted, err := s.secretBox.Encrypt(token)
 	if err != nil {
 		return Tunnel{}, err
 	}
@@ -109,6 +114,7 @@ func (s *Service) Update(ctx context.Context, id int64, in CreateInput) (Tunnel,
 		return Tunnel{}, err
 	}
 	_ = s.manager.Stop(id)
+	in.Network = s.applyDefaultNetwork(ctx, in.Network)
 	accountTag, tunnelID := current.AccountTag, current.TunnelID
 	encrypted := current.CredentialsEnc
 	if token := strings.TrimSpace(in.Token); token != "" {
@@ -189,6 +195,85 @@ func (s *Service) RuntimeStatus(ctx context.Context, id int64) (RuntimeStatus, e
 		return RuntimeStatus{}, err
 	}
 	return s.manager.Status(id), nil
+}
+
+// AppSettings 返回模块级配置；默认 token 只回显掩码。
+func (s *Service) AppSettings(ctx context.Context) (AppSettings, error) {
+	row, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return AppSettings{}, err
+	}
+	out := AppSettings{Mirror: row.Mirror, Network: row.Network}
+	if row.TokenEnc != "" {
+		out.DefaultTokenConfigured = true
+		if plain, err := s.secretBox.Decrypt(row.TokenEnc); err == nil {
+			out.DefaultTokenMasked = MaskSecret(plain)
+		}
+	}
+	return out, nil
+}
+
+// SaveAppSettings 保存默认 token、下载镜像与默认网络设置；Token 留空表示保留原值。
+func (s *Service) SaveAppSettings(ctx context.Context, in AppSettingsInput) (AppSettings, error) {
+	row, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return AppSettings{}, err
+	}
+	tokenEnc := row.TokenEnc
+	if token := strings.TrimSpace(in.Token); token != "" {
+		if _, _, _, err := DecodeToken(token); err != nil {
+			return AppSettings{}, err
+		}
+		tokenEnc, err = s.secretBox.Encrypt(token)
+		if err != nil {
+			return AppSettings{}, err
+		}
+	}
+	mirror := strings.TrimSpace(in.Mirror)
+	if mirror == "" {
+		mirror = row.Mirror
+	}
+	if mirror == "" {
+		mirror = "official"
+	}
+	network := in.Network
+	if strings.TrimSpace(network.TransportProtocol) == "" {
+		network = row.Network
+	}
+	if err := s.store.SaveSettings(ctx, tokenEnc, mirror, network); err != nil {
+		return AppSettings{}, err
+	}
+	return s.AppSettings(ctx)
+}
+
+func (s *Service) applyDefaultNetwork(ctx context.Context, network NetworkSettings) NetworkSettings {
+	if strings.TrimSpace(network.TransportProtocol) != "" {
+		return network
+	}
+	row, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return DefaultNetworkSettings()
+	}
+	return row.Network
+}
+
+func (s *Service) resolveToken(ctx context.Context, input string) (string, error) {
+	token := strings.TrimSpace(input)
+	if token != "" {
+		return token, nil
+	}
+	row, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return "", err
+	}
+	if row.TokenEnc == "" {
+		return "", fmt.Errorf("请填写 token，或先在「应用配置」中保存默认 token")
+	}
+	plain, err := s.secretBox.Decrypt(row.TokenEnc)
+	if err != nil {
+		return "", fmt.Errorf("默认 token 解密失败: %w", err)
+	}
+	return plain, nil
 }
 
 // attachConfig 从 config.yml 回填域名与回源 service，供编辑弹窗使用。
@@ -297,9 +382,6 @@ func validateInput(in CreateInput) error {
 	case ModeTokenLocal, ModeTokenRemote:
 	default:
 		return fmt.Errorf("暂不支持该模式，当前仅支持 token-local / token-remote")
-	}
-	if strings.TrimSpace(in.Token) == "" {
-		return fmt.Errorf("token 不能为空")
 	}
 	return nil
 }

@@ -41,6 +41,8 @@ import type {
   CfRuntimeStatus,
   CfTunnel,
   CfTunnelPayload,
+  CfAppSettings,
+  CfAppSettingsInput,
 } from './types'
 
 export function asList<T>(value: T[] | null | undefined): T[] {
@@ -507,4 +509,7 @@ export const api = {
     }),
   getCfIngressCandidates: () =>
     request<{ hostnames: string[] }>('/api/cloudflare/ingress-candidates'),
+  getCfSettings: () => request<CfAppSettings>('/api/cloudflare/settings'),
+  saveCfSettings: (payload: CfAppSettingsInput) =>
+    request<CfAppSettings>('/api/cloudflare/settings', { method: 'PUT', body: JSON.stringify(payload) }),
 }

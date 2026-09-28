@@ -206,6 +206,8 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("GET /api/cloudflare/tunnels/{id}/config", cf.Config)
 		protect("GET /api/cloudflare/binary", cf.BinaryInfo)
 		protect("POST /api/cloudflare/binary/download", cf.DownloadBinary)
+		protect("GET /api/cloudflare/settings", cf.AppSettings)
+		protect("PUT /api/cloudflare/settings", cf.SaveAppSettings)
 		protect("GET /api/cloudflare/ingress-candidates", cf.IngressCandidates)
 	}
 

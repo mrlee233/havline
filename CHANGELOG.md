@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.3] - 2026-09-28
+
+### 新增
+
+- **Cloudflare 应用配置**：「cloudflared 二进制」弹窗升级为「应用配置」，包含三块：
+  - 程序安装：当前版本、下载镜像、下载并安装
+  - Token 配置：保存模块级默认 token，掩码回显；新建隧道时可以留空，直接使用默认 token
+  - 默认网络设置：传输协议、边缘地址族、HA 连接数、代理模式，作为新建隧道的默认值
+- 新增 `cf_settings` 表（迁移 `031`）与 `GET / PUT /api/cloudflare/settings` 接口
+
+### 变更
+
+- 版本号提升到 1.6.3；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- 新增应用配置与默认 token 的端到端单元测试
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.2] - 2026-09-28
 
 ### 修复

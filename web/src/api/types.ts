@@ -1098,3 +1098,16 @@ export interface CfTunnelPayload {
   network: CfNetworkSettings
   auto_start: boolean
 }
+
+export interface CfAppSettings {
+  default_token_configured: boolean
+  default_token_masked: string
+  mirror: string
+  network: CfNetworkSettings
+}
+
+export interface CfAppSettingsInput {
+  token: string
+  mirror: string
+  network: CfNetworkSettings
+}

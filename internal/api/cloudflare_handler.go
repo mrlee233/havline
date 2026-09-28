@@ -165,6 +165,30 @@ func (h *CloudflareHandler) BinaryInfo(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *CloudflareHandler) AppSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.svc.AppSettings(r.Context())
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
+func (h *CloudflareHandler) SaveAppSettings(w http.ResponseWriter, r *http.Request) {
+	var input cloudflared.AppSettingsInput
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&input); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	input.Network = normalizeCloudflareNetwork(input.Network)
+	settings, err := h.svc.SaveAppSettings(r.Context(), input)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
 func (h *CloudflareHandler) DownloadBinary(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Mirror string `json:"mirror"`

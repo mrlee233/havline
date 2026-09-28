@@ -1,7 +1,7 @@
 <template>
   <PageHeader title="Cloudflare 隧道" description="通过 cloudflared 把内网 Web 服务发布到 Cloudflare 边缘，无需公网 IP">
     <template #actions>
-      <n-button :loading="binaryLoading" @click="openBinary">cloudflared 二进制</n-button>
+      <n-button :loading="settingsLoading" @click="openSettings">应用配置</n-button>
       <n-button type="primary" @click="openCreate">新建隧道</n-button>
     </template>
   </PageHeader>
@@ -47,7 +47,12 @@
         <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
         <n-form-item label="模式"><n-select v-model:value="form.mode" :options="modeOptions" /></n-form-item>
         <n-form-item :label="editing ? 'Token（留空保留原值）' : 'Token'">
-          <n-input v-model:value="form.token" type="password" show-password-on="click" placeholder="Cloudflare 面板生成的隧道 token" />
+          <n-input
+            v-model:value="form.token"
+            type="password"
+            show-password-on="click"
+            :placeholder="appSettings.default_token_configured ? '留空使用应用配置中的默认 token' : 'Cloudflare 面板生成的隧道 token'"
+          />
         </n-form-item>
       </n-form>
       <n-divider title-placement="left">暴露规则</n-divider>
@@ -108,23 +113,48 @@
     </template>
   </n-modal>
 
-  <n-modal v-model:show="binaryVisible" preset="card" :style="{ width: 'min(560px, 94vw)' }" title="cloudflared 二进制">
+  <n-modal v-model:show="settingsVisible" preset="card" :style="{ width: 'min(640px, 96vw)' }" title="Cloudflare 应用配置">
     <div class="cf-modal__body">
+      <n-divider title-placement="left">程序安装</n-divider>
       <div class="cf-binary">
         <div><label>当前版本</label><strong class="mono">{{ binaryVersion || '未安装' }}</strong></div>
         <div><label>目标文件</label><strong class="mono">cloudflared</strong></div>
       </div>
       <n-form label-placement="top">
         <n-form-item label="下载镜像">
-          <n-select v-model:value="selectedMirror" :options="mirrorOptions" />
+          <n-select v-model:value="settingsForm.mirror" :options="mirrorOptions" />
         </n-form-item>
       </n-form>
+      <div class="cf-code-toolbar">
+        <n-button size="small" :loading="binaryLoading" @click="downloadBinary">下载并安装</n-button>
+      </div>
       <p class="cf-hint">下载后会校验文件大小与可执行性，并原子替换现有二进制。国内环境推荐 gh-proxy 镜像。</p>
+
+      <n-divider title-placement="left">Token 配置</n-divider>
+      <n-form label-placement="top">
+        <n-form-item label="默认 Token">
+          <n-input
+            v-model:value="settingsForm.token"
+            type="password"
+            show-password-on="click"
+            :placeholder="appSettings.default_token_configured ? `已配置 ${appSettings.default_token_masked}，留空保留` : '粘贴 Cloudflare 隧道 token'"
+          />
+        </n-form-item>
+      </n-form>
+      <p class="cf-hint">保存后，新建隧道时可以留空 token，直接使用这里的默认值。</p>
+
+      <n-divider title-placement="left">默认网络设置</n-divider>
+      <n-form label-placement="top">
+        <n-form-item label="传输协议"><n-select v-model:value="settingsForm.network.transport_protocol" :options="protocolOptions" /></n-form-item>
+        <n-form-item label="边缘地址族"><n-select v-model:value="settingsForm.network.edge_ip_version" :options="edgeOptions" /></n-form-item>
+        <n-form-item label="HA 连接数"><n-input-number v-model:value="settingsForm.network.ha_connections" :min="1" :max="4" /></n-form-item>
+        <n-form-item label="代理模式"><n-select v-model:value="settingsForm.network.proxy_mode" :options="proxyOptions" /></n-form-item>
+      </n-form>
     </div>
     <template #footer>
       <div class="cf-modal__footer">
-        <n-button @click="binaryVisible = false">取消</n-button>
-        <n-button type="primary" :loading="binaryLoading" @click="downloadBinary">下载并安装</n-button>
+        <n-button @click="settingsVisible = false">取消</n-button>
+        <n-button type="primary" :loading="settingsSaving" @click="saveSettings">保存配置</n-button>
       </div>
     </template>
   </n-modal>
@@ -134,7 +164,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { NAlert, NButton, NDivider, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, NTabPane, NTabs, useMessage } from 'naive-ui'
 import { api, asList } from '../api/client'
-import type { CfMirror, CfRuntimeStatus, CfTunnel, CfTunnelPayload } from '../api/types'
+import type { CfAppSettings, CfAppSettingsInput, CfMirror, CfRuntimeStatus, CfTunnel, CfTunnelPayload } from '../api/types'
 import FonuCard from '../components/FonuCard.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -150,9 +180,17 @@ const candidates = ref<string[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const binaryLoading = ref(false)
-const selectedMirror = ref('official')
+const settingsVisible = ref(false)
+const settingsLoading = ref(false)
+const settingsSaving = ref(false)
+const appSettings = ref<CfAppSettings>({
+  default_token_configured: false,
+  default_token_masked: '',
+  mirror: 'official',
+  network: emptyNetwork(),
+})
+const settingsForm = ref<CfAppSettingsInput>({ token: '', mirror: 'official', network: emptyNetwork() })
 const editorVisible = ref(false)
-const binaryVisible = ref(false)
 const detailVisible = ref(false)
 const editing = ref<CfTunnel | null>(null)
 const detailTunnel = ref<CfTunnel | null>(null)
@@ -197,9 +235,13 @@ function emptyForm(): CfTunnelPayload {
     token: '',
     hostnames: [],
     origin_service: 'http://127.0.0.1:80',
-    network: { transport_protocol: 'http2', edge_ip_version: '4', ha_connections: 2, proxy_mode: 'system' },
+    network: emptyNetwork(),
     auto_start: false,
   }
+}
+
+function emptyNetwork() {
+  return { transport_protocol: 'http2', edge_ip_version: '4', ha_connections: 2, proxy_mode: 'system' }
 }
 
 async function load() {
@@ -256,8 +298,8 @@ async function saveTunnel() {
     message.warning('请填写隧道名称')
     return
   }
-  if (!editing.value && !(form.value.token || '').trim()) {
-    message.warning('请填写 Cloudflare 隧道 token')
+  if (!editing.value && !(form.value.token || '').trim() && !appSettings.value.default_token_configured) {
+    message.warning('请填写 token，或先在「应用配置」中保存默认 token')
     return
   }
   if (form.value.mode === 'token-local' && !form.value.hostnames.length) {
@@ -349,14 +391,42 @@ async function copyConfig() {
   }
 }
 
-function openBinary() {
-  binaryVisible.value = true
+async function openSettings() {
+  settingsVisible.value = true
+  await loadAppSettings()
+}
+
+async function loadAppSettings() {
+  settingsLoading.value = true
+  try {
+    const result = await api.getCfSettings()
+    appSettings.value = result
+    settingsForm.value = { token: '', mirror: result.mirror || 'official', network: { ...result.network } }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '读取应用配置失败')
+  } finally {
+    settingsLoading.value = false
+  }
+}
+
+async function saveSettings() {
+  settingsSaving.value = true
+  try {
+    const result = await api.saveCfSettings(settingsForm.value)
+    appSettings.value = result
+    settingsForm.value = { token: '', mirror: result.mirror, network: { ...result.network } }
+    message.success('应用配置已保存')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存应用配置失败')
+  } finally {
+    settingsSaving.value = false
+  }
 }
 
 async function downloadBinary() {
   binaryLoading.value = true
   try {
-    const result = await api.downloadCfBinary(selectedMirror.value)
+    const result = await api.downloadCfBinary(settingsForm.value.mirror || 'official')
     binaryVersion.value = result.version || ''
     message.success('cloudflared 已下载并安装')
   } catch (error) {
@@ -392,6 +462,7 @@ function statusKind(status: string): StatusKind {
 onMounted(() => {
   void load()
   void loadBinary()
+  void loadAppSettings()
   void loadCandidates()
 })
 

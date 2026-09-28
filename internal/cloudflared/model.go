@@ -70,6 +70,21 @@ type CreateInput struct {
 	AutoStart     bool            `json:"auto_start"`
 }
 
+// AppSettings 是模块级配置；默认 token 只回显掩码，不返回明文。
+type AppSettings struct {
+	DefaultTokenConfigured bool            `json:"default_token_configured"`
+	DefaultTokenMasked     string          `json:"default_token_masked"`
+	Mirror                 string          `json:"mirror"`
+	Network                NetworkSettings `json:"network"`
+}
+
+// AppSettingsInput 是保存应用配置的入参；Token 留空表示保留原值。
+type AppSettingsInput struct {
+	Token   string          `json:"token"`
+	Mirror  string          `json:"mirror"`
+	Network NetworkSettings `json:"network"`
+}
+
 // RuntimeStatus 是隧道运行状态与指标快照。
 type RuntimeStatus struct {
 	Running         bool    `json:"running"`
