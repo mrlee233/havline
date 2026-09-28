@@ -2,8 +2,11 @@ package cloudflared
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,6 +214,12 @@ func (s *Service) AppSettings(ctx context.Context) (AppSettings, error) {
 			out.DefaultTokenMasked = MaskSecret(plain)
 		}
 	}
+	if row.APITokenEnc != "" {
+		out.APITokenConfigured = true
+		if plain, err := s.secretBox.Decrypt(row.APITokenEnc); err == nil {
+			out.APITokenMasked = MaskSecret(plain)
+		}
+	}
 	return out, nil
 }
 
@@ -230,6 +239,13 @@ func (s *Service) SaveAppSettings(ctx context.Context, in AppSettingsInput) (App
 			return AppSettings{}, err
 		}
 	}
+	apiTokenEnc := row.APITokenEnc
+	if apiToken := strings.TrimSpace(in.APIToken); apiToken != "" {
+		apiTokenEnc, err = s.secretBox.Encrypt(apiToken)
+		if err != nil {
+			return AppSettings{}, err
+		}
+	}
 	mirror := strings.TrimSpace(in.Mirror)
 	if mirror == "" {
 		mirror = row.Mirror
@@ -241,7 +257,7 @@ func (s *Service) SaveAppSettings(ctx context.Context, in AppSettingsInput) (App
 	if strings.TrimSpace(network.TransportProtocol) == "" {
 		network = row.Network
 	}
-	if err := s.store.SaveSettings(ctx, tokenEnc, mirror, network); err != nil {
+	if err := s.store.SaveSettings(ctx, tokenEnc, apiTokenEnc, mirror, network); err != nil {
 		return AppSettings{}, err
 	}
 	return s.AppSettings(ctx)
@@ -277,8 +293,61 @@ func (s *Service) resolveToken(ctx context.Context, input string) (string, error
 	return plain, nil
 }
 
+// VerifyAPIToken 调用 Cloudflare 官方 tokens/verify 接口验证 API Token（cfat_...）。
+func (s *Service) VerifyAPIToken(ctx context.Context, input string) (string, error) {
+	token := strings.TrimSpace(input)
+	if token == "" {
+		row, err := s.store.GetSettingsRaw(ctx)
+		if err != nil {
+			return "", err
+		}
+		if row.APITokenEnc == "" {
+			return "", fmt.Errorf("请填写 API Token（cfat_...），或先在应用配置中保存")
+		}
+		token, err = s.secretBox.Decrypt(row.APITokenEnc)
+		if err != nil {
+			return "", fmt.Errorf("API Token 解密失败: %w", err)
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.cloudflare.com/client/v4/user/tokens/verify", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("请求 Cloudflare API 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var parsed struct {
+		Success bool `json:"success"`
+		Result  struct {
+			Status string `json:"status"`
+		} `json:"result"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return "", fmt.Errorf("Cloudflare API 响应格式无效（HTTP %d）", resp.StatusCode)
+	}
+	if !parsed.Success || parsed.Result.Status != "active" {
+		message := "API Token 无效或未激活"
+		if len(parsed.Errors) > 0 && strings.TrimSpace(parsed.Errors[0].Message) != "" {
+			message = parsed.Errors[0].Message
+		}
+		return "", fmt.Errorf("%s", message)
+	}
+	return fmt.Sprintf("API Token 有效（状态：%s）", parsed.Result.Status), nil
+}
+
 // TestToken 用 cloudflared 临时启动一次连接，验证 token 能否注册到 Cloudflare 边缘。
-func (s *Service) TestToken(ctx context.Context, input string) (string, error) {
+func (s *Service) TestToken(ctx context.Context, input, kind string) (string, error) {
+	if kind == "api" || strings.HasPrefix(strings.TrimSpace(input), "cfat_") {
+		return s.VerifyAPIToken(ctx, input)
+	}
 	token, err := s.resolveToken(ctx, input)
 	if err != nil {
 		return "", err

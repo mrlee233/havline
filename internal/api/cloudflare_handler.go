@@ -192,12 +192,13 @@ func (h *CloudflareHandler) SaveAppSettings(w http.ResponseWriter, r *http.Reque
 func (h *CloudflareHandler) TestToken(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Token string `json:"token"`
+		Kind  string `json:"kind"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
 		writeError(r, w, http.StatusBadRequest, "请求格式无效")
 		return
 	}
-	message, err := h.svc.TestToken(r.Context(), request.Token)
+	message, err := h.svc.TestToken(r.Context(), request.Token, request.Kind)
 	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return

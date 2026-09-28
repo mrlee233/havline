@@ -124,12 +124,20 @@
 
       <n-divider title-placement="left">Token 配置</n-divider>
       <n-form label-placement="top">
-        <n-form-item label="默认 Token">
+        <n-form-item label="隧道 Token（Tunnel Token）">
           <n-input
             v-model:value="settingsForm.token"
             type="password"
             show-password-on="click"
-            :placeholder="appSettings.default_token_configured ? `已配置 ${appSettings.default_token_masked}，留空保留` : '粘贴 Cloudflare 隧道 token'"
+            :placeholder="appSettings.default_token_configured ? `已配置 ${appSettings.default_token_masked}，留空保留` : '粘贴 Cloudflare 隧道 token（eyJ...）'"
+          />
+        </n-form-item>
+        <n-form-item label="API Token（可选，用于连接验证）">
+          <n-input
+            v-model:value="settingsForm.api_token"
+            type="password"
+            show-password-on="click"
+            :placeholder="appSettings.api_token_configured ? `已配置 ${appSettings.api_token_masked}，留空保留` : 'cfat_...'"
           />
         </n-form-item>
       </n-form>
@@ -140,7 +148,7 @@
       <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
         {{ tokenTestResult }}
       </n-alert>
-      <p class="cf-hint">保存后，新建隧道时可以留空 token，直接使用这里的默认值。</p>
+      <p class="cf-hint">隧道 Token 用于 cloudflared 运行；API Token 用于验证 Cloudflare 账号连接（格式 cfat_...）。测试连接优先使用 API Token。</p>
 
       <n-divider title-placement="left">默认网络设置</n-divider>
       <n-form label-placement="top">
@@ -188,10 +196,12 @@ const tokenTestOk = ref(false)
 const appSettings = ref<CfAppSettings>({
   default_token_configured: false,
   default_token_masked: '',
+  api_token_configured: false,
+  api_token_masked: '',
   mirror: 'official',
   network: emptyNetwork(),
 })
-const settingsForm = ref<CfAppSettingsInput>({ token: '', mirror: 'official', network: emptyNetwork() })
+const settingsForm = ref<CfAppSettingsInput>({ token: '', api_token: '', mirror: 'official', network: emptyNetwork() })
 const editorVisible = ref(false)
 const detailVisible = ref(false)
 const editing = ref<CfTunnel | null>(null)
@@ -409,7 +419,7 @@ async function loadAppSettings() {
   try {
     const result = await api.getCfSettings()
     appSettings.value = result
-    settingsForm.value = { token: '', mirror: result.mirror || 'official', network: { ...result.network } }
+    settingsForm.value = { token: '', api_token: '', mirror: result.mirror || 'official', network: { ...result.network } }
   } catch (error) {
     message.error(error instanceof Error ? error.message : '读取应用配置失败')
   } finally {
@@ -420,8 +430,13 @@ async function loadAppSettings() {
 async function testToken() {
   tokenTesting.value = true
   tokenTestResult.value = ''
+  const apiToken = (settingsForm.value.api_token || '').trim()
+  const useAPI = apiToken !== '' || appSettings.value.api_token_configured
   try {
-    const result = await api.testCfToken(settingsForm.value.token)
+    const result = await api.testCfToken(
+      useAPI ? apiToken : (settingsForm.value.token || ''),
+      useAPI ? 'api' : 'tunnel',
+    )
     tokenTestOk.value = true
     tokenTestResult.value = result.message || '连接成功'
   } catch (error) {
@@ -437,7 +452,7 @@ async function saveSettings() {
   try {
     const result = await api.saveCfSettings(settingsForm.value)
     appSettings.value = result
-    settingsForm.value = { token: '', mirror: result.mirror, network: { ...result.network } }
+    settingsForm.value = { token: '', api_token: '', mirror: result.mirror, network: { ...result.network } }
     message.success('应用配置已保存')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '保存应用配置失败')

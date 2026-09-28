@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.7] - 2026-09-28
+
+### 新增
+
+- **API Token 连接验证**：应用配置的 Token 区域拆分为两个输入：
+  - 隧道 Token（Tunnel Token）：用于 cloudflared 运行
+  - API Token（`cfat_...`）：用于连接验证，调用 Cloudflare 官方 `GET /user/tokens/verify` 接口
+- 「测试连接」优先使用 API Token；未配置 API Token 时回退到隧道 Token 的临时连接测试；输入以 `cfat_` 开头时也会自动走 API 验证
+- 新增 `cf_settings.api_token_enc` 字段（迁移 `032`），API Token 独立加密存储与掩码回显
+
+### 变更
+
+- 版本号提升到 1.6.7；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.6] - 2026-09-28
 
 ### 修复

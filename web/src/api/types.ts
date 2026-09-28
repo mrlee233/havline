@@ -1102,12 +1102,15 @@ export interface CfTunnelPayload {
 export interface CfAppSettings {
   default_token_configured: boolean
   default_token_masked: string
+  api_token_configured: boolean
+  api_token_masked: string
   mirror: string
   network: CfNetworkSettings
 }
 
 export interface CfAppSettingsInput {
   token: string
+  api_token: string
   mirror: string
   network: CfNetworkSettings
 }

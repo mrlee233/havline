@@ -97,35 +97,37 @@ func (s *Store) SetRuntime(ctx context.Context, id int64, status, lastError stri
 
 // settingsRow 是应用配置的原始行；TokenEnc 只在 Service 内部解密，不直接回给前端。
 type settingsRow struct {
-	TokenEnc string
-	Mirror   string
-	Network  NetworkSettings
+	TokenEnc    string
+	APITokenEnc string
+	Mirror      string
+	Network     NetworkSettings
 }
 
 func (s *Store) GetSettingsRaw(ctx context.Context) (settingsRow, error) {
-	var tokenEnc, mirror, networkJSON string
+	var tokenEnc, apiTokenEnc, mirror, networkJSON string
 	err := s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(default_token_enc, ''), COALESCE(mirror, 'official'), COALESCE(network_json, '{}')
+		SELECT COALESCE(default_token_enc, ''), COALESCE(api_token_enc, ''),
+		       COALESCE(mirror, 'official'), COALESCE(network_json, '{}')
 		FROM cf_settings WHERE id = 1
-	`).Scan(&tokenEnc, &mirror, &networkJSON)
+	`).Scan(&tokenEnc, &apiTokenEnc, &mirror, &networkJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return settingsRow{Mirror: "official", Network: DefaultNetworkSettings()}, nil
 	}
 	if err != nil {
 		return settingsRow{}, err
 	}
-	row := settingsRow{TokenEnc: tokenEnc, Mirror: mirror, Network: DefaultNetworkSettings()}
+	row := settingsRow{TokenEnc: tokenEnc, APITokenEnc: apiTokenEnc, Mirror: mirror, Network: DefaultNetworkSettings()}
 	_ = json.Unmarshal([]byte(networkJSON), &row.Network)
 	return row, nil
 }
 
-func (s *Store) SaveSettings(ctx context.Context, tokenEnc, mirror string, network NetworkSettings) error {
+func (s *Store) SaveSettings(ctx context.Context, tokenEnc, apiTokenEnc, mirror string, network NetworkSettings) error {
 	networkJSON, _ := json.Marshal(network)
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE cf_settings
-		SET default_token_enc = ?, mirror = ?, network_json = ?, updated_at = datetime('now')
+		SET default_token_enc = ?, api_token_enc = ?, mirror = ?, network_json = ?, updated_at = datetime('now')
 		WHERE id = 1
-	`, tokenEnc, mirror, string(networkJSON))
+	`, tokenEnc, apiTokenEnc, mirror, string(networkJSON))
 	return err
 }
 
