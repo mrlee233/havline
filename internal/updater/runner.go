@@ -22,6 +22,9 @@ func (s *Server) runUpdate(ctx context.Context) error {
 	s.state.Phase = PhaseRunning
 	s.state.Message = "正在准备升级"
 	s.mu.Unlock()
+	if err := s.ensureComposeFile(); err != nil {
+		return err
+	}
 
 	latest, err := s.latestVersion(ctx)
 	if err != nil {

@@ -162,6 +162,17 @@ func (s *Server) handleApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, status)
 }
 
+func (s *Server) ensureComposeFile() error {
+	info, err := os.Stat(s.composePath)
+	if err != nil {
+		return fmt.Errorf("找不到 Compose 文件 %s；请确认 updater 的 /workspace 挂载，或在 .env 设置 FONU_UPDATE_HOST_DIR 指向 Compose 所在目录", s.composePath)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("Compose 路径是目录而不是文件：%s", s.composePath)
+	}
+	return nil
+}
+
 // Status 返回当前版本、远端版本和任务状态。
 func (s *Server) Status(ctx context.Context) Status {
 	s.mu.Lock()
@@ -170,6 +181,16 @@ func (s *Server) Status(ctx context.Context) Status {
 		s.mu.Unlock()
 		return status
 	}
+	s.mu.Unlock()
+	if err := s.ensureComposeFile(); err != nil {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.state.UpdateAvailable = false
+		s.state.Message = err.Error()
+		s.state.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+		return cloneStatus(s.state)
+	}
+	s.mu.Lock()
 	if !s.lastChecked.IsZero() && time.Since(s.lastChecked) < time.Minute {
 		status := cloneStatus(s.state)
 		s.mu.Unlock()

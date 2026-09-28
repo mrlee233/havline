@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.4] - 2026-09-28
+
+### 修复
+
+- **一键升级找不到 Compose 文件**：fnOS 或 Docker UI 启动 Compose 时，updater 的 `.:/workspace` 可能解析到错误目录，构建时报 `open /workspace/docker-compose.hub.yml: no such file or directory`。Compose 文件现支持用 `FONU_UPDATE_HOST_DIR` 显式指定宿主机 Compose 目录，并在状态接口中提前报告缺少 Compose 文件，避免排到升级后才失败
+- **示例页验证标识更新为 v1.3.4-example-page**，用于确认升级后的前端资源确实生效
+
+### 变更
+
+- 版本号提升到 1.3.4；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.12.8
+
+### 测试
+
+- `internal/updater`：补充 Compose 文件缺失检查
+
 ## [v1.3.3] - 2026-09-27
 
 ### 新增

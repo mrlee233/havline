@@ -8,7 +8,7 @@
     </template>
   </PageHeader>
 
-  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.3 示例页面验证标识已生效">
+  <n-alert type="success" :bordered="false" class="example-alert" title="v1.3.4 示例页面验证标识已生效">
     当前页面由 v{{ version }} 提供，验证标识为 <span class="mono">{{ verificationMarker }}</span>。
     如果你是在升级后首次看到这行内容，说明前端构建、镜像重建和服务重启均已成功。
   </n-alert>
@@ -66,7 +66,7 @@ const message = useMessage()
 const version = ref(__APP_VERSION__)
 const checkedAt = ref('')
 const refreshing = ref(false)
-const verificationMarker = 'v1.3.3-example-page'
+const verificationMarker = 'v1.3.4-example-page'
 
 async function refreshVersion() {
   refreshing.value = true

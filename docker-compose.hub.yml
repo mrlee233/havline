@@ -70,7 +70,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
-      - .:/workspace
+      - ${FONU_UPDATE_HOST_DIR:-.}:/workspace
       - fonu-updater-sock:/run/fonu-updater
     environment:
       FONU_UPDATER_SOCKET: /run/fonu-updater/updater.sock

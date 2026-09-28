@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -39,5 +40,23 @@ func TestNewServerDefaultsAndValidation(t *testing.T) {
 	}
 	if _, err := NewServer(Config{ProjectDir: t.TempDir(), Mode: "git"}, nil); err == nil {
 		t.Fatal("git 模式缺少 RepoURL 应被拒绝")
+	}
+}
+
+func TestEnsureComposeFile(t *testing.T) {
+	dir := t.TempDir()
+	server, err := NewServer(Config{ProjectDir: dir, ComposeFile: "docker-compose.yml"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := server.ensureComposeFile(); err == nil {
+		t.Fatal("缺少 compose 文件时应返回错误")
+	}
+	path := filepath.Join(dir, "docker-compose.yml")
+	if err := os.WriteFile(path, []byte("services: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.ensureComposeFile(); err != nil {
+		t.Fatalf("存在 compose 文件时不应报错: %v", err)
 	}
 }
