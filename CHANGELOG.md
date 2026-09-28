@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### 修复
 
 - **限流状态损坏时拒绝覆盖**：`readLimitState` 原来忽略 JSON 解析错误并返回空 map，保存任一规则时可能把其他域名的限流配置清空。现在文件不存在仍视为空状态，读取失败、空文件或 JSON 损坏则返回错误，`applyLimitState` / `clearLimitState` 会保留原文件与现有 Nginx zone，不再覆盖
+- **一键升级宿主机目录自动发现**：当 Compose 标签里的 `working_dir` 是 `/workspace` 这类容器路径时，不再直接把它当宿主机目录；优先使用 `project.config_files` 推导真实目录，无法得到宿主机路径时明确报错，避免 helper 挂载 `/workspace:/workspace` 后找不到 Compose 文件
 
 ### 变更
 

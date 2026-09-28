@@ -188,6 +188,10 @@ docker compose -f /实际/的/Compose/目录/docker-compose.hub.yml up -d --buil
 
 如果现有 `fonu` 容器不是由 Compose 管理，updater 会拒绝升级，避免新建 `fonu_fonu-data` 等空数据卷。应先按 Compose 方式重新部署，再使用一键升级。
 
+### helper 命令里出现 `-v /workspace:/workspace`
+
+说明 Compose 标签只返回了容器内路径。更新后的 updater 会优先从 `project.config_files` 标签推导宿主机目录，并忽略 `/workspace` 这类容器路径。若标签仍无法提供真实宿主机路径，应检查部署工具的 Compose 标签是否完整；正常情况下无需手工设置目录。
+
 ### `docker-compose.hub.yml` 模式无法读取远端版本
 
 检查 sidecar 容器内是否可以访问 Git 仓库：

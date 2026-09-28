@@ -85,3 +85,20 @@ func TestResolveComposePlanUsesHostProjectDir(t *testing.T) {
 		t.Fatalf("helper compose 路径不正确: %s", plan.helperComposePath)
 	}
 }
+
+func TestIsContainerPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/workspace", true},
+		{"/workspace/docker-compose.yml", true},
+		{"/vol1/1000/Docker/mafrp", false},
+		{"/vol1/1000/Docker/mafrp/docker-compose.yml", false},
+	}
+	for _, tc := range cases {
+		if got := isContainerPath(tc.path, "/workspace"); got != tc.want {
+			t.Fatalf("isContainerPath(%q) = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}

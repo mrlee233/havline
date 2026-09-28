@@ -230,7 +230,7 @@ func (s *Server) composeProjectName(ctx context.Context) (string, error) {
 }
 
 func (s *Server) discoverHostCompose(ctx context.Context) (string, string, error) {
-	if s.cfg.HostProjectDir != "" {
+	if s.cfg.HostProjectDir != "" && !isContainerPath(s.cfg.HostProjectDir, s.cfg.ProjectDir) {
 		if !filepath.IsAbs(s.cfg.HostProjectDir) {
 			return "", "", fmt.Errorf("FONU_UPDATE_HOST_DIR 必须是绝对路径")
 		}
@@ -241,15 +241,30 @@ func (s *Server) discoverHostCompose(ctx context.Context) (string, string, error
 	hostDir := strings.TrimSpace(workingDir)
 	hostCompose := chooseComposeFile(configFiles, filepath.Base(s.cfg.ComposeFile))
 	if hostCompose == "" {
-		return "", "", fmt.Errorf("无法从容器标签读取 Compose 文件")
+		if hostDir == "" || isContainerPath(hostDir, s.cfg.ProjectDir) {
+			return "", "", fmt.Errorf("无法从容器标签读取宿主机 Compose 目录")
+		}
+		hostCompose = filepath.Join(hostDir, filepath.Base(s.cfg.ComposeFile))
 	}
-	if hostDir == "" {
+	if hostDir == "" || isContainerPath(hostDir, s.cfg.ProjectDir) {
 		hostDir = filepath.Dir(hostCompose)
 	}
 	if !filepath.IsAbs(hostDir) || !filepath.IsAbs(hostCompose) {
 		return "", "", fmt.Errorf("容器标签中的 Compose 路径不是绝对路径")
 	}
+	if isContainerPath(hostDir, s.cfg.ProjectDir) {
+		return "", "", fmt.Errorf("容器标签只提供了容器内路径 %s，无法定位宿主机 Compose 目录", hostDir)
+	}
 	return filepath.Clean(hostDir), filepath.Clean(hostCompose), nil
+}
+
+func isContainerPath(path, containerDir string) bool {
+	path = filepath.Clean(strings.TrimSpace(path))
+	containerDir = filepath.Clean(strings.TrimSpace(containerDir))
+	if path == "" || containerDir == "" || path == "." {
+		return false
+	}
+	return path == containerDir || strings.HasPrefix(path, containerDir+string(filepath.Separator))
 }
 
 func (s *Server) dockerLabel(ctx context.Context, label string) (string, error) {
