@@ -297,12 +297,16 @@ func (s *Service) cloudflareAPI(ctx context.Context) (*CloudflareAPI, error) {
 }
 
 // VerifyAPIToken 用 Account ID + API Token 调用 Cloudflare 账号级 tokens/verify 接口。
-func (s *Service) VerifyAPIToken(ctx context.Context, input string) (string, error) {
+// accountID / input 为空时回退到应用配置中已保存的值。
+func (s *Service) VerifyAPIToken(ctx context.Context, accountID, input string) (string, error) {
 	row, err := s.store.GetSettingsRaw(ctx)
 	if err != nil {
 		return "", err
 	}
-	accountID := strings.TrimSpace(row.AccountID)
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		accountID = strings.TrimSpace(row.AccountID)
+	}
 	if accountID == "" {
 		return "", fmt.Errorf("请先填写 Account ID")
 	}
@@ -320,8 +324,8 @@ func (s *Service) VerifyAPIToken(ctx context.Context, input string) (string, err
 }
 
 // TestToken 验证 Account ID + API Token 是否可用。
-func (s *Service) TestToken(ctx context.Context, input, _ string) (string, error) {
-	return s.VerifyAPIToken(ctx, input)
+func (s *Service) TestToken(ctx context.Context, accountID, input, _ string) (string, error) {
+	return s.VerifyAPIToken(ctx, accountID, input)
 }
 
 // attachConfig 从 config.yml 回填域名与回源 service，供编辑弹窗使用。

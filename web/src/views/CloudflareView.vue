@@ -416,7 +416,11 @@ async function testToken() {
   tokenTesting.value = true
   tokenTestResult.value = ''
   try {
-    const result = await api.testCfToken((settingsForm.value.api_token || '').trim(), 'api')
+    const result = await api.testCfToken(
+      (settingsForm.value.account_id || '').trim(),
+      (settingsForm.value.api_token || '').trim(),
+      'api',
+    )
     tokenTestOk.value = true
     tokenTestResult.value = result.message || '连接成功'
   } catch (error) {

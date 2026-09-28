@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.9] - 2026-09-28
+
+### 修复
+
+- **测试连接未使用当前输入的 Account ID**：测试连接原先只读取数据库中已保存的 Account ID，未保存直接点测试会误报「请先填写 Account ID」。现在前端会把输入框里的 Account ID 与 API Token 一起提交，后端优先使用输入值，留空时才回退到已保存配置
+
+### 变更
+
+- 版本号提升到 1.6.9；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.8] - 2026-09-28
 
 ### 变更
