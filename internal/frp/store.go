@@ -279,14 +279,14 @@ func (s *Store) AgentToken(ctx context.Context, id int64) (string, error) {
 	return token, err
 }
 
-func (s *Store) SetAgentTransport(ctx context.Context, id int64, transport string, localPort int, tlsPin, listenAddr, state, lastError string) error {
+func (s *Store) SetAgentTransport(ctx context.Context, id int64, agentURL, transport string, localPort int, tlsPin, listenAddr, state, lastError string) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE frp_servers
-		SET agent_transport = ?, agent_local_port = ?, agent_tls_pin = ?,
+		SET agent_url = ?, agent_transport = ?, agent_local_port = ?, agent_tls_pin = ?,
 		    agent_listen_addr = ?, agent_transport_state = ?, agent_transport_error = ?,
 		    updated_at = datetime('now')
 		WHERE id = ?
-	`, transport, localPort, tlsPin, listenAddr, state, lastError, id)
+	`, agentURL, transport, localPort, tlsPin, listenAddr, state, lastError, id)
 	if err != nil {
 		return err
 	}

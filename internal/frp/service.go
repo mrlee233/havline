@@ -780,11 +780,12 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	}
 	s.tunnels[serverID] = tunnel
 	s.tunnelMu.Unlock()
-	if err := s.store.SetAgentTransport(ctx, serverID, "tunnel", localPort, "", "127.0.0.1:7700", "connected", ""); err != nil {
+	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "tunnel", localPort, "", "127.0.0.1:7700", "connected", ""); err != nil {
 		tunnel.Stop()
 		_ = (AgentInstaller{SSH: installer}).RestorePreviousConfig(ctx)
 		return Server{}, err
 	}
+	s.invalidateAgentClient(serverID)
 	return updated, nil
 }
 
@@ -861,10 +862,12 @@ func (s *Service) ensureAgentTunnel(ctx context.Context, serverID int64) (*agent
 	}
 	s.tunnels[serverID] = tunnel
 	s.tunnelMu.Unlock()
-	if err := s.store.SetAgentTransport(ctx, serverID, "tunnel", localPort, server.AgentTLSPin, "127.0.0.1:7700", "connected", ""); err != nil {
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", localPort)
+	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "tunnel", localPort, "", "127.0.0.1:7700", "connected", ""); err != nil {
 		tunnel.Stop()
 		return nil, err
 	}
+	s.invalidateAgentClient(serverID)
 	return tunnel, nil
 }
 
@@ -926,7 +929,7 @@ func (s *Service) RestartAgentTunnel(ctx context.Context, serverID int64) (Serve
 	}
 	s.stopAgentTunnel(serverID)
 	if _, err := s.ensureAgentTunnel(ctx, serverID); err != nil {
-		_ = s.store.SetAgentTransport(ctx, serverID, "tunnel", current.AgentLocalPort, current.AgentTLSPin, current.AgentListenAddr, "failed", err.Error())
+		_ = s.store.SetAgentTransport(ctx, serverID, current.AgentURL, "tunnel", current.AgentLocalPort, current.AgentTLSPin, current.AgentListenAddr, "failed", err.Error())
 		return Server{}, err
 	}
 	server, err := s.store.GetServer(ctx, serverID)
@@ -984,9 +987,10 @@ func (s *Service) EnableAgentHTTPS(ctx context.Context, serverID int64, port int
 		_ = currentClient.DisableHTTPS(ctx)
 		return Server{}, fmt.Errorf("HTTPS 直连验证失败: %w", err)
 	}
-	if err := s.store.SetAgentTransport(ctx, serverID, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", port), "connected", ""); err != nil {
+	if err := s.store.SetAgentTransport(ctx, serverID, baseURL, "https-pin", server.AgentLocalPort, cert.Pin, fmt.Sprintf("0.0.0.0:%d", port), "connected", ""); err != nil {
 		return Server{}, err
 	}
+	s.invalidateAgentClient(serverID)
 	s.stopAgentTunnel(serverID)
 	updated, err := s.store.GetServer(ctx, serverID)
 	if err != nil {
@@ -1029,7 +1033,7 @@ func (s *Service) AgentUninstall(ctx context.Context, serverID int64, keepData b
 	output, err := AgentInstaller{SSH: installer}.Uninstall(ctx, keepData)
 	if err == nil {
 		s.stopAgentTunnel(serverID)
-		_ = s.store.SetAgentTransport(ctx, serverID, "tunnel", 0, "", "", "stopped", "")
+		_ = s.store.SetAgentTransport(ctx, serverID, "", "tunnel", 0, "", "", "stopped", "")
 	}
 	return output, err
 }
@@ -1583,6 +1587,12 @@ func (s *Service) DeleteProxy(ctx context.Context, id int64) error {
 type cachedAgentClient struct {
 	fingerprint string
 	client      *AgentClient
+}
+
+func (s *Service) invalidateAgentClient(serverID int64) {
+	s.agentMu.Lock()
+	delete(s.agentClients, serverID)
+	s.agentMu.Unlock()
 }
 
 func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient, bool) {

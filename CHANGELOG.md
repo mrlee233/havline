@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.2] - 2026-09-28
+
+### 修复
+
+- **切换 HTTPS 后 Agent URL 未更新**：启用 HTTPS 直连时只更新了 transport 和证书 pin，数据库里的 `agent_url` 仍保留旧的 `http://127.0.0.1:17701`。隧道关闭后仍访问旧本地地址，导致 `connect: connection refused`。现在 transport、URL、端口和 pin 同批更新，并在切换后清理旧 AgentClient 缓存
+- **切回 SSH 隧道时同步恢复本地 URL**：恢复隧道会重新写入 `http://127.0.0.1:<localPort>`，避免残留 HTTPS 地址影响后续状态读取
+
+### 变更
+
+- 版本号提升到 1.4.2；`web/package.json` 与 `web/package-lock.json` 同步对齐
+- `AgentVersion` 保持 0.13.0
+
+### 测试
+
+- `internal/frp`：transport 切换与缓存失效编译验证
+
 ## [v1.4.1] - 2026-09-28
 
 ### 修复
