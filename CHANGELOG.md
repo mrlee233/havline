@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.6.1] - 2026-09-28
+
+### 修复
+
+- **Cloudflare 隧道弹窗完善**：编辑弹窗回填已配置的暴露域名与回源 service（后端从 `config.yml` 解析）；按「基本信息 / 暴露规则 / 网络调优」分组，增加模式说明；云端规则模式隐藏本地域名配置并提示规则由 Cloudflare 面板管理
+- **详情弹窗**：改为状态卡 + `config.yml` / 日志分页，日志每 3 秒自动刷新，支持一键复制配置，刷新按钮带加载状态
+- **二进制弹窗**：显示当前版本与目标文件；镜像列表为空时回退官方源
+- **保存校验**：提交前校验名称、token 与本地规则模式的暴露域名
+
+### 变更
+
+- 版本号提升到 1.6.1；`AgentVersion` 保持 **0.14.1**，本次无 Agent 行为变化
+
+### 测试
+
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.6.0] - 2026-09-28
 
 ### 新增

@@ -53,6 +53,8 @@ type Tunnel struct {
 	LastError      string          `json:"last_error"`
 	MetricsPort    int             `json:"metrics_port"`
 	AutoStart      bool            `json:"auto_start"`
+	Hostnames      []string        `json:"hostnames"`
+	OriginService  string          `json:"origin_service"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
 }

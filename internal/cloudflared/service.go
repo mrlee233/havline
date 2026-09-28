@@ -48,11 +48,23 @@ func (s *Service) EnsureDirs() error {
 }
 
 func (s *Service) List(ctx context.Context) ([]Tunnel, error) {
-	return s.store.List(ctx)
+	items, err := s.store.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range items {
+		s.attachConfig(&items[i])
+	}
+	return items, nil
 }
 
 func (s *Service) Get(ctx context.Context, id int64) (Tunnel, error) {
-	return s.store.Get(ctx, id)
+	item, err := s.store.Get(ctx, id)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	s.attachConfig(&item)
+	return item, nil
 }
 
 // Create 解析 token、生成 creds.json 与 config.yml，并写入数据库。
@@ -158,13 +170,13 @@ func (s *Service) Start(ctx context.Context, id int64) (Tunnel, error) {
 		return Tunnel{}, err
 	}
 	_ = s.store.SetRuntime(ctx, id, "starting", "", 0)
-	return s.store.Get(ctx, id)
+	return s.Get(ctx, id)
 }
 
 func (s *Service) Stop(ctx context.Context, id int64) (Tunnel, error) {
 	_ = s.manager.Stop(id)
 	_ = s.store.SetRuntime(ctx, id, "stopped", "", 0)
-	return s.store.Get(ctx, id)
+	return s.Get(ctx, id)
 }
 
 func (s *Service) Restart(ctx context.Context, id int64) (Tunnel, error) {
@@ -177,6 +189,33 @@ func (s *Service) RuntimeStatus(ctx context.Context, id int64) (RuntimeStatus, e
 		return RuntimeStatus{}, err
 	}
 	return s.manager.Status(id), nil
+}
+
+// attachConfig 从 config.yml 回填域名与回源 service，供编辑弹窗使用。
+func (s *Service) attachConfig(item *Tunnel) {
+	data, err := os.ReadFile(item.ConfigPath)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(string(data), "\n")
+	for i, raw := range lines {
+		line := strings.TrimSpace(raw)
+		host, found := strings.CutPrefix(line, "- hostname:")
+		if !found {
+			continue
+		}
+		host = strings.TrimSpace(host)
+		if host == "" {
+			continue
+		}
+		item.Hostnames = append(item.Hostnames, host)
+		if i+1 >= len(lines) {
+			continue
+		}
+		if service, ok := strings.CutPrefix(strings.TrimSpace(lines[i+1]), "service:"); ok && item.OriginService == "" {
+			item.OriginService = strings.TrimSpace(service)
+		}
+	}
 }
 
 func (s *Service) Logs(ctx context.Context, id int64, lines int) (string, error) {

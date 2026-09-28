@@ -1064,6 +1064,8 @@ export interface CfTunnel {
   last_error?: string
   metrics_port?: number
   auto_start: boolean
+  hostnames?: string[]
+  origin_service?: string
   created_at: string
   updated_at: string
 }

@@ -38,32 +38,39 @@
   </FonuCard>
 
   <n-modal v-model:show="editorVisible" preset="card" class="cf-modal" :title="editing ? '编辑隧道' : '新建隧道'">
-    <n-form label-placement="top">
-      <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
-      <n-form-item label="模式">
-        <n-select v-model:value="form.mode" :options="modeOptions" />
-      </n-form-item>
-      <n-form-item :label="editing ? 'Token（留空保留原值）' : 'Token'">
-        <n-input v-model:value="form.token" type="password" show-password-on="click" placeholder="Cloudflare 面板生成的隧道 token" />
-      </n-form-item>
-      <n-form-item label="暴露域名">
-        <n-select v-model:value="form.hostnames" multiple filterable tag :options="hostnameOptions" placeholder="从本机反代规则选择，或直接输入域名" />
-      </n-form-item>
-      <n-form-item label="回源 service">
-        <n-input v-model:value="form.origin_service" placeholder="http://127.0.0.1:80" />
-      </n-form-item>
-      <n-form-item label="传输协议">
-        <n-select v-model:value="form.network.transport_protocol" :options="protocolOptions" />
-      </n-form-item>
-      <n-form-item label="边缘地址族">
-        <n-select v-model:value="form.network.edge_ip_version" :options="edgeOptions" />
-      </n-form-item>
-      <n-form-item label="HA 连接数"><n-input-number v-model:value="form.network.ha_connections" :min="1" :max="4" /></n-form-item>
-      <n-form-item label="代理模式">
-        <n-select v-model:value="form.network.proxy_mode" :options="proxyOptions" />
-      </n-form-item>
-      <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
-    </n-form>
+    <div class="cf-modal__body">
+      <n-alert :type="form.mode === 'token-remote' ? 'warning' : 'info'" :bordered="false" class="cf-mode-alert">
+        {{ modeHint }}
+      </n-alert>
+      <n-divider title-placement="left">基本信息</n-divider>
+      <n-form label-placement="top">
+        <n-form-item label="名称"><n-input v-model:value="form.name" placeholder="例如 home-nas" /></n-form-item>
+        <n-form-item label="模式"><n-select v-model:value="form.mode" :options="modeOptions" /></n-form-item>
+        <n-form-item :label="editing ? 'Token（留空保留原值）' : 'Token'">
+          <n-input v-model:value="form.token" type="password" show-password-on="click" placeholder="Cloudflare 面板生成的隧道 token" />
+        </n-form-item>
+      </n-form>
+      <n-divider title-placement="left">暴露规则</n-divider>
+      <n-form v-if="form.mode === 'token-local'" label-placement="top">
+        <n-form-item label="暴露域名">
+          <n-select v-model:value="form.hostnames" multiple filterable tag :options="hostnameOptions" placeholder="从本机反代规则选择，或直接输入域名" />
+        </n-form-item>
+        <n-form-item label="回源 service">
+          <n-input v-model:value="form.origin_service" placeholder="http://127.0.0.1:80" />
+        </n-form-item>
+      </n-form>
+      <n-alert v-else type="warning" :bordered="false" class="cf-mode-alert">
+        云端规则模式下，本地域名与回源配置不生效，请在 Cloudflare 面板管理 ingress。
+      </n-alert>
+      <n-divider title-placement="left">网络调优</n-divider>
+      <n-form label-placement="top">
+        <n-form-item label="传输协议"><n-select v-model:value="form.network.transport_protocol" :options="protocolOptions" /></n-form-item>
+        <n-form-item label="边缘地址族"><n-select v-model:value="form.network.edge_ip_version" :options="edgeOptions" /></n-form-item>
+        <n-form-item label="HA 连接数"><n-input-number v-model:value="form.network.ha_connections" :min="1" :max="4" /></n-form-item>
+        <n-form-item label="代理模式"><n-select v-model:value="form.network.proxy_mode" :options="proxyOptions" /></n-form-item>
+        <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
+      </n-form>
+    </div>
     <template #footer>
       <div class="cf-modal__footer">
         <n-button @click="editorVisible = false">取消</n-button>
@@ -72,35 +79,48 @@
     </template>
   </n-modal>
 
-  <n-modal v-model:show="detailVisible" preset="card" class="cf-modal" :title="detailTunnel?.name || '隧道详情'">
+  <n-modal v-model:show="detailVisible" preset="card" class="cf-modal cf-modal--wide" :title="detailTunnel?.name || '隧道详情'">
     <div v-if="detailTunnel" class="cf-detail">
-      <div class="cf-detail__row">
-        <StatusBadge :kind="statusKind(detailStatus?.status || detailTunnel.status)" :text="statusText(detailStatus?.status || detailTunnel.status)" />
-        <span class="cf-meta mono">连接数 {{ detailStatus?.connections ?? 0 }}</span>
-        <span class="cf-meta mono">延迟 {{ (detailStatus?.latency_ms ?? 0).toFixed(0) }} ms</span>
-        <span class="cf-meta mono">{{ detailStatus?.transport || '—' }}</span>
+      <div class="cf-detail__stats">
+        <div class="cf-stat"><label>状态</label><StatusBadge :kind="statusKind(detailStatus?.status || detailTunnel.status)" :text="statusText(detailStatus?.status || detailTunnel.status)" /></div>
+        <div class="cf-stat"><label>连接数</label><strong>{{ detailStatus?.connections ?? 0 }}</strong></div>
+        <div class="cf-stat"><label>延迟</label><strong>{{ (detailStatus?.latency_ms ?? 0).toFixed(0) }} ms</strong></div>
+        <div class="cf-stat"><label>传输协议</label><strong>{{ detailStatus?.transport || '—' }}</strong></div>
+        <div class="cf-stat"><label>metrics 端口</label><strong>{{ detailStatus?.metrics_port || '—' }}</strong></div>
       </div>
       <p v-if="detailStatus?.bandwidth_notice" class="cf-hint">{{ detailStatus.bandwidth_notice }}</p>
-      <h4>config.yml</h4>
-      <pre class="cf-pre">{{ detailConfig || '暂无配置' }}</pre>
-      <h4>日志</h4>
-      <pre class="cf-pre">{{ detailLogs || '暂无日志' }}</pre>
+      <n-tabs type="line" animated>
+        <n-tab-pane name="config" tab="config.yml">
+          <div class="cf-code-toolbar"><n-button size="tiny" @click="copyConfig">复制</n-button></div>
+          <pre class="cf-pre">{{ detailConfig || '暂无配置' }}</pre>
+        </n-tab-pane>
+        <n-tab-pane name="logs" tab="日志">
+          <div class="cf-code-toolbar"><n-button size="tiny" :loading="detailLoading" @click="refreshDetail">刷新</n-button></div>
+          <pre class="cf-pre">{{ detailLogs || '暂无日志' }}</pre>
+        </n-tab-pane>
+      </n-tabs>
     </div>
     <template #footer>
       <div class="cf-modal__footer">
-        <n-button @click="refreshDetail">刷新</n-button>
+        <n-button @click="refreshDetail">刷新全部</n-button>
         <n-button type="primary" @click="detailVisible = false">关闭</n-button>
       </div>
     </template>
   </n-modal>
 
   <n-modal v-model:show="binaryVisible" preset="card" class="cf-modal" title="cloudflared 二进制">
-    <n-form label-placement="top">
-      <n-form-item label="当前版本"><span class="mono">{{ binaryVersion || '未安装' }}</span></n-form-item>
-      <n-form-item label="下载镜像">
-        <n-select v-model:value="selectedMirror" :options="mirrorOptions" />
-      </n-form-item>
-    </n-form>
+    <div class="cf-modal__body">
+      <div class="cf-binary">
+        <div><label>当前版本</label><strong class="mono">{{ binaryVersion || '未安装' }}</strong></div>
+        <div><label>目标文件</label><strong class="mono">cloudflared</strong></div>
+      </div>
+      <n-form label-placement="top">
+        <n-form-item label="下载镜像">
+          <n-select v-model:value="selectedMirror" :options="mirrorOptions" />
+        </n-form-item>
+      </n-form>
+      <p class="cf-hint">下载后会校验文件大小与可执行性，并原子替换现有二进制。国内环境推荐 gh-proxy 镜像。</p>
+    </div>
     <template #footer>
       <div class="cf-modal__footer">
         <n-button @click="binaryVisible = false">取消</n-button>
@@ -112,13 +132,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { NAlert, NButton, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, useMessage } from 'naive-ui'
+import { NAlert, NButton, NDivider, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, NTabPane, NTabs, useMessage } from 'naive-ui'
 import { api, asList } from '../api/client'
 import type { CfMirror, CfRuntimeStatus, CfTunnel, CfTunnelPayload } from '../api/types'
 import FonuCard from '../components/FonuCard.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
+import { copyText } from '../utils/clipboard'
 import type { StatusKind } from '../utils/status'
 
 const message = useMessage()
@@ -138,6 +159,7 @@ const detailTunnel = ref<CfTunnel | null>(null)
 const detailStatus = ref<CfRuntimeStatus | null>(null)
 const detailConfig = ref('')
 const detailLogs = ref('')
+const detailLoading = ref(false)
 
 const form = ref<CfTunnelPayload>(emptyForm())
 
@@ -160,7 +182,13 @@ const proxyOptions = [
   { label: '禁用代理', value: 'disabled' },
 ]
 const hostnameOptions = computed(() => candidates.value.map((host) => ({ label: host, value: host })))
-const mirrorOptions = computed(() => mirrors.value.map((item) => ({ label: item.name, value: item.id })))
+const mirrorOptions = computed(() => {
+  const list = mirrors.value.length ? mirrors.value : [{ id: 'official', name: 'GitHub 官方源', base: '' }]
+  return list.map((item) => ({ label: item.name, value: item.id }))
+})
+const modeHint = computed(() => (form.value.mode === 'token-remote'
+  ? '云端规则模式：cloudflared 用 --token 启动，ingress 由 Cloudflare 面板管理，Fonu 只负责进程、日志与健康。'
+  : '本地规则模式：Fonu 解码 token 并生成本地 config.yml，域名与回源由下方配置决定。'))
 
 function emptyForm(): CfTunnelPayload {
   return {
@@ -215,8 +243,8 @@ function openEdit(item: CfTunnel) {
     name: item.name,
     mode: item.mode,
     token: '',
-    hostnames: [],
-    origin_service: 'http://127.0.0.1:80',
+    hostnames: [...(item.hostnames || [])],
+    origin_service: item.origin_service || 'http://127.0.0.1:80',
     network: { ...item.network },
     auto_start: item.auto_start,
   }
@@ -224,6 +252,18 @@ function openEdit(item: CfTunnel) {
 }
 
 async function saveTunnel() {
+  if (!form.value.name.trim()) {
+    message.warning('请填写隧道名称')
+    return
+  }
+  if (!editing.value && !(form.value.token || '').trim()) {
+    message.warning('请填写 Cloudflare 隧道 token')
+    return
+  }
+  if (form.value.mode === 'token-local' && !form.value.hostnames.length) {
+    message.warning('本地规则模式至少需要一个暴露域名')
+    return
+  }
   saving.value = true
   try {
     if (editing.value) {
@@ -282,6 +322,7 @@ async function openDetail(item: CfTunnel) {
 async function refreshDetail() {
   const item = detailTunnel.value
   if (!item) return
+  detailLoading.value = true
   try {
     const [status, config, logs] = await Promise.all([
       api.getCfTunnelStatus(item.id),
@@ -293,6 +334,18 @@ async function refreshDetail() {
     detailLogs.value = logs.output || ''
   } catch (error) {
     message.error(error instanceof Error ? error.message : '读取隧道详情失败')
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+async function copyConfig() {
+  if (!detailConfig.value) return
+  try {
+    await copyText(detailConfig.value)
+    message.success('已复制 config.yml')
+  } catch {
+    message.error('复制失败')
   }
 }
 
@@ -343,6 +396,7 @@ onMounted(() => {
 })
 
 useVisibilityPolling(() => load(), 5000)
+useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
 </script>
 
 <style scoped>
@@ -360,9 +414,19 @@ useVisibilityPolling(() => load(), 5000)
 .cf-row__main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cf-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .cf-meta { font-size: 12px; color: var(--fonu-text-secondary); }
-.cf-modal { width: 620px; max-width: 94vw; }
+.cf-modal { width: 720px; max-width: 94vw; }
+.cf-modal--wide { width: 780px; }
+.cf-modal__body { max-height: 68vh; overflow: auto; padding-right: 4px; }
 .cf-modal__footer { display: flex; justify-content: flex-end; gap: 8px; }
-.cf-detail__row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.cf-mode-alert { margin-bottom: 4px; }
+.cf-detail__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.cf-stat { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg); }
+.cf-stat label { font-size: 12px; color: var(--fonu-text-muted); }
+.cf-stat strong { font-size: 15px; }
+.cf-code-toolbar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.cf-binary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.cf-binary > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg); }
+.cf-binary label { font-size: 12px; color: var(--fonu-text-muted); }
 .cf-hint { font-size: 12px; color: var(--fonu-text-muted); }
 .cf-pre {
   max-height: 240px;
