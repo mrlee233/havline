@@ -6,6 +6,14 @@
     </template>
   </PageHeader>
 
+  <div class="cf-global" :class="{ 'cf-global--off': !appSettings.enabled }">
+    <div class="cf-global__text">
+      <strong>全局托管</strong>
+      <span>{{ appSettings.enabled ? '已启用：隧道进程由 Fonu 托管，auto_start 的隧道会在应用启动时恢复' : '已停用：所有隧道已停止，应用重启后也不会自动拉起' }}</span>
+    </div>
+    <n-switch :value="appSettings.enabled" :loading="globalLoading" @update:value="toggleGlobal" />
+  </div>
+
   <n-alert v-if="binaryVersion" type="info" :bordered="false" class="cf-alert">
     已安装：<span class="mono">{{ binaryVersion }}</span>
   </n-alert>
@@ -26,7 +34,7 @@
       <div class="cf-row__actions">
         <n-button size="small" @click="openDetail(item)">详情</n-button>
         <n-button size="small" @click="openEdit(item)">编辑</n-button>
-        <n-button v-if="item.status !== 'connected' && item.status !== 'starting'" size="small" type="success" @click="startTunnel(item)">启动</n-button>
+        <n-button v-if="item.status !== 'connected' && item.status !== 'starting'" size="small" type="success" :disabled="!appSettings.enabled" @click="startTunnel(item)">启动</n-button>
         <n-button v-else size="small" type="warning" @click="stopTunnel(item)">停止</n-button>
         <n-button size="small" @click="restartTunnel(item)">重启</n-button>
         <n-popconfirm @positive-click="removeTunnel(item)">
@@ -178,6 +186,7 @@ const candidates = ref<string[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const binaryLoading = ref(false)
+const globalLoading = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
@@ -186,6 +195,7 @@ const tokenTestResult = ref('')
 const tokenTestOk = ref(false)
 const appSettings = ref<CfAppSettings>({
   account_id: '',
+  enabled: true,
   default_token_configured: false,
   default_token_masked: '',
   api_token_configured: false,
@@ -248,6 +258,20 @@ async function load() {
     message.error(error instanceof Error ? error.message : '读取隧道列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+async function toggleGlobal(value: boolean) {
+  globalLoading.value = true
+  try {
+    const result = await api.setCfEnabled(value)
+    appSettings.value = result
+    message.success(value ? '全局托管已启用' : '全局托管已停用，所有隧道已停止')
+    await load()
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '切换全局托管失败')
+  } finally {
+    globalLoading.value = false
   }
 }
 
@@ -496,6 +520,20 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
 </script>
 
 <style scoped>
+.cf-global {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fonu-space-4);
+  padding: 12px var(--fonu-space-5);
+  margin-bottom: var(--fonu-space-4);
+  border: 1px solid var(--fonu-border);
+  border-radius: var(--fonu-radius-sm);
+  background: var(--fonu-surface);
+}
+.cf-global--off { border-color: var(--fonu-warning); background: var(--fonu-bg); }
+.cf-global__text { display: grid; gap: 4px; font-size: 13px; }
+.cf-global__text span { color: var(--fonu-text-secondary); }
 .cf-alert { margin-bottom: var(--fonu-space-4); }
 .cf-empty { padding: 24px 0; color: var(--fonu-text-muted); }
 .cf-row {

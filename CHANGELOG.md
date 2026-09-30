@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.8.0] - 2026-09-30
+
+### 新增
+
+- **Cloudflare 隧道全局托管开关**：页面顶部新增「全局托管」开关：
+  - 关闭时立即停止所有隧道进程，应用重启后不再自动拉起；单条隧道的「启动」按钮同时禁用
+  - 开启时只恢复标记了 `auto_start` 的隧道，其余保持停止
+  - 只影响本机 cloudflared 进程托管，不删除本地配置、凭据、云端隧道或 DNS 记录
+- 新增 `cf_settings.enabled` 字段（迁移 `034`）与 `POST /api/cloudflare/enabled` 接口
+
+### 变更
+
+- 版本号提升到 1.8.0；`AgentVersion` 保持 **0.14.1**
+
+### 测试
+
+- 新增「全局停用时拒绝启动」单元测试
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test`、`npm run build` 通过
+
 ## [v1.7.0] - 2026-09-28
 
 ### 新增

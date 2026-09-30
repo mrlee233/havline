@@ -98,6 +98,7 @@ func (s *Store) SetRuntime(ctx context.Context, id int64, status, lastError stri
 // settingsRow 是应用配置的原始行；TokenEnc 只在 Service 内部解密，不直接回给前端。
 type settingsRow struct {
 	AccountID   string
+	Enabled     bool
 	TokenEnc    string
 	APITokenEnc string
 	Mirror      string
@@ -106,29 +107,30 @@ type settingsRow struct {
 
 func (s *Store) GetSettingsRaw(ctx context.Context) (settingsRow, error) {
 	var accountID, tokenEnc, apiTokenEnc, mirror, networkJSON string
+	var enabled int
 	err := s.db.QueryRowContext(ctx, `
-		SELECT COALESCE(account_id, ''), COALESCE(default_token_enc, ''), COALESCE(api_token_enc, ''),
+		SELECT COALESCE(account_id, ''), COALESCE(enabled, 1), COALESCE(default_token_enc, ''), COALESCE(api_token_enc, ''),
 		       COALESCE(mirror, 'official'), COALESCE(network_json, '{}')
 		FROM cf_settings WHERE id = 1
-	`).Scan(&accountID, &tokenEnc, &apiTokenEnc, &mirror, &networkJSON)
+	`).Scan(&accountID, &enabled, &tokenEnc, &apiTokenEnc, &mirror, &networkJSON)
 	if errors.Is(err, sql.ErrNoRows) {
-		return settingsRow{Mirror: "official", Network: DefaultNetworkSettings()}, nil
+		return settingsRow{Enabled: true, Mirror: "official", Network: DefaultNetworkSettings()}, nil
 	}
 	if err != nil {
 		return settingsRow{}, err
 	}
-	row := settingsRow{AccountID: accountID, TokenEnc: tokenEnc, APITokenEnc: apiTokenEnc, Mirror: mirror, Network: DefaultNetworkSettings()}
+	row := settingsRow{AccountID: accountID, Enabled: enabled == 1, TokenEnc: tokenEnc, APITokenEnc: apiTokenEnc, Mirror: mirror, Network: DefaultNetworkSettings()}
 	_ = json.Unmarshal([]byte(networkJSON), &row.Network)
 	return row, nil
 }
 
-func (s *Store) SaveSettings(ctx context.Context, accountID, tokenEnc, apiTokenEnc, mirror string, network NetworkSettings) error {
+func (s *Store) SaveSettings(ctx context.Context, accountID string, enabled bool, tokenEnc, apiTokenEnc, mirror string, network NetworkSettings) error {
 	networkJSON, _ := json.Marshal(network)
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE cf_settings
-		SET account_id = ?, default_token_enc = ?, api_token_enc = ?, mirror = ?, network_json = ?, updated_at = datetime('now')
+		SET account_id = ?, enabled = ?, default_token_enc = ?, api_token_enc = ?, mirror = ?, network_json = ?, updated_at = datetime('now')
 		WHERE id = 1
-	`, accountID, tokenEnc, apiTokenEnc, mirror, string(networkJSON))
+	`, accountID, boolInt(enabled), tokenEnc, apiTokenEnc, mirror, string(networkJSON))
 	return err
 }
 

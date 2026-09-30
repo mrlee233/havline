@@ -74,6 +74,7 @@ type CreateInput struct {
 // AppSettings 是模块级配置；默认 token 只回显掩码，不返回明文。
 type AppSettings struct {
 	AccountID              string          `json:"account_id"`
+	Enabled                bool            `json:"enabled"`
 	DefaultTokenConfigured bool            `json:"default_token_configured"`
 	DefaultTokenMasked     string          `json:"default_token_masked"`
 	APITokenConfigured     bool            `json:"api_token_configured"`
@@ -85,6 +86,7 @@ type AppSettings struct {
 // AppSettingsInput 是保存应用配置的入参；Token 留空表示保留原值。
 type AppSettingsInput struct {
 	AccountID string          `json:"account_id"`
+	Enabled   *bool           `json:"enabled,omitempty"`
 	Token     string          `json:"token"`
 	APIToken  string          `json:"api_token"`
 	Mirror    string          `json:"mirror"`

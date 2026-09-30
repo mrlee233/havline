@@ -517,4 +517,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ account_id: accountId, token, kind }),
     }, 60_000),
+  setCfEnabled: (enabled: boolean) =>
+    request<CfAppSettings>('/api/cloudflare/enabled', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    }),
 }

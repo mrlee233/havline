@@ -1102,6 +1102,7 @@ export interface CfTunnelPayload {
 
 export interface CfAppSettings {
   account_id: string
+  enabled: boolean
   default_token_configured: boolean
   default_token_masked: string
   api_token_configured: boolean
@@ -1112,6 +1113,7 @@ export interface CfAppSettings {
 
 export interface CfAppSettingsInput {
   account_id: string
+  enabled?: boolean
   token: string
   api_token: string
   mirror: string

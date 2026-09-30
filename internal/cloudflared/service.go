@@ -181,6 +181,13 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 }
 
 func (s *Service) Start(ctx context.Context, id int64) (Tunnel, error) {
+	settings, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	if !settings.Enabled {
+		return Tunnel{}, fmt.Errorf("Cloudflare 隧道全局已停用，请先在页面顶部重新启用")
+	}
 	tunnel, err := s.store.Get(ctx, id)
 	if err != nil {
 		return Tunnel{}, err
@@ -229,7 +236,7 @@ func (s *Service) AppSettings(ctx context.Context) (AppSettings, error) {
 	if err != nil {
 		return AppSettings{}, err
 	}
-	out := AppSettings{AccountID: row.AccountID, Mirror: row.Mirror, Network: row.Network}
+	out := AppSettings{AccountID: row.AccountID, Enabled: row.Enabled, Mirror: row.Mirror, Network: row.Network}
 	if row.TokenEnc != "" {
 		out.DefaultTokenConfigured = true
 		if plain, err := s.secretBox.Decrypt(row.TokenEnc); err == nil {
@@ -255,6 +262,10 @@ func (s *Service) SaveAppSettings(ctx context.Context, in AppSettingsInput) (App
 	if accountID == "" {
 		accountID = row.AccountID
 	}
+	enabled := row.Enabled
+	if in.Enabled != nil {
+		enabled = *in.Enabled
+	}
 	tokenEnc := row.TokenEnc
 	apiTokenEnc := row.APITokenEnc
 	if apiToken := strings.TrimSpace(in.APIToken); apiToken != "" {
@@ -274,10 +285,42 @@ func (s *Service) SaveAppSettings(ctx context.Context, in AppSettingsInput) (App
 	if strings.TrimSpace(network.TransportProtocol) == "" {
 		network = row.Network
 	}
-	if err := s.store.SaveSettings(ctx, accountID, tokenEnc, apiTokenEnc, mirror, network); err != nil {
+	if err := s.store.SaveSettings(ctx, accountID, enabled, tokenEnc, apiTokenEnc, mirror, network); err != nil {
 		return AppSettings{}, err
 	}
 	return s.AppSettings(ctx)
+}
+
+// SetEnabled 切换全局托管开关；关闭时停止所有隧道，开启时恢复 auto_start 的隧道。
+func (s *Service) SetEnabled(ctx context.Context, enabled bool) (AppSettings, error) {
+	row, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		return AppSettings{}, err
+	}
+	if err := s.store.SaveSettings(ctx, row.AccountID, enabled, row.TokenEnc, row.APITokenEnc, row.Mirror, row.Network); err != nil {
+		return AppSettings{}, err
+	}
+	if enabled {
+		s.StartAuto(ctx)
+	} else {
+		s.StopAll(ctx)
+	}
+	return s.AppSettings(ctx)
+}
+
+// StopAll 停止所有隧道进程，但保留配置、凭据与云端隧道。
+func (s *Service) StopAll(ctx context.Context) {
+	tunnels, err := s.store.List(ctx)
+	if err != nil {
+		s.logger.Warn("读取 Cloudflare 隧道失败", "error", err.Error())
+		return
+	}
+	for _, tunnel := range tunnels {
+		if err := s.manager.Stop(tunnel.ID); err != nil {
+			s.logger.Warn("停止 Cloudflare 隧道失败", "tunnel_id", tunnel.ID, "error", err.Error())
+		}
+		_ = s.store.SetRuntime(ctx, tunnel.ID, "stopped", "", 0)
+	}
 }
 
 func (s *Service) applyDefaultNetwork(ctx context.Context, network NetworkSettings) NetworkSettings {
@@ -438,6 +481,14 @@ func (s *Service) IngressCandidates(ctx context.Context) ([]string, error) {
 
 // StartAuto 在应用启动时拉起标记了 auto_start 的隧道。
 func (s *Service) StartAuto(ctx context.Context) {
+	settings, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		s.logger.Warn("读取 Cloudflare 配置失败", "error", err.Error())
+		return
+	}
+	if !settings.Enabled {
+		return
+	}
 	tunnels, err := s.store.List(ctx)
 	if err != nil {
 		s.logger.Warn("读取 Cloudflare 隧道失败", "error", err.Error())

@@ -207,6 +207,22 @@ func (h *CloudflareHandler) TestToken(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": message})
 }
 
+func (h *CloudflareHandler) SetEnabled(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	settings, err := h.svc.SetEnabled(r.Context(), request.Enabled)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
+}
+
 func (h *CloudflareHandler) DownloadBinary(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Mirror string `json:"mirror"`
