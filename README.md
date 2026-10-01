@@ -1,69 +1,79 @@
 <p align="center">
-  <img src="web/src/assets/brand/logo.png" alt="Havline Logo" width="96" />
+  <img src="web/src/assets/brand/havline-logo.svg" alt="Havline Logo" width="112" />
 </p>
 
 <h1 align="center">Havline</h1>
 
-<p align="center"><strong>让 NAS 访问更简单</strong></p>
+<p align="center"><strong>让每一台 NAS，都能安全地连接世界。</strong></p>
 
 <p align="center">
-  面向 <strong>飞牛 fnOS</strong> 的轻量公网访问管理工具<br />
-  反向代理 · DDNS · HTTPS 证书 · 内网穿透 · 一站式 Web 管理
+  面向 <strong>飞牛 fnOS</strong> 等 NAS 环境的轻量公网访问管理控制台<br />
+  反向代理 · DDNS · HTTPS 证书 · 内网穿透 · Cloudflare Tunnel · 一键升级
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/目标平台-飞牛_fnOS-22c55e?style=flat-square" alt="飞牛 fnOS" />
-  <img src="https://img.shields.io/badge/其他环境-未测试-94a3b8?style=flat-square" alt="其他环境未测试" />
-  <img src="https://img.shields.io/badge/Go-1.23-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" />
+  <img src="https://img.shields.io/badge/Go-1.23-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go 1.23" />
   <img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" alt="Vue 3" />
-  <img src="https://img.shields.io/badge/Nginx-内置-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx" />
-  <a href="https://www.gnu.org/licenses/gpl-3.0.html"><img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square" alt="GPL-3.0" /></a>
+  <img src="https://img.shields.io/badge/Docker-amd64_%7C_arm64-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <a href="https://www.gnu.org/licenses/gpl-3.0.html">
+    <img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square" alt="GPL-3.0" />
+  </a>
 </p>
+
+> **Havline 是基于开源项目 [O96u/Fonu](https://github.com/O96u/Fonu) 1.0.2 版本进行二次开发的项目。**
+> 原项目已经完成了反向代理、DDNS、证书和内网穿透等核心能力。Havline 在此基础上进行品牌重塑、
+> 功能迭代、界面调整、部署流程整理和文档重构，并继续遵循 GPL-3.0 开源协议。
 
 ---
 
-## 简介
+## 项目简介
 
-**Havline** 是一款主要为 **飞牛 fnOS** 编写的反代与管理工具，帮助你在 NAS 上快速搭建稳定的公网访问能力：通过 Web 界面管理 Nginx 反向代理、自动同步 DDNS、申请与续期 Let's Encrypt 证书，并在一个仪表盘里查看服务状态、访问日志与流量统计。
+NAS 的价值不只在存储，更在于把文件、媒体、自动化工具和家庭服务安全地带到需要它们的地方。
 
-无需手写 Nginx 配置，也无需在多个工具之间切换。当前开发与测试环境以飞牛 fnOS 为主，**群晖、威联通、自建 Linux 等其他环境尚未充分测试**，部署前请自行验证。
+**Havline** 把 NAS 用户最常用、也最容易出错的公网访问能力收进一个 Web 控制台：
 
-## 功能特性
+- 管理 Nginx 反向代理，不必手工维护复杂配置；
+- 自动同步 DDNS，保持域名始终指向当前公网 IP；
+- 使用 ACME DNS-01 申请与续期 HTTPS 证书；
+- 通过 FRP 在无公网 IP 时经 VPS 中转服务；
+- 通过公网 Agent 远程管理 VPS 上的 frps 与 Nginx；
+- 使用 Cloudflare Tunnel 发布服务，不必开放公网端口；
+- 在一个仪表盘中查看状态、日志、流量和运行健康度。
 
-| 模块           | 说明                                                                         |
-| -------------- | ---------------------------------------------------------------------------- |
-| **反向代理**   | 多域名、多端口、HTTP/HTTPS、自动重定向；实时访问日志、流量统计、当前连接 IP  |
-| **DDNS**       | 支持 Cloudflare、DNSPod、阿里云、腾讯云、火山引擎 DNS；单任务多根域名，自动同步公网 IP |
-| **HTTPS 证书** | ACME 自动申请与续期；证书/私钥/ZIP 下载；申请进度实时日志                    |
-| **仪表盘**     | 公网 IP、域名、证书、服务状态一览；请求趋势与运行健康度                      |
-| **日志中心**   | 系统日志、Nginx 访问日志、Nginx 错误日志；分页筛选与自动刷新                   |
-| **内网穿透**   | FRP 客户端（Nginx 网关穿透）：无公网 IP 时经 VPS 中转，反代与安全策略不变    |
-| **系统设置**   | 常规 / 通知 / 安全 / 高级分栏；邮件/Webhook/Telegram 告警、备份与恢复        |
-| **其他**       | 深色模式、配置导出/导入、GitHub Release 更新提示                             |
+当前开发与测试环境以 **飞牛 fnOS** 为主。群晖、威联通、自建 Linux 等其他环境尚未充分测试，
+部署前请自行验证端口、权限和数据目录。
 
+## 界面预览
 
-## 技术栈
+| 仪表盘 | 反向代理 |
+| --- | --- |
+| ![仪表盘](docs/screenshots/dashboard.png) | ![反向代理](docs/screenshots/proxy.png) |
 
-| 层级         | 技术                                                  |
-| ------------ | ----------------------------------------------------- |
-| **后端**     | Go 1.23、标准库 HTTP、SQLite（modernc.org/sqlite）    |
-| **反向代理** | 内置 Nginx（动态生成配置、热重载）                    |
-| **证书**     | go-acme/lego（Let's Encrypt）                         |
-| **DDNS**     | Cloudflare / DNSPod / 阿里云 / 腾讯云 / 火山引擎 DNS API |
-| **内网穿透** | FRP 客户端（多服务端）：无公网 IP 时经 VPS 中转，8 种穿透类型与插件，frps.toml 同源生成 |
-| **前端**     | Vue 3、TypeScript、Vite、Naive UI、ECharts            |
-| **部署**     | Docker 镜像（amd64 / arm64），本地源码构建 |
+| DDNS | 证书管理 |
+| --- | --- |
+| ![DDNS](docs/screenshots/ddns.png) | ![证书管理](docs/screenshots/certificates.png) |
 
-## 部署
+## 功能总览
 
-本地项目：三个 compose 文件均从源码构建镜像（`build: .`），不拉取任何仓库镜像，构建产物标签为 `havline:local`。
+| 模块 | 能力 |
+| --- | --- |
+| **反向代理** | 多域名、多端口、HTTP/HTTPS、自动跳转、Nginx 配置生成与热重载 |
+| **DDNS** | Cloudflare、DNSPod、阿里云、腾讯云、火山引擎；单任务多域名与自动同步 |
+| **HTTPS 证书** | ACME 自动申请与续期、通配符证书、手动导入、证书与私钥下载 |
+| **内网穿透** | FRP 多服务端、8 种代理类型、插件、规则下发、流量与连接数监控 |
+| **公网服务端** | SSH 安装与升级 `havline-agent`，远程管理 VPS 上的 frps 与 Nginx |
+| **Cloudflare Tunnel** | cloudflared 安装、隧道、路由、DNS、健康检查、漂移修复 |
+| **仪表盘** | 公网 IP、域名、证书、代理状态、请求趋势、流量和运行健康度 |
+| **日志中心** | 系统日志、Nginx 访问日志、错误日志；分页、筛选与自动刷新 |
+| **通知与备份** | 邮件、Webhook、Telegram、钉钉、飞书、企业微信；配置导出与恢复 |
+| **一键升级** | Docker Compose sidecar 构建、重建、健康检查与失败回滚 |
 
-> **详细部署安装文档**：[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) —— 环境要求、镜像构建、三种部署方式、首次配置、FRP/DDNS/证书联动、升级回滚与故障排查。
-> **FRPS 服务端管理方案**：[`docs/frps服务端管理方案.md`](frps服务端管理方案.md) —— 公网 VPS 部署 `havline-agent`，SSH 从本地 Havline 安装/升级/卸载，日常通过本地管理面板调用 API 自动编排 Nginx、frps 与证书。
+## 快速开始
 
-### 快速部署（推荐 · 飞牛 fnOS · Host 模式）
+### 推荐：飞牛 fnOS Host 模式
 
-飞牛系统已占用 **80/443**，使用 **host 网络** + **高位反代端口**，避免与系统 Nginx 冲突。
+飞牛系统通常已经占用 `80/443`，推荐使用 **host 网络 + 高位反代端口**：
 
 ```bash
 docker run -d \
@@ -74,122 +84,149 @@ docker run -d \
   havline:local
 ```
 
-| 入口               | 地址                    |
-| ------------------ | ----------------------- |
-| 管理后台           | `http://<NAS-IP>:6893`  |
-| HTTP 反代（默认）  | `http://<NAS-IP>:18080` |
-| HTTPS 反代（默认） | `https://<NAS-IP>:9443` |
+| 入口 | 默认地址 |
+| --- | --- |
+| 管理后台 | `http://<NAS-IP>:6893` |
+| HTTP 反向代理 | `http://<NAS-IP>:18080` |
+| HTTPS 反向代理 | `https://<NAS-IP>:9443` |
 
-- `./data` 挂载后自动作为数据目录，存放数据库、Nginx 配置、证书与日志
-- 飞牛系统已占用 80/443，容器默认反代端口为 `18080`、`9443`，可通过环境变量修改
-
-### 其他部署方式
-
-<details>
-<summary>Docker Compose</summary>
+### Docker Compose
 
 ```bash
-HAVLINE_SESSION_SECRET=your-secret docker compose -f docker-compose.host.yml up -d
+# 飞牛 fnOS / host 网络
+HAVLINE_SESSION_SECRET=your-secret \
+  docker compose -f docker-compose.host.yml up -d
+
+# Bridge 网络
+HAVLINE_SESSION_SECRET=your-secret \
+  docker compose -f docker-compose.yml up -d --build
 ```
-
-</details>
-
-<details>
-<summary>Bridge 网络（端口映射，非飞牛环境可自行尝试）</summary>
-
-```bash
-HAVLINE_SESSION_SECRET=your-secret docker compose -f docker-compose.hub.yml up -d --build
-```
-
-</details>
-
-<details>
-<summary>本地构建</summary>
-
-```bash
-docker compose up -d --build
-```
-
-</details>
-
-### Web 一键升级
-
-`docker-compose.yml` 与 `docker-compose.hub.yml` 会同时启动受限的 `havline-updater` sidecar。检测到新版本后，侧栏会出现「一键升级」入口，可在管理页面完成构建、重建与健康检查。
-
-> 从旧版本升级时，需要先手动更新 Compose 文件并执行一次 `docker compose up -d --build` 启动 sidecar。详见 [`docs/system-upgrade.md`](docs/system-upgrade.md)。
 
 ### 首次登录
 
-1. 启动后查看容器/运行日志，获取自动生成的 **admin 初始密码**
-2. 访问 `http://<NAS-IP>:6893/login` 登录
-3. 在 **设置** 中立即修改管理员密码
+1. 查看容器或系统日志，获取自动生成的 `admin` 初始密码；
+2. 打开 `http://<NAS-IP>:6893/login`；
+3. 登录后立即在 **系统设置 → 管理员账户** 中修改密码。
 
-### FRP 内网穿透（无公网 IP）
+> 完整部署、权限、端口、数据目录、迁移和故障排查请阅读
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) 与
+> [`docs/container-deploy-and-data.md`](docs/container-deploy-and-data.md)。
 
-适用于无法端口映射、无公网 IPv4 的场景。Havline 内置 **frpc**，支持**多台公网服务端**与全部 8 种穿透类型（tcp / udp / http / https / tcpmux / stcp / sudp / xtcp）及插件（static_file / socks5 / https2http 等）。
+## 内网穿透与公网服务端
 
-**典型流量路径**（tcp 规则 + 本地反代）：用户 → DNS（解析到 VPS）→ frps → frpc → Havline Nginx → 内网服务
+没有公网 IPv4 或无法端口映射时，可以使用 FRP 经 VPS 中转：
 
-#### 1. VPS 部署 frps
+```text
+用户 → DNS(VPS) → frps → frpc → Havline Nginx → 内网服务
+```
 
-在服务端「详情」弹窗点 **「frps.toml」** 一键生成与 frpc 侧同源的服务端配置（bindPort / 认证 / webServer / 传输参数 / vhost 端口与防火墙清单全部对齐），复制到 VPS 保存后 `frps -c frps.toml` 启动，按文件末尾清单放行防火墙端口。
+公网 VPS 上可以安装 `havline-agent`，由本地 Havline 通过 SSH 管理 agent、frps、Nginx 和证书。
 
-#### 2. Havline 配置 frpc
+| 主题 | 文档 |
+| --- | --- |
+| FRP 使用与场景 | [`docs/FRP公网暴露操作手册.md`](docs/FRP公网暴露操作手册.md) |
+| 公网服务端管理 | [`docs/frps服务端管理方案.md`](docs/frps服务端管理方案.md) |
+| Agent 监听与安全 | [`docs/agent-listen-strategy-plan.md`](docs/agent-listen-strategy-plan.md) |
 
-在侧栏 **FRP 穿透** 页面：
+## Cloudflare Tunnel
 
-- **添加服务端**：主机地址 / 端口（frps bindPort，默认 7000）/ 认证方式与 Token，与 frps 一致；可选填 frps 管理接口（webServer）用于拉取穿透流量；
-- **添加穿透规则**：按需选择类型——tcp / udp 填远程端口，http / https / tcpmux 填自定义域名，stcp / sudp / xtcp 凭 secretKey 访问；
-- 保存后「应用配置」弹窗内校验并应用；服务端「详情」含五项诊断与独立日志。
+Havline 支持将 Cloudflare Tunnel 作为服务发布出口。反向代理规则可选择本机 Nginx 或
+Cloudflare 出口，并自动派生隧道 ingress、同步 DNS、检查健康状态和修复云端漂移。
 
-#### 3. DNS 与证书
+| 主题 | 文档 |
+| --- | --- |
+| 当前功能 | [`docs/cloudflared-current-features.md`](docs/cloudflared-current-features.md) |
+| 实施方案 | [`docs/cloudflared-havline-fit-plan.md`](docs/cloudflared-havline-fit-plan.md) |
+| UX 调研 | [`docs/cloudflared-github-ux-research.md`](docs/cloudflared-github-ux-research.md) |
 
-- **DDNS**：IP 来源**留空**=检测本机（域名指家庭宽带）；填**自定义 IP**=VPS 的 IP（域名直接指 VPS，Web 服务经 VPS 对外时使用）；VPS 动态 IP 场景把服务端地址填 DDNS 域名即可自动跟随；
-- **HTTPS 证书**：ACME DNS-01 验证（复用 DDNS 服务商凭证，含火山引擎）；「统一入口」方案证书在本地 Nginx 终结，「直通」方案在 VPS 侧终止。
+## 一键升级
 
-> 组合场景详解已内置页面：FRP 页右上「使用说明」→「组合场景详解」标签，覆盖十个典型部署场景与故障排查。
+`docker-compose.yml` 与 `docker-compose.hub.yml` 会启动受限的 `havline-updater` sidecar。
+检测到新版本后，侧栏会出现「一键升级」入口，可在页面中完成：
+
+1. 拉取或构建目标版本镜像；
+2. 重建 `havline` 服务；
+3. 执行健康检查；
+4. 失败时尝试回滚到升级前镜像。
+
+详细设计、安全边界、故障排查和验证步骤见 [`docs/system-upgrade.md`](docs/system-upgrade.md)。
 
 ## 环境变量
 
-| 变量                    | 默认值                    | 说明                                       |
-| ----------------------- | ------------------------- | ------------------------------------------ |
-| `HAVLINE_LISTEN`           | `:6893`                   | 管理后台监听地址                           |
-| `HAVLINE_DATA_DIR`         | `/data`                   | 数据目录（数据库、Nginx 配置、证书、日志） |
-| `HAVLINE_SESSION_SECRET`   | 空（自动生成）            | 会话与凭据加密密钥；有数据后不要更换       |
-| `HAVLINE_NGINX_HTTP_PORT`  | `80`                      | 新建 HTTP 反代规则的默认监听端口           |
-| `HAVLINE_NGINX_HTTPS_PORT` | `443`                     | 新建 HTTPS 反代规则的默认监听端口          |
-| `HAVLINE_NGINX_BIN`        | `nginx`                   | Nginx 可执行文件路径（本地开发可指定）     |
-| `HAVLINE_FRPC_BIN`         | `frpc`                    | frpc 可执行文件路径（镜像不预装，用「应用配置」按需下载或自行放置） |
-| `HAVLINE_FRP_PID`          | `{DATA_DIR}/frp/frpc.pid` | frpc 进程 PID 文件路径                     |
-| `HAVLINE_UPDATER_SOCKET`   | `/run/havline-updater/updater.sock` | 一键升级 sidecar 的 Unix Socket；未挂载时自动禁用 |
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `HAVLINE_LISTEN` | `:6893` | 管理后台监听地址 |
+| `HAVLINE_DATA_DIR` | `/data` | 数据目录，包含数据库、Nginx、证书与日志 |
+| `HAVLINE_SESSION_SECRET` | 空，自动生成 | 会话签名与凭据加密密钥；有数据后不要更换 |
+| `HAVLINE_NGINX_BIN` | `nginx` | Nginx 可执行文件路径 |
+| `HAVLINE_NGINX_HTTP_PORT` | `80` | 新建 HTTP 反代规则默认监听端口 |
+| `HAVLINE_NGINX_HTTPS_PORT` | `443` | 新建 HTTPS 反代规则默认监听端口 |
+| `HAVLINE_FRPC_BIN` | `frpc` | frpc 可执行文件路径 |
+| `HAVLINE_FRP_PID` | `{DATA_DIR}/frp/frpc.pid` | frpc PID 文件 |
+| `HAVLINE_UPDATER_SOCKET` | `/run/havline-updater/updater.sock` | 一键升级 sidecar Socket |
+| `HAVLINE_AGENT_LISTEN` | `127.0.0.1:7700` | Agent 默认监听地址 |
+| `HAVLINE_AGENT_ALLOW_REMOTE` | `0` | 是否允许 Agent 监听非回环地址 |
+| `HAVLINE_AGENT_TOKEN` | 安装时生成 | Agent Bearer Token |
 
-## 注意事项
+## 技术架构
 
-1. **生产环境务必设置** `HAVLINE_SESSION_SECRET`，不要使用默认值。
-2. **端口冲突**：宿主机已有 Nginx（如飞牛系统）占用 80/443 时，不要让 Havline 反代规则监听 80/443；使用 `18080/9443` 或 host 模式 + 环境变量。
-3. **已有反代规则**：修改 `HAVLINE_NGINX_HTTP_PORT` / `HAVLINE_NGINX_HTTPS_PORT` 后，**不会自动更新**数据库中已有规则的端口，需在反代页手动修改并保存。
-4. **访问日志**：仅统计经 Havline Nginx 反代的域名流量，不包含管理后台 `:6893` 的请求。
-5. **证书与 DNS**：HTTPS 申请前请确保域名 DNS 已解析到本机，且 DDNS 凭证能管理对应根域。
-6. **数据持久化**：Docker 部署请挂载 volume 到 `HAVLINE_DATA_DIR`，避免容器重建后配置丢失。
-7. **备份**：可通过设置页导出配置；重要证书与数据库建议定期备份 `HAVLINE_DATA_DIR` 目录。
+| 层级 | 技术 |
+| --- | --- |
+| 后端 | Go 1.23、标准库 HTTP、SQLite |
+| 数据存储 | `modernc.org/sqlite`，单文件数据库 |
+| 反向代理 | Nginx，配置动态生成与热重载 |
+| 证书 | go-acme/lego，ACME DNS-01 |
+| 内网穿透 | FRP 客户端 / 服务端与自研管理 Agent |
+| 隧道 | Cloudflare Tunnel / cloudflared |
+| 前端 | Vue 3、TypeScript、Vite、Naive UI、ECharts |
+| 部署 | Docker、Docker Compose、Linux systemd |
+| 架构 | amd64 / arm64 |
 
 ## 本地开发
 
 ```bash
-# 前端热更新
-cd web && npm ci && npm run dev
+# 前端依赖与热更新
+cd web
+npm ci
+npm run dev
 
-# 后端（需先把 web/dist 复制到 cmd/havline/web/dist）
-cd web && npm run build
+# 构建前端并同步到 Go embed 目录
+npm run build
+cd ..
+Copy-Item -Path web/dist/* -Destination cmd/havline/web/dist -Recurse -Force
+
+# 运行后端
 go run ./cmd/havline
 
 # 测试
 go test ./...
-cd web && npm run typecheck
+go vet ./...
+cd web && npm test
 ```
 
-发版版本号以根目录 `VERSION` 文件为单一来源，`docker compose build` 自动读取并注入前后端；本地 `go run` / 未注入时默认显示 `dev`。
+`VERSION` 是版本号单一来源。Docker 构建会读取并注入前后端；直接 `go run` 时未注入版本会显示 `dev`。
 
-## 开源协议
+## 文档导航
 
-本项目采用 [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html) 开源。
+| 文档 | 说明 |
+| --- | --- |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | 裸机、Docker、飞牛 host 模式部署 |
+| [`docs/container-deploy-and-data.md`](docs/container-deploy-and-data.md) | 容器部署与数据目录 |
+| [`docs/system-upgrade.md`](docs/system-upgrade.md) | 一键升级与回滚 |
+| [`docs/FRP公网暴露操作手册.md`](docs/FRP公网暴露操作手册.md) | FRP 使用手册 |
+| [`docs/frps服务端管理方案.md`](docs/frps服务端管理方案.md) | 公网服务端与 Agent |
+| [`docs/cloudflared-current-features.md`](docs/cloudflared-current-features.md) | Cloudflare Tunnel 当前能力 |
+| [`docs/fnos-app-packaging-plan.md`](docs/fnos-app-packaging-plan.md) | 飞牛应用打包方案 |
+| [`docs/README.md`](docs/README.md) | 全部文档索引 |
+
+## 开源许可与致谢
+
+> 开源不是重新发明轮子，而是站在巨人的肩膀上，把一件事继续做得更好。
+
+Havline 基于开源项目 [**O96u/Fonu**](https://github.com/O96u/Fonu) **1.0.2** 版本进行二次开发。
+感谢原项目及其贡献者提供的基础实现和工程积累。
+
+本项目继续采用 [GPL-3.0](https://www.gnu.org/licenses/gpl-3.0.html) 开源。品牌名称调整不会改变
+原项目及其衍生版本在 GPL-3.0 下的版权、署名和源代码提供义务。
+
+软件按“原样”提供，不附带任何担保。请在部署前做好数据备份、访问控制和网络安全配置。
