@@ -39,3 +39,26 @@ func TestEnsureDefaultAdminCreatesOnce(t *testing.T) {
 		t.Fatalf("expected unauthorized for wrong password, got %v", err)
 	}
 }
+
+func TestEnsureDefaultAdminUsesEnvPassword(t *testing.T) {
+	conn, err := db.Open(filepath.Join(t.TempDir(), "havline.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer conn.Close()
+
+	if err := db.Migrate(context.Background(), conn, filepath.Join("..", "..", "migrations")); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	t.Setenv("HAVLINE_INITIAL_ADMIN_PASSWORD", "env-password-123")
+	svc := New(conn)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	if err := svc.EnsureDefaultAdmin(context.Background(), logger); err != nil {
+		t.Fatalf("bootstrap with env password: %v", err)
+	}
+	if _, err := svc.Login(context.Background(), "admin", "env-password-123"); err != nil {
+		t.Fatalf("expected env password login to succeed, got %v", err)
+	}
+}

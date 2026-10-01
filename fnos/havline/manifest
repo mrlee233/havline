@@ -1,0 +1,14 @@
+appname               = havline
+version               = 1.9.0
+display_name          = Havline
+desc                  = NAS 公网访问管理：反向代理、DDNS、HTTPS 证书、FRP、Cloudflare Tunnel 与一键升级
+platform              = all
+source                = thirdparty
+maintainer            = Havline
+maintainer_url        = http://45.207.223.190:10082/mrlee/Havline
+distributor           = Havline
+desktop_uidir         = ui
+desktop_applaunchname = havline.main
+checkport             = false
+ctl_stop              = true
+changelog             = 首发飞牛应用：支持安装向导、端口配置、数据持久化和应用中心升级

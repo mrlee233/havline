@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -45,20 +47,35 @@ func (s *Service) EnsureDefaultAdmin(ctx context.Context, log *slog.Logger) erro
 		return nil
 	}
 
-	password, err := generatePassword(16)
-	if err != nil {
-		return err
+	password := strings.TrimSpace(os.Getenv("HAVLINE_INITIAL_ADMIN_PASSWORD"))
+	generated := false
+	if password == "" {
+		var err error
+		password, err = generatePassword(16)
+		if err != nil {
+			return err
+		}
+		generated = true
 	}
 	if err := s.Setup(ctx, defaultAdminUsername, password); err != nil {
 		return err
 	}
 
-	log.Info(
-		"首次启动已创建管理员账户，请使用以下凭据登录，并在「设置」中尽快修改密码",
-		"module", "SYSTEM",
-		"username", defaultAdminUsername,
-		"password", password,
-	)
+	if generated {
+		log.Info(
+			"首次启动已创建管理员账户，请使用以下凭据登录，并在「设置」中尽快修改密码",
+			"module", "SYSTEM",
+			"username", defaultAdminUsername,
+			"password", password,
+		)
+	} else {
+		log.Info(
+			"首次启动已使用 HAVLINE_INITIAL_ADMIN_PASSWORD 创建管理员账户，请在登录后尽快修改密码",
+			"module", "SYSTEM",
+			"username", defaultAdminUsername,
+			"password_source", "environment",
+		)
+	}
 	return nil
 }
 

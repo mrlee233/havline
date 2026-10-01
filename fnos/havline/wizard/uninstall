@@ -1,0 +1,21 @@
+[
+  {
+    "stepTitle": "卸载选项",
+    "items": [
+      {
+        "type": "radio",
+        "field": "wizard_uninstall_mode",
+        "label": "数据处理",
+        "initValue": "keep",
+        "options": [
+          { "label": "保留数据（推荐）", "value": "keep" },
+          { "label": "删除全部数据", "value": "purge" }
+        ]
+      },
+      {
+        "type": "tips",
+        "helpText": "删除数据将移除数据库、证书、Nginx 配置、FRP 与 Cloudflare 配置，且无法恢复。"
+      }
+    ]
+  }
+]

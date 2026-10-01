@@ -1001,6 +1001,25 @@ Havline 适合做飞牛 Docker 应用，不适合首发做成 CGI 或原生应�
     首发使用飞牛应用中心升级。`manifest.changelog` 应面向用户简洁表达本次变更；
     Havline 内部升级页面、`havline-updater` sidecar 和 Docker Socket 默认不进入 fnOS 包。
 
+11. **端口入口和容器端口必须区分**
+
+    `app/ui/config` 的 `port` 支持使用向导变量，因此管理入口可以写成：
+
+    ```json
+    "port": "${wizard_service_port}"
+    ```
+
+    Compose 中应把宿主机端口映射到 Havline 容器内的固定端口：
+
+    ```yaml
+    ports:
+      - "${wizard_service_port}:6893"
+      - "${wizard_nginx_http_port}:80"
+      - "${wizard_nginx_https_port}:443"
+    ```
+
+    不要把 `18080` 或 `9443` 当成容器内部监听端口。它们是宿主机端口，容器内仍然是 `80/443`。
+
 ### 19.3 建议的首发实施顺序
 
 阶段 1 只做“能安装、能打开、能保留数据”：
@@ -1013,6 +1032,14 @@ Havline 适合做飞牛 Docker 应用，不适合首发做成 CGI 或原生应�
 6. 编写 `cmd/install_callback`，创建数据目录、修正权限并完成首次初始化。
 7. 构建 amd64 / arm64 镜像。
 8. 用 `fnpack build` 打包并在飞牛测试设备安装验证。
+
+当前已经在仓库内生成：
+
+```text
+fnos/havline/
+```
+
+并补上了首发骨架所需的基础配置。
 
 阶段 1 暂不实现：
 

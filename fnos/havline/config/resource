@@ -1,0 +1,17 @@
+{
+  "docker-project": {
+    "projects": [
+      {
+        "name": "havline",
+        "path": "docker"
+      }
+    ]
+  },
+  "data-share": {
+    "shares": [
+      {
+        "name": "havline/backups"
+      }
+    ]
+  }
+}
