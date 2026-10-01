@@ -14,7 +14,7 @@ import CloudflareTunnelConfigView from '../views/CloudflareTunnelConfigView.vue'
 import AgentView from '../views/AgentView.vue'
 import ProxyRemoteView from '../views/ProxyRemoteView.vue'
 import StatusPageView from '../views/StatusPageView.vue'
-import ExampleView from '../views/ExampleView.vue'
+import AboutView from '../views/AboutView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -96,10 +96,10 @@ const router = createRouter({
           meta: { title: '系统设置', description: '配置系统参数与运行策略' },
         },
         {
-          path: 'example',
-          name: 'example',
-          component: ExampleView,
-          meta: { title: '示例页面', description: '用于验证在线升级是否成功生效' },
+          path: 'about',
+          name: 'about',
+          component: AboutView,
+          meta: { title: '关于项目', description: '查看 Havline 版本、源开源项目和技术信息' },
         },
       ],
     },

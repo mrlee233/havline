@@ -123,9 +123,9 @@ import {
   CogOutline,
   DocumentTextOutline,
   Ellipse,
-  FlashOutline,
   GitNetworkOutline,
   GridOutline,
+  InformationCircleOutline,
   LockClosedOutline,
   LogoGithub,
   MoonOutline,
@@ -205,7 +205,7 @@ const menuDefs = [
   { label: 'Cloudflare 隧道', key: 'cloudflare', icon: CloudOutline },
   { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
   { label: '系统设置', key: 'settings', icon: CogOutline },
-  { label: '示例页面', key: 'example', icon: FlashOutline },
+  { label: '关于项目', key: 'about', icon: InformationCircleOutline },
 ]
 
 const menuOptions = computed<MenuOption[]>(() =>
