@@ -830,3 +830,217 @@ Havline 适合做飞牛 Docker 应用，不适合首发做成 CGI 或原生应�
 3. 增加 multi-arch 镜像发布。
 4. 增加 `fnos/` 打包模板和构建脚本。
 5. 验证 `TRIM_PKGVAR/data` 数据迁移。
+
+---
+
+## 十九、官方文档复核与实施修正（2026-10-01）
+
+本轮已逐页复核飞牛应用开放平台文档中的以下内容：
+
+- 快速开始：准备工作、创建应用、测试应用、上架应用
+- 核心概念：`manifest`、权限、资源、运行时、环境变量、应用入口、统一网关、用户向导
+- 开发工具：`fnpack`、`appcenter-cli`
+- Docker 应用案例：`fnpack create --template docker`、Compose、资源声明、状态检查、桌面入口
+
+### 19.1 已确认正确的方案
+
+现有方案的大方向与官方 Docker 应用案例一致：
+
+1. 使用 Docker 应用模板，而不是首发做 CGI 或原生应用。
+2. 包结构使用 `manifest`、`config/privilege`、`config/resource`、`app/docker/docker-compose.yaml`、`app/ui/config`、`cmd/main` 和 `wizard/`。
+3. `config/resource` 声明 Docker 项目资源的格式正确：
+
+```json
+{
+  "docker-project": {
+    "projects": [
+      {
+        "name": "havline",
+        "path": "docker"
+      }
+    ]
+  }
+}
+```
+
+4. `cmd/main` 的 `start` 和 `stop` 可以空操作，Docker 项目启停由飞牛应用中心处理；`status` 检查容器状态，运行中返回 `0`，未运行返回 `3`。
+5. 首发关闭 Havline 自带 updater，避免 Docker Socket、宿主机路径映射和飞牛应用中心升级冲突。
+6. 默认使用 `run-as=package`，不使用 Root，不挂载 Docker Socket。
+7. 使用 `TRIM_SERVICE_PORT`、`TRIM_APPDEST`、`TRIM_PKGVAR` 等变量，而不是硬编码安装路径。
+
+### 19.2 需要修正或补充的实现细节
+
+1. **以 `fnpack` 模板为起点**
+
+   官方 Docker 案例推荐先执行：
+
+   ```bash
+   fnpack create havline --template docker
+   cd havline
+   ```
+
+   因此 `fnos/` 不应完全手写。正确做法是：
+
+   - 先用模板生成标准骨架；
+   - 再将 Havline 的 Compose、入口和生命周期脚本替换进去；
+   - 让构建脚本只维护差异部分，避免未来官方模板升级时难以同步。
+
+2. **`cmd/main` 的状态检查必须与 Compose 一致**
+
+   Compose 中有 `container_name: havline` 时，`cmd/main` 应检查该名称：
+
+   ```bash
+   CONTAINER_NAME="havline"
+   ```
+
+   如果以后移除 `container_name`，`cmd/main` 需要按 Compose 实际生成的容器名检查，否则应用中心会一直显示未运行。
+
+3. **向导密钥字段必须使用 `password` 类型**
+
+   官方向导支持 `password` 类型，不能把管理员初始密码或 Token 用普通 `text` 收集：
+
+   ```json
+   {
+     "type": "password",
+     "field": "wizard_initial_admin_password",
+     "label": "初始管理员密码",
+     "rules": [
+       { "required": true, "message": "请输入初始管理员密码" }
+     ]
+   }
+   ```
+
+   向导值会变成同名环境变量，生命周期脚本使用前必须再次校验，并禁止写入日志。
+
+4. **自定义向导字段统一使用 `wizard_` 前缀**
+
+   官方建议：
+
+   - 自定义字段使用 `wizard_` 前缀；
+   - 字段名一旦发布应保持稳定；
+   - 不要使用 `TRIM_` 前缀，因为该前缀保留给系统变量。
+
+   Havline 建议字段：
+
+   ```text
+   wizard_service_port
+   wizard_nginx_http_port
+   wizard_nginx_https_port
+   wizard_timezone
+   wizard_initial_admin_password
+   ```
+
+5. **生命周期脚本错误必须写入 `TRIM_TEMP_LOGFILE`**
+
+   官方要求生命周期脚本以非零状态退出前，将用户可见错误写入：
+
+   ```text
+   TRIM_TEMP_LOGFILE
+   ```
+
+   安装、升级、配置和卸载脚本都应遵循该约定，不能只输出到 stdout。
+
+6. **`app/ui/config` 的 `port` 必须三处一致**
+
+   以下三个值必须保持一致：
+
+   ```text
+   manifest.service_port
+   app/ui/config 的 port
+   docker-compose.yaml 中 ${TRIM_SERVICE_PORT}:6893
+   ```
+
+   否则应用卡片可能打开失败，或应用中心显示运行但入口不可访问。
+
+7. **Docker Compose 支持官方路径变量**
+
+   官方明确指出 Docker Compose 可以使用：
+
+   ```text
+   TRIM_SERVICE_PORT
+   TRIM_APPDEST
+   TRIM_PKGVAR
+   TRIM_DATA_SHARE_PATHS
+   ```
+
+   Havline 推荐继续使用：
+
+   ```yaml
+   volumes:
+     - "${TRIM_PKGVAR}:/data"
+   ```
+
+   不要额外拼出无意义的 `${TRIM_PKGVAR}/data`，除非确实要在数据根下再做子目录。
+
+8. **共享目录只暴露明确需要的路径**
+
+   `config/resource` 的 `data-share` 会让用户在文件管理器中看到路径。首发只能暴露备份目录，绝不能暴露：
+
+   ```text
+   session_secret
+   havline.db
+   certs/
+   nginx/
+   frp/
+   cloudflared/
+   ```
+
+9. **镜像必须真正支持 amd64 与 arm64**
+
+   `platform=all` 只代表应用包不含架构相关二进制，容器镜像本身仍必须支持目标架构。CI 必须构建并推送：
+
+   ```text
+   linux/amd64
+   linux/arm64
+   ```
+
+   否则 x86 测试通过但 ARM 设备仍会启动失败。
+
+10. **版本和升级说明由 fnOS 管理**
+
+    首发使用飞牛应用中心升级。`manifest.changelog` 应面向用户简洁表达本次变更；
+    Havline 内部升级页面、`havline-updater` sidecar 和 Docker Socket 默认不进入 fnOS 包。
+
+### 19.3 建议的首发实施顺序
+
+阶段 1 只做“能安装、能打开、能保留数据”：
+
+1. 用 `fnpack create havline --template docker` 生成标准骨架。
+2. 改写 `manifest`，确定 `appname=havline`、`service_port` 和桌面入口。
+3. 编写 Havline 专用 `app/docker/docker-compose.yaml`。
+4. 编写 `cmd/main` 容器状态检查。
+5. 编写 `wizard/install`，只收集端口、时区和初始管理员密码。
+6. 编写 `cmd/install_callback`，创建数据目录、修正权限并完成首次初始化。
+7. 构建 amd64 / arm64 镜像。
+8. 用 `fnpack build` 打包并在飞牛测试设备安装验证。
+
+阶段 1 暂不实现：
+
+- Havline 自带 updater；
+- Docker Socket；
+- 统一网关 Unix Socket；
+- 高级 host 网络模式；
+- 自动迁移旧 Docker Compose 数据。
+
+### 19.4 首发验收清单
+
+```text
+[ ] fnpack 模板生成的项目结构与官方一致
+[ ] manifest 必填字段完整
+[ ] service_port、入口 port、Compose 映射三处一致
+[ ] cmd/main status 与 Compose 容器名一致
+[ ] wizard 使用 password 类型收集初始密码
+[ ] 安装回调创建并修正 TRIM_PKGVAR 权限
+[ ] 数据目录持久化，升级后 session_secret 不变
+[ ] 默认不挂载 Docker Socket
+[ ] 默认关闭 Havline updater
+[ ] amd64 与 arm64 镜像均可拉取并启动
+[ ] 卸载默认保留数据，明确选择后才删除
+[ ] TRIM_TEMP_LOGFILE 能输出可读错误
+```
+
+### 19.5 结论
+
+现有方案不需要推倒重来，主要修正点是把手工设计的包结构收敛到官方
+`fnpack create --template docker` 模板，并补齐向导密码、状态检查、
+路径变量、生命周期错误输出和双架构镜像验证。
