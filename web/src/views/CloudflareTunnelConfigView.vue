@@ -266,7 +266,7 @@ const routeEditingIndex = ref<number | null>(null)
 const routeForm = ref({ subdomain: '', domain: '', type: 'http', target: '' })
 const loadError = ref('')
 const form = ref({ name: '', subdomain: '', domain: '', type: 'http', target: '', autoStart: false })
-const TOPOLOGY_WIDTH = 820
+const TOPOLOGY_WIDTH = 880
 const TOPOLOGY_ROW_HEIGHT = 54
 const TOPOLOGY_START_Y = 38
 
@@ -298,15 +298,15 @@ function serviceY(index: number) {
 }
 
 function domainToExitPath(sourceY: number) {
-  return `M 220 ${sourceY} C 250 ${sourceY}, 265 ${centerY.value}, 292 ${centerY.value}`
+  return `M 280 ${sourceY} C 295 ${sourceY}, 305 ${centerY.value}, 320 ${centerY.value}`
 }
 
 function exitToTunnelPath() {
-  return `M 392 ${centerY.value} L 470 ${centerY.value}`
+  return `M 420 ${centerY.value} L 460 ${centerY.value}`
 }
 
 function tunnelToServicePath(targetY: number) {
-  return `M 578 ${centerY.value} C 610 ${centerY.value}, 625 ${targetY}, 660 ${targetY}`
+  return `M 570 ${centerY.value} C 585 ${centerY.value}, 598 ${targetY}, 610 ${targetY}`
 }
 
 async function load() {
@@ -568,7 +568,7 @@ onMounted(load)
 }
 .topology-graph {
   position: relative;
-  width: 820px;
+  width: 880px;
   height: 100%;
   margin: 0 auto;
 }
@@ -579,13 +579,10 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 220px;
+  width: 280px;
   height: 44px;
 }
 .topology-domain__name {
-  max-width: 125px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--fonu-brand-text);
   text-decoration: underline;
@@ -599,7 +596,7 @@ onMounted(load)
   position: absolute;
   inset: 0;
   z-index: 1;
-  width: 820px;
+  width: 880px;
   height: 100%;
   pointer-events: none;
 }
@@ -628,16 +625,17 @@ onMounted(load)
   box-shadow: var(--fonu-shadow);
   white-space: nowrap;
 }
-.topology-exit { left: 292px; min-width: 100px; }
-.topology-tunnel { left: 470px; min-width: 108px; }
+.topology-exit { left: 320px; min-width: 100px; }
+.topology-tunnel { left: 460px; min-width: 110px; }
 .topology-service {
   position: absolute;
-  left: 660px;
+  left: 610px;
   z-index: 2;
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 150px;
+  width: max-content;
+  min-width: 260px;
   height: 44px;
   padding: 7px 8px;
   border: 1px solid var(--fonu-border);
@@ -645,8 +643,9 @@ onMounted(load)
   background: var(--fonu-surface);
   color: var(--fonu-text-secondary);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
+.topology-service .mono { white-space: nowrap; }
 .topology-service :deep(.n-icon) { flex: none; color: var(--fonu-brand); }
 .config-form { max-width: 780px; }
 .config-form__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }

@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.9.0] - 2026-10-01
+
+### 新增
+
+- **Cloudflare 隧道出口抽象**：反向代理规则新增 `local` / `cloudflare` 出口选择，支持同时使用本机 Nginx 与 Cloudflare 隧道；托管隧道从服务发布规则自动派生 ingress，规则新增、修改、删除、启停时自动同步 Cloudflare 云端与 DNS
+- **Cloudflare 独立配置页**：隧道「编辑」改为独立普通页面 `/cloudflare/:id/config`，包含指标、基础配置、拓扑图、路由列表和运行控制；基础配置通过按钮打开弹窗，不再直接堆叠在页面中
+- **Cloudflare 路由管理增强**：新增路由添加、编辑、删除、上移、下移、复制和源服务 TCP 连通性测试；通配路径 `*` 只在界面显示，不再作为非法正则发送给 Cloudflare
+- **Cloudflare 接入向导与预检**：新增 cloudflared、Account ID、API Token、Zone 权限检查，并在 Cloudflare 页面提供接入向导入口
+- **Cloudflare 调和中心**：隧道列表显示“调和”状态；检测本地规则与云端 ingress 漂移，支持以本地规则一键覆盖修复
+- **Cloudflare 运维能力**：新增隧道健康巡检、24 小时可用率、断连/恢复通知、状态页事故记录、仪表盘摘要、日志中心分页、漂移检测、一键诊断、Access 只读检测、Zone 列表和 DNS 记录归属管理
+- **cloudflared 二进制管理**：支持查询最新版本、指定版本下载、保留上一版回滚；Cloudflare 页面显示当前版本并支持检查更新
+- **NAS 服务发现增强**：服务发现目录新增 Home Assistant、Immich、AdGuard Home、Synology DSM 等常见 NAS 应用；扫描后可按 Cloudflare 出口预填服务发布规则
+- **备份恢复增强**：备份归档加入 `cloudflared/tunnels`，保留隧道 `config.yml`、`creds.json` 与相关数据库记录
+- **Cloudflare 拓扑图**：按“域名 → 出口 → 隧道 → 服务”展示服务发布链路，支持点阵画布、节点和曲线连接
+
+### 修复
+
+- **Cloudflare 全局启动策略**：全局托管开启或 Fonu 启动时，默认启动全部隧道；关闭时停止全部隧道并阻止应用重启自动拉起
+- **Cloudflare 路由保存提示**：规则本体保存成功但 Cloudflare 同步失败时返回 `sync_warning` 并在前端提示，不再把已保存的规则判为完全失败
+- **Cloudflare metrics 端口识别**：兼容 `Starting metrics server...` 大小写日志格式，修复 metrics 端口、连接数、传输协议无法采集的问题
+- **Cloudflare DNS 安全清理**：只删除 Fonu 接管或创建的 DNS 记录，不覆盖用户已有的其他目标 CNAME
+- **Cloudflare 隧道删除保护**：仍被反向代理规则引用的托管隧道不允许删除或切换为手工隧道
+
+### 测试
+
+- 新增 Cloudflare 出口默认值与持久化、托管规则生成 ingress、健康状态与可用率、路由解析、通配 path、DNS 记录归属、漂移比较、备份包含隧道配置等测试
+- `go test ./...`、`go vet ./...`、`npm run typecheck`、`npm test -- --run`、`npm run build` 通过
+
+### 变更
+
+- 版本号提升到 1.9.0；`AgentVersion` 保持 **0.14.1**，本次无 Agent 行为变化
+
 ## [v1.8.0] - 2026-09-30
 
 ### 新增
