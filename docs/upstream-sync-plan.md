@@ -6,7 +6,7 @@
 > 本文逐版本列出上游 1.0.3 / 1.0.4 / 1.0.5 的全部变更，并逐条核对**本项目代码现状**，
 > 给出「同步 / 已具备 / 不适用 / 待核对」的判定与落地建议。
 >
-> 上游来源：`https://github.com/O96u/Havline`（CHANGELOG.md + 提交记录）
+> 上游来源：`https://github.com/O96u/Fonu`（CHANGELOG.md + 提交记录）
 > 核对方式：对本仓库 `f:\Havline-main\Havline-1.0.2` 做 grep / 文件树核对（证据写在每条的「本项目现状」里）
 > 更新日期：2026-09-23
 
@@ -341,6 +341,5 @@ Nginx 的冲突规则是「**同端口 + 同 `server_name`**」：此时只在 r
 2. **前端预检**（`ProxyView.vue` 的 `findHostConflict`）只覆盖 `proxy_hosts`（表单规则的 `rule.hosts`），看不到 custom 占用；
    这类冲突由后端保存时报错兜底，错误消息直接展示给用户。
 3. 解析器对手写配置里的 `include`、变量、`listen unix:` 一律忽略——宁可漏报也不误报（拦不住保存比误报更可接受）。
-
 
 
