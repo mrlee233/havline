@@ -2,6 +2,7 @@ package cloudflared
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -86,6 +87,11 @@ func (s *Service) BinaryVersion() string {
 
 // DownloadBinary 下载并替换本机 cloudflared 二进制。
 func (s *Service) DownloadBinary(ctx context.Context, mirrorID string) (string, error) {
+	return s.DownloadBinaryVersion(ctx, mirrorID, "")
+}
+
+// DownloadBinaryVersion 下载指定版本；version 为空表示最新版。
+func (s *Service) DownloadBinaryVersion(ctx context.Context, mirrorID, version string) (string, error) {
 	mirror := findMirror(mirrorID)
 	target := s.binaryPath()
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
@@ -93,7 +99,7 @@ func (s *Service) DownloadBinary(ctx context.Context, mirrorID string) (string, 
 	}
 	tmp := target + ".download"
 	_ = os.Remove(tmp)
-	if err := fetchFile(ctx, DownloadURL(mirror, ""), tmp); err != nil {
+	if err := fetchFile(ctx, DownloadURL(mirror, version), tmp); err != nil {
 		_ = os.Remove(tmp)
 		return "", err
 	}
@@ -109,10 +115,70 @@ func (s *Service) DownloadBinary(ctx context.Context, mirrorID string) (string, 
 		_ = os.Remove(tmp)
 		return "", fmt.Errorf("cloudflared 二进制不可执行: %s", strings.TrimSpace(string(out)))
 	}
+	previous := target + ".previous"
+	if _, err := os.Stat(target); err == nil {
+		_ = os.Remove(previous)
+		if err := os.Rename(target, previous); err != nil {
+			_ = os.Remove(tmp)
+			return "", err
+		}
+	}
 	if err := os.Rename(tmp, target); err != nil {
+		_ = os.Rename(previous, target)
 		_ = os.Remove(tmp)
 		return "", err
 	}
+	return s.BinaryVersion(), nil
+}
+
+// LatestBinaryVersion 查询 Cloudflare 官方 GitHub Release 的最新版本。
+func (s *Service) LatestBinaryVersion(ctx context.Context) (string, error) {
+	client := &http.Client{Timeout: 20 * time.Second}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/cloudflare/cloudflared/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("读取最新版本失败：HTTP %d", resp.StatusCode)
+	}
+	var payload struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&payload); err != nil {
+		return "", err
+	}
+	version := strings.TrimSpace(payload.TagName)
+	if version == "" {
+		return "", fmt.Errorf("GitHub 未返回 cloudflared 版本")
+	}
+	return version, nil
+}
+
+// RollbackBinary 恢复上一版 cloudflared 二进制。
+func (s *Service) RollbackBinary() (string, error) {
+	target := s.binaryPath()
+	previous := target + ".previous"
+	if _, err := os.Stat(previous); err != nil {
+		return "", fmt.Errorf("没有可回滚的 cloudflared 版本")
+	}
+	failed := target + ".failed"
+	_ = os.Remove(failed)
+	if _, err := os.Stat(target); err == nil {
+		if err := os.Rename(target, failed); err != nil {
+			return "", err
+		}
+	}
+	if err := os.Rename(previous, target); err != nil {
+		_ = os.Rename(failed, target)
+		return "", err
+	}
+	_ = os.Remove(failed)
 	return s.BinaryVersion(), nil
 }
 

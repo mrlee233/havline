@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+
+	"github.com/fonu/fonu/internal/proxy"
 )
 
 func TestDecodeToken(t *testing.T) {
@@ -65,6 +67,49 @@ func TestBuildIngressInvariants(t *testing.T) {
 	}
 	if got[2].Hostname != "" || got[2].Service != "http_status:404" {
 		t.Fatalf("末条必须是 catch-all：%#v", got[2])
+	}
+}
+
+func TestBuildIngressForRulesUsesRuleUpstream(t *testing.T) {
+	rules := []proxy.Rule{
+		{
+			Enabled:    true,
+			Upstream:   "http://192.168.1.10:8080",
+			Hosts:      []proxy.Host{{Hostname: "b.example.com"}},
+			Exits:      []string{proxy.ExitCloudflare},
+			CFTunnelID: 9,
+		},
+		{
+			Enabled:    true,
+			Upstream:   "http://192.168.1.11:9090",
+			Hosts:      []proxy.Host{{Hostname: "a.example.com"}},
+			Exits:      []string{proxy.ExitLocal, proxy.ExitCloudflare},
+			CFTunnelID: 9,
+		},
+	}
+	got := BuildIngressForRules(rules)
+	if len(got) != 3 {
+		t.Fatalf("应生成 2 条域名 + catch-all：%#v", got)
+	}
+	if got[0].Hostname != "a.example.com" || got[0].Service != "http://192.168.1.11:9090" {
+		t.Fatalf("第一条 ingress 不符：%#v", got[0])
+	}
+	if got[1].Hostname != "b.example.com" || got[1].Service != "http://192.168.1.10:8080" {
+		t.Fatalf("第二条 ingress 不符：%#v", got[1])
+	}
+	if got[2].Hostname != "" || got[2].Service != "http_status:404" {
+		t.Fatalf("末条必须是 catch-all：%#v", got[2])
+	}
+}
+
+func TestBuildIngressForRulesSkipsDisabledAndManualRules(t *testing.T) {
+	rules := []proxy.Rule{
+		{Enabled: false, Upstream: "http://127.0.0.1:8080", Hosts: []proxy.Host{{Hostname: "off.example.com"}}, Exits: []string{proxy.ExitCloudflare}, CFTunnelID: 1},
+		{Enabled: true, Upstream: "http://127.0.0.1:8081", Hosts: []proxy.Host{{Hostname: "local.example.com"}}, Exits: []string{proxy.ExitLocal}},
+	}
+	got := BuildIngressForRules(rules)
+	if len(got) != 1 || got[0].Service != "http_status:404" {
+		t.Fatalf("停用规则和仅本机规则不应进入 Cloudflare ingress：%#v", got)
 	}
 }
 

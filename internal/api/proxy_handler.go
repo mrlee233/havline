@@ -36,6 +36,8 @@ type proxyRequest struct {
 	Name         *string          `json:"name"`
 	Remark       *string          `json:"remark"` // deprecated alias for name
 	Security     *securityRequest `json:"security,omitempty"`
+	Exits        []string         `json:"exits"`
+	CFTunnelID   *int64           `json:"cf_tunnel_id"`
 }
 
 type proxyReorderRequest struct {
@@ -80,6 +82,8 @@ func (h *ProxyHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Enabled:      boolDefault(req.Enabled, true),
 		Name:         name,
 		Security:     req.securityInput(),
+		Exits:        req.Exits,
+		CFTunnelID:   int64Default(req.CFTunnelID, 0),
 	}
 
 	rule, err := h.svc.Create(r.Context(), in)
@@ -134,6 +138,12 @@ func (h *ProxyHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Security != nil {
 		sec := req.securityInput()
 		in.Security = &sec
+	}
+	if req.Exits != nil {
+		in.Exits = &req.Exits
+	}
+	if req.CFTunnelID != nil {
+		in.CFTunnelID = req.CFTunnelID
 	}
 
 	rule, err := h.svc.Update(r.Context(), id, in)
@@ -253,6 +263,13 @@ func parseID(raw string) (int64, error) {
 }
 
 func boolDefault(v *bool, fallback bool) bool {
+	if v == nil {
+		return fallback
+	}
+	return *v
+}
+
+func int64Default(v *int64, fallback int64) int64 {
 	if v == nil {
 		return fallback
 	}

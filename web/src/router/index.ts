@@ -10,6 +10,7 @@ import LogsView from '../views/LogsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import FrpView from '../views/FrpView.vue'
 import CloudflareView from '../views/CloudflareView.vue'
+import CloudflareTunnelConfigView from '../views/CloudflareTunnelConfigView.vue'
 import AgentView from '../views/AgentView.vue'
 import ProxyRemoteView from '../views/ProxyRemoteView.vue'
 import StatusPageView from '../views/StatusPageView.vue'
@@ -69,6 +70,12 @@ const router = createRouter({
           name: 'cloudflare',
           component: CloudflareView,
           meta: { title: 'Cloudflare 隧道', description: '通过 cloudflared 把内网 Web 服务发布到 Cloudflare 边缘' },
+        },
+        {
+          path: 'cloudflare/:id/config',
+          name: 'cloudflare-tunnel-config',
+          component: CloudflareTunnelConfigView,
+          meta: { title: 'Cloudflare 隧道配置', description: '配置隧道、查看副本指标与已发布路由' },
         },
         {
           path: 'public-proxy',

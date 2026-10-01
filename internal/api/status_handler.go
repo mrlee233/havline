@@ -13,6 +13,7 @@ import (
 
 	"github.com/fonu/fonu/internal/acme"
 	certstore "github.com/fonu/fonu/internal/certificate"
+	"github.com/fonu/fonu/internal/cloudflared"
 	"github.com/fonu/fonu/internal/config"
 	"github.com/fonu/fonu/internal/ddns"
 	"github.com/fonu/fonu/internal/logstore"
@@ -22,27 +23,29 @@ import (
 )
 
 type StatusHandler struct {
-	cfg          config.Config
-	proxySvc     *service.ProxyService
-	ddnsSvc      *ddns.Service
-	acmeSvc      *acme.Service
-	startedAt    string
-	nginxPIDFile string
-	cpuMu        sync.Mutex
-	cpuSample    sysinfo.CPUSample
+	cfg           config.Config
+	proxySvc      *service.ProxyService
+	ddnsSvc       *ddns.Service
+	acmeSvc       *acme.Service
+	cloudflareSvc *cloudflared.Service
+	startedAt     string
+	nginxPIDFile  string
+	cpuMu         sync.Mutex
+	cpuSample     sysinfo.CPUSample
 }
 
-func NewStatusHandler(cfg config.Config, proxySvc *service.ProxyService, ddnsSvc *ddns.Service, acmeSvc *acme.Service, startedAt, nginxPIDFile string) *StatusHandler {
+func NewStatusHandler(cfg config.Config, proxySvc *service.ProxyService, ddnsSvc *ddns.Service, acmeSvc *acme.Service, cloudflareSvc *cloudflared.Service, startedAt, nginxPIDFile string) *StatusHandler {
 	// 先采一次 CPU 计数器，使首次请求就能算出占用率（否则只能返回 0）
 	_, sample := sysinfo.Read(sysinfo.CPUSample{})
 	return &StatusHandler{
-		cfg:          cfg,
-		proxySvc:     proxySvc,
-		ddnsSvc:      ddnsSvc,
-		acmeSvc:      acmeSvc,
-		startedAt:    startedAt,
-		nginxPIDFile: nginxPIDFile,
-		cpuSample:    sample,
+		cfg:           cfg,
+		proxySvc:      proxySvc,
+		ddnsSvc:       ddnsSvc,
+		acmeSvc:       acmeSvc,
+		cloudflareSvc: cloudflareSvc,
+		startedAt:     startedAt,
+		nginxPIDFile:  nginxPIDFile,
+		cpuSample:     sample,
 	}
 }
 
@@ -71,6 +74,10 @@ type statusResponse struct {
 	MemTotalBytes        uint64   `json:"mem_total_bytes"`
 	DiskUsedBytes        uint64   `json:"disk_used_bytes"`
 	DiskTotalBytes       uint64   `json:"disk_total_bytes"`
+	CloudflareCount      int      `json:"cloudflare_count"`
+	CloudflareOnline     int      `json:"cloudflare_online"`
+	CloudflareStatus     string   `json:"cloudflare_status"`
+	CloudflareMessage    string   `json:"cloudflare_message,omitempty"`
 	StartedAt            string   `json:"started_at"`
 	UptimeSeconds        int64    `json:"uptime_seconds"`
 }
@@ -97,6 +104,10 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	resources, cpuSample := sysinfo.Read(h.currentCPUSample())
 	h.setCPUSample(cpuSample)
+	cfSummary := cloudflared.TunnelSummary{Status: "none", Message: "未创建隧道"}
+	if h.cloudflareSvc != nil {
+		cfSummary = h.cloudflareSvc.Summary(r.Context())
+	}
 
 	accessLog := filepath.Join(h.cfg.LogsDir(), "access.log")
 	total, errors, avgMs := logstore.CountTodayAccess(accessLog)
@@ -131,6 +142,10 @@ func (h *StatusHandler) Get(w http.ResponseWriter, r *http.Request) {
 		MemTotalBytes:        resources.MemTotalBytes,
 		DiskUsedBytes:        resources.DiskUsedBytes,
 		DiskTotalBytes:       resources.DiskTotalBytes,
+		CloudflareCount:      cfSummary.Count,
+		CloudflareOnline:     cfSummary.Online,
+		CloudflareStatus:     cfSummary.Status,
+		CloudflareMessage:    cfSummary.Message,
 		StartedAt:            h.startedAt,
 		UptimeSeconds:        int64(uptime),
 	})

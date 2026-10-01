@@ -88,3 +88,43 @@ func TestRestoreAppliesFixedMode(t *testing.T) {
 		t.Fatalf("还原后的权限应为 %o，实际 %o", restoreFileMode, got)
 	}
 }
+
+func TestExportIncludesCloudflareTunnelConfig(t *testing.T) {
+	dataDir := t.TempDir()
+	tunnelDir := filepath.Join(dataDir, "cloudflared", "tunnels", "home")
+	if err := os.MkdirAll(tunnelDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tunnelDir, "config.yml"), []byte("tunnel: test\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	path, err := New(dataDir).Export(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	gr, err := gzip.NewReader(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gr.Close()
+	tr := tar.NewReader(gr)
+	found := false
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			break
+		}
+		if header.Name == "cloudflared/tunnels/home/config.yml" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("备份应包含 Cloudflare 隧道配置")
+	}
+}

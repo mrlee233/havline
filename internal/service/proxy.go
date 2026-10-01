@@ -23,6 +23,12 @@ type ProxyService struct {
 	settings  *settings.Store
 	nginx     *nginx.Manager
 	notify    *notify.Service
+	exitSync  ExitSync
+}
+
+// ExitSync 处理服务发布规则变化后的外部出口同步。
+type ExitSync interface {
+	SyncRules(ctx context.Context) error
 }
 
 func NewProxyService(cfg config.Config, db *sql.DB, store *proxy.Store, certStore *certificate.Store, settingsStore *settings.Store, nginxMgr *nginx.Manager) *ProxyService {
@@ -31,6 +37,10 @@ func NewProxyService(cfg config.Config, db *sql.DB, store *proxy.Store, certStor
 
 func (s *ProxyService) SetNotify(notifySvc *notify.Service) {
 	s.notify = notifySvc
+}
+
+func (s *ProxyService) SetExitSync(sync ExitSync) {
+	s.exitSync = sync
 }
 
 func (s *ProxyService) List(ctx context.Context) ([]proxy.Rule, error) {
@@ -42,8 +52,10 @@ func (s *ProxyService) Get(ctx context.Context, id int64) (proxy.Rule, error) {
 }
 
 func (s *ProxyService) Create(ctx context.Context, in proxy.CreateInput) (proxy.Rule, error) {
-	if err := s.validateHTTPSInput(ctx, in.Hosts, in.HTTPSEnabled); err != nil {
-		return proxy.Rule{}, err
+	if proxy.HasExit(in.Exits, proxy.ExitLocal) {
+		if err := s.validateHTTPSInput(ctx, in.Hosts, in.HTTPSEnabled); err != nil {
+			return proxy.Rule{}, err
+		}
 	}
 
 	rule, err := s.store.Create(ctx, in)
@@ -52,6 +64,9 @@ func (s *ProxyService) Create(ctx context.Context, in proxy.CreateInput) (proxy.
 	}
 	if err := s.applyNginx(ctx); err != nil {
 		return rule, fmt.Errorf("规则已保存，但 Nginx 重载失败：%w", err)
+	}
+	if err := s.syncExits(ctx); err != nil {
+		rule.SyncWarning = "规则已保存，但 Cloudflare 同步失败：" + err.Error()
 	}
 	return rule, nil
 }
@@ -69,8 +84,14 @@ func (s *ProxyService) Update(ctx context.Context, id int64, in proxy.UpdateInpu
 	if in.Hosts != nil {
 		hosts = *in.Hosts
 	}
-	if err := s.validateHTTPSInput(ctx, hosts, httpsEnabled); err != nil {
-		return proxy.Rule{}, err
+	exits := current.Exits
+	if in.Exits != nil {
+		exits = *in.Exits
+	}
+	if proxy.HasExit(exits, proxy.ExitLocal) {
+		if err := s.validateHTTPSInput(ctx, hosts, httpsEnabled); err != nil {
+			return proxy.Rule{}, err
+		}
 	}
 
 	rule, err := s.store.Update(ctx, id, in)
@@ -80,7 +101,17 @@ func (s *ProxyService) Update(ctx context.Context, id int64, in proxy.UpdateInpu
 	if err := s.applyNginx(ctx); err != nil {
 		return rule, fmt.Errorf("规则已保存，但 Nginx 重载失败：%w", err)
 	}
+	if err := s.syncExits(ctx); err != nil {
+		rule.SyncWarning = "规则已保存，但 Cloudflare 同步失败：" + err.Error()
+	}
 	return rule, nil
+}
+
+func (s *ProxyService) syncExits(ctx context.Context) error {
+	if s.exitSync == nil {
+		return nil
+	}
+	return s.exitSync.SyncRules(ctx)
 }
 
 func (s *ProxyService) Reorder(ctx context.Context, ids []int64) error {
@@ -95,6 +126,9 @@ func (s *ProxyService) Delete(ctx context.Context, id int64) error {
 	if err := s.applyNginx(ctx); err != nil {
 		return fmt.Errorf("规则已删除，但 Nginx 重载失败：%w", err)
 	}
+	if err := s.syncExits(ctx); err != nil {
+		return fmt.Errorf("规则已删除，但 Cloudflare 同步失败：%w", err)
+	}
 	return nil
 }
 
@@ -103,7 +137,7 @@ func (s *ProxyService) ReloadAll(ctx context.Context) error {
 }
 
 func (s *ProxyService) applyNginx(ctx context.Context) error {
-	rules, err := s.store.ListEnabled(ctx)
+	rules, err := s.store.ListEnabledLocal(ctx)
 	if err != nil {
 		return err
 	}
@@ -124,17 +158,17 @@ func (s *ProxyService) ValidateRule(ctx context.Context, candidate proxy.Rule, e
 	replaced := false
 	for _, r := range existing {
 		if r.ID == candidate.ID {
-			if candidate.Enabled {
+			if candidate.LocalEnabled() {
 				rules = append(rules, candidate)
 			}
 			replaced = true
 			continue
 		}
-		if r.Enabled {
+		if r.LocalEnabled() {
 			rules = append(rules, r)
 		}
 	}
-	if !replaced && candidate.Enabled {
+	if !replaced && candidate.LocalEnabled() {
 		rules = append(rules, candidate)
 	}
 	certs, err := s.loadCertSources(ctx)

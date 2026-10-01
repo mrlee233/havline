@@ -1,7 +1,7 @@
 # Fonu 文档索引
 
 > 维护约定：新增方案 / 审查文档时在下方登记；方案落地后在「状态」列标注实施结果，并给已被推翻的描述加时效说明。
-> 最近更新：2026-09-30（v1.8.0）
+> 最近更新：2026-10-01（v1.8.0）
 
 ## 方案与设计（本目录）
 
@@ -13,7 +13,9 @@
 | `agent-listen-strategy-plan.md` | Agent 默认监听策略：回环监听、SSH 隧道优先、HTTPS pin 可选与自动迁移方案 | 阶段 1-4 已实施（v1.4.0）；2.0.0 兼容清理待后续 |
 | `cloudflared-integration-plan.md` | Cloudflare Tunnel（cloudflared）与 Fonu 的融合方案：托管模型、复用面、分阶段落地与 v2 优化 | 阶段 1-2 已实施（v1.6.0）；后续按 `cloudflared-fonu-fit-plan.md` 推进 |
 | `cloudflared-feature-plan.md` | Cloudflare 隧道功能全集：官方最新文档、参考项目功能、Fonu 现状差距与 P0-P3 路线 | 查漏用；实施以 `cloudflared-fonu-fit-plan.md` 为准 |
-| `cloudflared-fonu-fit-plan.md` | Cloudflare 隧道 Fonu 适配版计划：出口抽象、规则同源、体系整合、明确不做项与阶段实施 | 待实施（阶段 1 优先） |
+| `cloudflared-fonu-fit-plan.md` | Cloudflare 隧道 Fonu 适配版计划：出口抽象、规则同源、体系整合、明确不做项与阶段实施 | 阶段 1-3 主体已实施；剩余项见 `cloudflared-current-features.md` |
+| `cloudflared-current-features.md` | Cloudflare 隧道当前已实现功能说明：页面、出口、路由、DNS、监控、备份、诊断、API 与限制 | 当前版本功能基线 |
+| `cloudflared-github-ux-research.md` | GitHub 同类项目调研：Cloudflare 管理面板、反向代理、访问平台、监控与流量检查器的可借鉴体验 | 调研与优化路线 |
 | `project-audit-2026-09-24.md` | 全项目审查：P0/P1/P2 分级，含精确行号与逐条修法 | **进行中**——P0 已随 v1.2.7 完成，P1 实施中 |
 | `frp-server-list-merge-plan.md` | FRP 服务端列表并入「公网服务端」页（方案 A，四步） | 步 1/2 已完成（v1.2.6）；步 3 文案收尾、步 4 死样式清理未做 |
 | `agent-capability-plan.md` | fonu-agent 能力扩展（P0/P1/P2/P3） | 已实施（agent 0.11.0）；P3 三项不做 |

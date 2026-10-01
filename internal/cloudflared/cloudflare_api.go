@@ -144,6 +144,19 @@ func (a *CloudflareAPI) PutIngress(ctx context.Context, tunnelID string, ingress
 	}, nil)
 }
 
+// GetIngress 读取云端隧道的 ingress 配置。
+func (a *CloudflareAPI) GetIngress(ctx context.Context, tunnelID string) ([]IngressRule, error) {
+	var result struct {
+		Config struct {
+			Ingress []IngressRule `json:"ingress"`
+		} `json:"config"`
+	}
+	if err := a.do(ctx, http.MethodGet, "/accounts/"+a.AccountID+"/cfd_tunnel/"+tunnelID+"/configurations", nil, &result); err != nil {
+		return nil, err
+	}
+	return result.Config.Ingress, nil
+}
+
 // DeleteTunnel 删除云端隧道。
 func (a *CloudflareAPI) DeleteTunnel(ctx context.Context, tunnelID string) error {
 	return a.do(ctx, http.MethodDelete, "/accounts/"+a.AccountID+"/cfd_tunnel/"+tunnelID+"?cascade=true", nil, nil)
@@ -153,6 +166,15 @@ func (a *CloudflareAPI) DeleteTunnel(ctx context.Context, tunnelID string) error
 type Zone struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+// ListZones 返回当前 API Token 可访问的 Zone。
+func (a *CloudflareAPI) ListZones(ctx context.Context) ([]Zone, error) {
+	var zones []Zone
+	if err := a.do(ctx, http.MethodGet, "/zones?per_page=50", nil, &zones); err != nil {
+		return nil, err
+	}
+	return zones, nil
 }
 
 // FindZone 从 hostname 逐级向上查找所属 Zone。
@@ -168,23 +190,66 @@ func (a *CloudflareAPI) FindZone(ctx context.Context, hostname string) (string, 
 			return zones[0].ID, zones[0].Name, nil
 		}
 	}
-	return "", "", fmt.Errorf("未找到 %s 对应的 Cloudflare Zone；请确认 API Token 具备 Zone:Read 权限", hostname)
+	return "", "", fmt.Errorf("未找到 %s 对应的 Cloudflare Zone；请确认该域名的根域名已加入当前 Account ID，且 API Token 的 Zone Resources 包含它，并具备 Zone:Read 权限", hostname)
 }
 
-// EnsureCNAME 幂等创建或更新指向隧道的 CNAME 记录，并开启代理（橙云）。
-func (a *CloudflareAPI) EnsureCNAME(ctx context.Context, zoneID, hostname, target string) error {
+// EnsureCNAME 幂等创建指向隧道的 CNAME 记录，并开启代理（橙云）。
+// 已存在且目标一致的记录会被接管；指向其他目标的记录不会被覆盖。
+func (a *CloudflareAPI) EnsureCNAME(ctx context.Context, zoneID, hostname, target string) (string, error) {
 	var records []struct {
-		ID string `json:"id"`
+		ID      string `json:"id"`
+		Content string `json:"content"`
 	}
 	path := "/zones/" + zoneID + "/dns_records?type=CNAME&name=" + url.QueryEscape(hostname)
 	if err := a.do(ctx, http.MethodGet, path, nil, &records); err != nil {
-		return err
+		return "", err
 	}
 	payload := map[string]any{
 		"type": "CNAME", "name": hostname, "content": target, "proxied": true, "ttl": 1,
 	}
 	if len(records) > 0 {
-		return a.do(ctx, http.MethodPut, "/zones/"+zoneID+"/dns_records/"+records[0].ID, payload, nil)
+		if !strings.EqualFold(strings.TrimSpace(records[0].Content), strings.TrimSpace(target)) {
+			return "", fmt.Errorf("DNS 记录 %s 已指向其他目标，未自动覆盖", hostname)
+		}
+		if err := a.do(ctx, http.MethodPut, "/zones/"+zoneID+"/dns_records/"+records[0].ID, payload, nil); err != nil {
+			return "", err
+		}
+		return records[0].ID, nil
 	}
-	return a.do(ctx, http.MethodPost, "/zones/"+zoneID+"/dns_records", payload, nil)
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := a.do(ctx, http.MethodPost, "/zones/"+zoneID+"/dns_records", payload, &created); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(created.ID) == "" {
+		return "", fmt.Errorf("Cloudflare 未返回 DNS 记录 ID")
+	}
+	return created.ID, nil
+}
+
+// DeleteDNSRecord 删除一条明确由 Fonu 接管的 DNS 记录。
+func (a *CloudflareAPI) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error {
+	return a.do(ctx, http.MethodDelete, "/zones/"+zoneID+"/dns_records/"+recordID, nil, nil)
+}
+
+type accessApp struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Domain string `json:"domain"`
+}
+
+// HasAccessForHostname 只读检测域名是否已有 Access 应用；Token 无权限时返回错误，不修改任何配置。
+func (a *CloudflareAPI) HasAccessForHostname(ctx context.Context, hostname string) (bool, string, error) {
+	var apps []accessApp
+	if err := a.do(ctx, http.MethodGet, "/accounts/"+a.AccountID+"/access/apps?per_page=100", nil, &apps); err != nil {
+		return false, "", err
+	}
+	wanted := strings.ToLower(strings.TrimSpace(hostname))
+	for _, app := range apps {
+		if strings.EqualFold(strings.TrimSpace(app.Domain), wanted) {
+			return true, app.Name, nil
+		}
+	}
+	return false, "", nil
 }

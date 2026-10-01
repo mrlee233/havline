@@ -102,6 +102,9 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Tunnel, error) {
 		origin = defaultOriginService
 	}
 	ingress := BuildIngress(in.Hostnames, origin)
+	if in.Managed {
+		ingress = BuildIngress(nil, origin)
+	}
 	if err := fsutil.WriteFileAtomic(credsPath, []byte(CredentialsJSON(accountTag, decodedID, tunnelSecret)), 0o600); err != nil {
 		_ = api.DeleteTunnel(ctx, tunnelID)
 		return Tunnel{}, err
@@ -120,8 +123,15 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (Tunnel, error) {
 		_ = api.DeleteTunnel(ctx, tunnelID)
 		return Tunnel{}, err
 	}
+	if tunnel.Managed {
+		if err := s.syncManagedTunnel(ctx, tunnel); err != nil {
+			s.logger.Warn("创建托管隧道后同步规则失败", "tunnel_id", decodedID, "error", err.Error())
+			tunnel.DNSWarning = "隧道已创建，但规则或 DNS 同步失败：" + err.Error()
+		}
+		return tunnel, nil
+	}
 	_ = api.PutIngress(ctx, decodedID, ingress)
-	if err := s.ensureTunnelDNS(ctx, api, decodedID, in.Hostnames); err != nil {
+	if err := s.syncTunnelDNS(ctx, api, tunnel.ID, decodedID, in.Hostnames); err != nil {
 		s.logger.Warn("自动创建 Cloudflare DNS 失败", "tunnel_id", decodedID, "error", err.Error())
 		tunnel.DNSWarning = "隧道已创建，但 DNS 记录未自动创建：" + err.Error()
 	}
@@ -134,6 +144,11 @@ func (s *Service) Update(ctx context.Context, id int64, in CreateInput) (Tunnel,
 	if err != nil {
 		return Tunnel{}, err
 	}
+	if current.Managed && !in.Managed {
+		if count := s.tunnelUsageCount(ctx, id); count > 0 {
+			return Tunnel{}, fmt.Errorf("仍有 %d 条反向代理规则使用该托管隧道，请先移除 Cloudflare 出口", count)
+		}
+	}
 	_ = s.manager.Stop(id)
 	in.Network = s.applyDefaultNetwork(ctx, in.Network)
 	origin := strings.TrimSpace(in.OriginService)
@@ -141,23 +156,30 @@ func (s *Service) Update(ctx context.Context, id int64, in CreateInput) (Tunnel,
 		origin = defaultOriginService
 	}
 	ingress := BuildIngress(in.Hostnames, origin)
+	if in.Managed {
+		ingress = BuildIngress(nil, origin)
+	}
 	if err := fsutil.WriteFileAtomic(current.ConfigPath, []byte(BuildConfig(current.TunnelID, current.CredsPath, in.Network, ingress)), 0o640); err != nil {
 		return Tunnel{}, err
-	}
-	dnsWarning := ""
-	if current.Mode == ModeAccountLocal && current.TunnelID != "" {
-		if api, err := s.cloudflareAPI(ctx); err == nil {
-			_ = api.PutIngress(ctx, current.TunnelID, ingress)
-			if err := s.ensureTunnelDNS(ctx, api, current.TunnelID, in.Hostnames); err != nil {
-				s.logger.Warn("同步 Cloudflare DNS 失败", "tunnel_id", current.TunnelID, "error", err.Error())
-				dnsWarning = "DNS 记录同步失败：" + err.Error()
-			}
-		}
 	}
 	updated, err := s.store.Update(ctx, id, in, current.TunnelID, current.AccountTag, current.CredentialsEnc, current.CertPEMEnc,
 		current.ConfigPath, current.CredsPath, current.LogPath)
 	if err != nil {
 		return Tunnel{}, err
+	}
+	dnsWarning := ""
+	if updated.Managed {
+		if err := s.syncManagedTunnel(ctx, updated); err != nil {
+			dnsWarning = "托管隧道已保存，但规则或 DNS 同步失败：" + err.Error()
+		}
+	} else if updated.Mode == ModeAccountLocal && updated.TunnelID != "" {
+		if api, err := s.cloudflareAPI(ctx); err == nil {
+			_ = api.PutIngress(ctx, updated.TunnelID, ingress)
+			if err := s.syncTunnelDNS(ctx, api, updated.ID, updated.TunnelID, in.Hostnames); err != nil {
+				s.logger.Warn("同步 Cloudflare DNS 失败", "tunnel_id", updated.TunnelID, "error", err.Error())
+				dnsWarning = "DNS 记录同步失败：" + err.Error()
+			}
+		}
 	}
 	updated.DNSWarning = dnsWarning
 	return updated, nil
@@ -168,9 +190,13 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
+	if count := s.tunnelUsageCount(ctx, id); count > 0 {
+		return fmt.Errorf("仍有 %d 条反向代理规则使用该隧道，请先移除这些规则的 Cloudflare 出口", count)
+	}
 	_ = s.manager.Stop(id)
 	if current.TunnelID != "" {
 		if api, err := s.cloudflareAPI(ctx); err == nil {
+			s.deleteTunnelDNS(ctx, api, current.ID)
 			_ = api.DeleteTunnel(ctx, current.TunnelID)
 		}
 	}
@@ -178,6 +204,23 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 		_ = os.RemoveAll(dir)
 	}
 	return s.store.Delete(ctx, id)
+}
+
+func (s *Service) tunnelUsageCount(ctx context.Context, id int64) int {
+	if s.rules == nil {
+		return 0
+	}
+	rules, err := s.rules.List(ctx)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, rule := range rules {
+		if rule.UsesExit(proxy.ExitCloudflare) && rule.CFTunnelID == id {
+			count++
+		}
+	}
+	return count
 }
 
 func (s *Service) Start(ctx context.Context, id int64) (Tunnel, error) {
@@ -221,6 +264,40 @@ func (s *Service) Stop(ctx context.Context, id int64) (Tunnel, error) {
 func (s *Service) Restart(ctx context.Context, id int64) (Tunnel, error) {
 	_, _ = s.Stop(ctx, id)
 	return s.Start(ctx, id)
+}
+
+// RefreshCredentials 重新从 Cloudflare 获取隧道凭据并更新本地 creds.json。
+func (s *Service) RefreshCredentials(ctx context.Context, id int64) (Tunnel, error) {
+	tunnel, err := s.store.Get(ctx, id)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	api, err := s.cloudflareAPI(ctx)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	token, err := api.TunnelToken(ctx, tunnel.TunnelID)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	accountTag, decodedID, tunnelSecret, err := DecodeToken(token)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	if err := fsutil.WriteFileAtomic(tunnel.CredsPath, []byte(CredentialsJSON(accountTag, decodedID, tunnelSecret)), 0o600); err != nil {
+		return Tunnel{}, err
+	}
+	encrypted, err := s.secretBox.Encrypt(token)
+	if err != nil {
+		return Tunnel{}, err
+	}
+	if err := s.store.UpdateCredentials(ctx, id, encrypted); err != nil {
+		return Tunnel{}, err
+	}
+	if s.manager.Status(id).Running {
+		return s.Restart(ctx, id)
+	}
+	return s.Get(ctx, id)
 }
 
 func (s *Service) RuntimeStatus(ctx context.Context, id int64) (RuntimeStatus, error) {
@@ -301,7 +378,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) (AppSettings, er
 		return AppSettings{}, err
 	}
 	if enabled {
-		s.StartAuto(ctx)
+		s.StartAll(ctx)
 	} else {
 		s.StopAll(ctx)
 	}
@@ -353,15 +430,131 @@ func (s *Service) cloudflareAPI(ctx context.Context) (*CloudflareAPI, error) {
 	return NewCloudflareAPI(accountID, token), nil
 }
 
-// ensureTunnelDNS 为所有 hostname 幂等创建或更新指向隧道的 CNAME 记录。
-func (s *Service) ensureTunnelDNS(ctx context.Context, api *CloudflareAPI, tunnelID string, hostnames []string) error {
-	target := tunnelID + ".cfargotunnel.com"
+// SyncRules 让所有托管隧道从反向代理规则重新派生 ingress 与 DNS。
+func (s *Service) SyncRules(ctx context.Context) error {
+	if s.rules == nil {
+		return nil
+	}
+	rules, err := s.rules.List(ctx)
+	if err != nil {
+		return err
+	}
+	tunnels, err := s.store.List(ctx)
+	if err != nil {
+		return err
+	}
 	var firstErr error
-	for _, raw := range hostnames {
-		hostname := strings.ToLower(strings.TrimSpace(raw))
-		if hostname == "" {
+	for _, tunnel := range tunnels {
+		if !tunnel.Managed {
 			continue
 		}
+		assigned := rulesForTunnel(rules, tunnel.ID)
+		dnsRecords, err := s.store.ListDNSRecords(ctx, tunnel.ID)
+		if err != nil && firstErr == nil {
+			firstErr = err
+			continue
+		}
+		if len(assigned) == 0 && len(dnsRecords) == 0 {
+			continue
+		}
+		if err := s.syncManagedTunnel(ctx, tunnel); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func rulesForTunnel(rules []proxy.Rule, tunnelID int64) []proxy.Rule {
+	out := make([]proxy.Rule, 0)
+	for _, rule := range rules {
+		if !rule.CloudflareEnabled() || rule.CFTunnelID != tunnelID {
+			continue
+		}
+		out = append(out, rule)
+	}
+	return out
+}
+
+func (s *Service) syncManagedTunnel(ctx context.Context, tunnel Tunnel) error {
+	if !tunnel.Managed {
+		return nil
+	}
+	if s.rules == nil {
+		return nil
+	}
+	rules, err := s.rules.List(ctx)
+	if err != nil {
+		return err
+	}
+	assigned := rulesForTunnel(rules, tunnel.ID)
+	ingress := BuildIngressForRules(assigned)
+	content := BuildConfig(tunnel.TunnelID, tunnel.CredsPath, tunnel.Network, ingress)
+	if err := fsutil.WriteFileAtomic(tunnel.ConfigPath, []byte(content), 0o640); err != nil {
+		return err
+	}
+	api, err := s.cloudflareAPI(ctx)
+	if err != nil {
+		return err
+	}
+	if err := api.PutIngress(ctx, tunnel.TunnelID, ingress); err != nil {
+		return err
+	}
+	if err := s.syncTunnelDNS(ctx, api, tunnel.ID, tunnel.TunnelID, hostnamesFromIngress(ingress)); err != nil {
+		return err
+	}
+	return s.restartIfRunning(ctx, tunnel.ID)
+}
+
+func hostnamesFromIngress(ingress []IngressRule) []string {
+	out := make([]string, 0, len(ingress))
+	for _, item := range ingress {
+		if strings.TrimSpace(item.Hostname) != "" {
+			out = append(out, item.Hostname)
+		}
+	}
+	return out
+}
+
+func (s *Service) restartIfRunning(ctx context.Context, id int64) error {
+	if !s.manager.Status(id).Running {
+		return nil
+	}
+	if _, err := s.Restart(ctx, id); err != nil {
+		return fmt.Errorf("配置已同步，但隧道重启失败：%w", err)
+	}
+	return nil
+}
+
+// syncTunnelDNS 让 Cloudflare DNS 与目标 hostname 保持一致，并只清理 Fonu 自己接管的记录。
+func (s *Service) syncTunnelDNS(ctx context.Context, api *CloudflareAPI, localTunnelID int64, remoteTunnelID string, hostnames []string) error {
+	desired := make(map[string]struct{}, len(hostnames))
+	for _, raw := range hostnames {
+		hostname := strings.ToLower(strings.TrimSpace(raw))
+		if hostname != "" {
+			desired[hostname] = struct{}{}
+		}
+	}
+	records, err := s.store.ListDNSRecords(ctx, localTunnelID)
+	if err != nil {
+		return err
+	}
+	var firstErr error
+	for _, record := range records {
+		if _, ok := desired[record.Hostname]; ok {
+			continue
+		}
+		if err := api.DeleteDNSRecord(ctx, record.ZoneID, record.RecordID); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if err := s.store.DeleteDNSRecord(ctx, record.ID); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	target := remoteTunnelID + ".cfargotunnel.com"
+	for hostname := range desired {
 		zoneID, _, err := api.FindZone(ctx, hostname)
 		if err != nil {
 			if firstErr == nil {
@@ -369,11 +562,69 @@ func (s *Service) ensureTunnelDNS(ctx context.Context, api *CloudflareAPI, tunne
 			}
 			continue
 		}
-		if err := api.EnsureCNAME(ctx, zoneID, hostname, target); err != nil && firstErr == nil {
+		recordID, err := api.EnsureCNAME(ctx, zoneID, hostname, target)
+		if err != nil {
+			if transferredID, transferErr := s.transferTrackedDNS(ctx, api, localTunnelID, zoneID, hostname, target); transferErr == nil {
+				recordID = transferredID
+				err = nil
+			}
+		}
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if strings.TrimSpace(recordID) == "" {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("Cloudflare 未返回 %s 的 DNS 记录 ID", hostname)
+			}
+			continue
+		}
+		if err := s.store.UpsertDNSRecord(ctx, localTunnelID, zoneID, recordID, hostname); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
 	return firstErr
+}
+
+func (s *Service) transferTrackedDNS(ctx context.Context, api *CloudflareAPI, localTunnelID int64, zoneID, hostname, target string) (string, error) {
+	record, err := s.store.FindDNSRecord(ctx, hostname)
+	if err != nil {
+		return "", err
+	}
+	if record.TunnelID == localTunnelID {
+		if err := api.DeleteDNSRecord(ctx, record.ZoneID, record.RecordID); err != nil {
+			return "", err
+		}
+		if err := s.store.DeleteDNSRecord(ctx, record.ID); err != nil {
+			return "", err
+		}
+		return api.EnsureCNAME(ctx, zoneID, hostname, target)
+	}
+	if err := api.DeleteDNSRecord(ctx, record.ZoneID, record.RecordID); err != nil {
+		return "", err
+	}
+	if err := s.store.DeleteDNSRecord(ctx, record.ID); err != nil {
+		return "", err
+	}
+	return api.EnsureCNAME(ctx, zoneID, hostname, target)
+}
+
+func (s *Service) deleteTunnelDNS(ctx context.Context, api *CloudflareAPI, localTunnelID int64) {
+	records, err := s.store.ListDNSRecords(ctx, localTunnelID)
+	if err != nil {
+		s.logger.Warn("读取 Cloudflare DNS 记录失败", "tunnel_id", localTunnelID, "error", err.Error())
+		return
+	}
+	for _, record := range records {
+		if err := api.DeleteDNSRecord(ctx, record.ZoneID, record.RecordID); err != nil {
+			s.logger.Warn("删除 Cloudflare DNS 记录失败", "hostname", record.Hostname, "error", err.Error())
+			continue
+		}
+		_ = s.store.DeleteDNSRecord(ctx, record.ID)
+	}
+	_ = s.store.DeleteDNSRecordsForTunnel(ctx, localTunnelID)
 }
 
 // VerifyAPIToken 用 Account ID + API Token 调用 Cloudflare 账号级 tokens/verify 接口。
@@ -406,6 +657,28 @@ func (s *Service) VerifyAPIToken(ctx context.Context, accountID, input string) (
 // TestToken 验证 Account ID + API Token 是否可用。
 func (s *Service) TestToken(ctx context.Context, accountID, input, _ string) (string, error) {
 	return s.VerifyAPIToken(ctx, accountID, input)
+}
+
+// Zones 返回当前 API Token 可访问的 Cloudflare Zone。
+func (s *Service) Zones(ctx context.Context) ([]Zone, error) {
+	api, err := s.cloudflareAPI(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return api.ListZones(ctx)
+}
+
+// AccessStatus 只读检测域名是否启用了 Cloudflare Access。
+func (s *Service) AccessStatus(ctx context.Context, hostname string) (bool, string, error) {
+	hostname = strings.ToLower(strings.TrimSpace(hostname))
+	if hostname == "" {
+		return false, "", fmt.Errorf("域名为空")
+	}
+	api, err := s.cloudflareAPI(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	return api.HasAccessForHostname(ctx, hostname)
 }
 
 // attachConfig 从 config.yml 回填域名与回源 service，供编辑弹窗使用。
@@ -504,6 +777,28 @@ func (s *Service) StartAuto(ctx context.Context) {
 	}
 }
 
+// StartAll 启动全部隧道；用于全局总开关重新开启时立即恢复所有出口。
+func (s *Service) StartAll(ctx context.Context) {
+	settings, err := s.store.GetSettingsRaw(ctx)
+	if err != nil {
+		s.logger.Warn("读取 Cloudflare 配置失败", "error", err.Error())
+		return
+	}
+	if !settings.Enabled {
+		return
+	}
+	tunnels, err := s.store.List(ctx)
+	if err != nil {
+		s.logger.Warn("读取 Cloudflare 隧道失败", "error", err.Error())
+		return
+	}
+	for _, tunnel := range tunnels {
+		if _, err := s.Start(ctx, tunnel.ID); err != nil {
+			s.logger.Warn("启动 Cloudflare 隧道失败", "tunnel_id", tunnel.ID, "error", err.Error())
+		}
+	}
+}
+
 func (s *Service) tunnelDir(name string) string {
 	safe := strings.Map(func(r rune) rune {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
@@ -522,6 +817,12 @@ func validateInput(in CreateInput) error {
 	case ModeAccountLocal, ModeTokenLocal, ModeTokenRemote:
 	default:
 		return fmt.Errorf("不支持的隧道模式: %s", in.Mode)
+	}
+	if !in.Managed && len(in.Hostnames) == 0 {
+		return fmt.Errorf("手动隧道至少需要一个暴露域名")
+	}
+	if in.Managed && in.Mode != ModeAccountLocal {
+		return fmt.Errorf("仅 API 管理隧道支持自动托管")
 	}
 	return nil
 }

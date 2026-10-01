@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"net"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fonu/fonu/internal/cloudflared"
 	"github.com/fonu/fonu/internal/frp"
 	"github.com/fonu/fonu/internal/notify"
 	"github.com/fonu/fonu/internal/settings"
@@ -26,25 +28,37 @@ const (
 // 刻意只暴露域名与可用率：不带内网地址、端口、证书路径、服务端地址——
 // 状态页是要挂到公网上的东西，泄露拓扑就等于把内网结构摊开给别人看。
 type StatusPageHandler struct {
-	settings *settings.Store
-	frp      *frp.Service
-	limiter  *statusPageLimiter
+	settings   *settings.Store
+	frp        *frp.Service
+	cloudflare *cloudflared.Service
+	limiter    *statusPageLimiter
 }
 
-func NewStatusPageHandler(settingsStore *settings.Store, frpSvc *frp.Service) *StatusPageHandler {
+func NewStatusPageHandler(settingsStore *settings.Store, frpSvc *frp.Service, cloudflareSvc *cloudflared.Service) *StatusPageHandler {
 	return &StatusPageHandler{
-		settings: settingsStore,
-		frp:      frpSvc,
-		limiter:  newStatusPageLimiter(),
+		settings:   settingsStore,
+		frp:        frpSvc,
+		cloudflare: cloudflareSvc,
+		limiter:    newStatusPageLimiter(),
 	}
 }
 
 type statusPageRoute struct {
-	Domain         string  `json:"domain"`
-	State          string  `json:"state"`
-	Uptime         float64 `json:"uptime_pct"`
-	DownMinutes    int     `json:"down_minutes"`
-	UnknownMinutes int     `json:"unknown_minutes"`
+	Domain         string               `json:"domain"`
+	State          string               `json:"state"`
+	Source         string               `json:"source,omitempty"`
+	Uptime         float64              `json:"uptime_pct"`
+	DownMinutes    int                  `json:"down_minutes"`
+	UnknownMinutes int                  `json:"unknown_minutes"`
+	Incidents      []statusPageIncident `json:"incidents"`
+}
+
+type statusPageIncident struct {
+	From    string `json:"from"`
+	To      string `json:"to,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Detail  string `json:"detail,omitempty"`
+	Minutes int    `json:"minutes"`
 }
 
 type statusPagePayload struct {
@@ -70,7 +84,7 @@ func (h *StatusPageHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	enabled, _ := h.settings.GetBool(r.Context(), settings.KeyStatusPageEnabled)
-	if !enabled || h.frp == nil {
+	if !enabled || (h.frp == nil && h.cloudflare == nil) {
 		writeError(r, w, http.StatusNotFound, "状态页未开启")
 		return
 	}
@@ -84,17 +98,30 @@ func (h *StatusPageHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	stats, err := h.frp.RouteUptime(r.Context(), 24*time.Hour)
-	if err != nil {
-		writeError(r, w, http.StatusInternalServerError, "读取状态失败", err)
-		return
-	}
-
 	payload := statusPagePayload{
 		Title:        "Fonu 服务状态",
 		CodeRequired: codeRequired,
 		CheckedAt:    time.Now().UTC().Format(time.RFC3339),
-		Routes:       make([]statusPageRoute, 0, len(stats)),
+		Routes:       make([]statusPageRoute, 0),
+	}
+	if err := appendFRPStatus(&payload, h.frp, r.Context()); err != nil {
+		writeError(r, w, http.StatusInternalServerError, "读取状态失败", err)
+		return
+	}
+	if err := appendCloudflareStatus(&payload, h.cloudflare, r.Context()); err != nil {
+		writeError(r, w, http.StatusInternalServerError, "读取状态失败", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func appendFRPStatus(payload *statusPagePayload, svc *frp.Service, ctx context.Context) error {
+	if svc == nil {
+		return nil
+	}
+	stats, err := svc.RouteUptime(ctx, 24*time.Hour)
+	if err != nil {
+		return err
 	}
 	for _, stat := range stats {
 		switch stat.State {
@@ -108,12 +135,64 @@ func (h *StatusPageHandler) Get(w http.ResponseWriter, r *http.Request) {
 		payload.Routes = append(payload.Routes, statusPageRoute{
 			Domain:         stat.Domain,
 			State:          stat.State,
+			Source:         "frp",
 			Uptime:         stat.Uptime,
 			DownMinutes:    stat.DownMinutes,
 			UnknownMinutes: stat.UnknownMinutes,
+			Incidents:      mapFRPIncidents(stat.Incidents),
 		})
 	}
-	writeJSON(w, http.StatusOK, payload)
+	return nil
+}
+
+func appendCloudflareStatus(payload *statusPagePayload, svc *cloudflared.Service, ctx context.Context) error {
+	if svc == nil {
+		return nil
+	}
+	stats, err := svc.HealthUptime(ctx, 24*time.Hour)
+	if err != nil {
+		return err
+	}
+	for _, stat := range stats {
+		switch stat.State {
+		case cloudflared.HealthUp:
+			payload.Up++
+		case cloudflared.HealthDown:
+			payload.Down++
+		default:
+			payload.Unknown++
+		}
+		payload.Routes = append(payload.Routes, statusPageRoute{
+			Domain:         stat.Domain,
+			State:          stat.State,
+			Source:         "cloudflare",
+			Uptime:         stat.Uptime,
+			DownMinutes:    stat.DownMinutes,
+			UnknownMinutes: stat.UnknownMinutes,
+			Incidents:      mapCloudflareIncidents(stat.Incidents),
+		})
+	}
+	return nil
+}
+
+func mapFRPIncidents(items []frp.RouteHealthIncident) []statusPageIncident {
+	out := make([]statusPageIncident, 0, len(items))
+	for _, item := range items {
+		out = append(out, statusPageIncident{
+			From: item.From, To: item.To, Reason: item.Reason, Detail: item.Detail, Minutes: item.Minutes,
+		})
+	}
+	return out
+}
+
+func mapCloudflareIncidents(items []cloudflared.HealthIncident) []statusPageIncident {
+	out := make([]statusPageIncident, 0, len(items))
+	for _, item := range items {
+		out = append(out, statusPageIncident{
+			From: item.From, To: item.To, Reason: item.Reason, Detail: item.Detail, Minutes: item.Minutes,
+		})
+	}
+	return out
 }
 
 func hashStatusPageCode(code string) string {

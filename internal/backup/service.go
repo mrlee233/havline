@@ -59,7 +59,7 @@ func (s *Service) writeArchive(ctx context.Context, file *os.File, outPath strin
 
 	gw := gzip.NewWriter(file)
 	tw := tar.NewWriter(gw)
-	for _, entry := range []string{"fonu.db", "certs", "nginx"} {
+	for _, entry := range []string{"fonu.db", "certs", "nginx", "cloudflared/tunnels"} {
 		if err := addToArchive(ctx, tw, s.dataDir, entry); err != nil {
 			discard()
 			return err

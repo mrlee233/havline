@@ -41,6 +41,13 @@ func TestParseMetricsHTTP2(t *testing.T) {
 	}
 }
 
+func TestMetricsPortPatternCaseInsensitive(t *testing.T) {
+	match := metricsPortPattern.FindStringSubmatch("2026-09-30T18:00:00Z INF Starting metrics server on 127.0.0.1:20241/metrics")
+	if len(match) != 2 || match[1] != "20241" {
+		t.Fatalf("应识别大写 Starting 的 metrics 端口：%#v", match)
+	}
+}
+
 func TestBuildEnvDisablesProxy(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://127.0.0.1:8080")
 	env := buildEnv(NetworkSettings{ProxyMode: "disabled"})

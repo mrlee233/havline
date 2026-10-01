@@ -287,7 +287,7 @@ func (s *ProxyService) RollbackGlobalNginx(ctx context.Context, backupName strin
 }
 
 func (s *ProxyService) validateRuleNginxPending(ctx context.Context, rule proxy.Rule, content string) error {
-	rules, err := s.store.ListEnabled(ctx)
+	rules, err := s.store.ListEnabledLocal(ctx)
 	if err != nil {
 		return err
 	}
@@ -315,7 +315,7 @@ func (s *ProxyService) validateRuleNginxPending(ctx context.Context, rule proxy.
 }
 
 func (s *ProxyService) validateGlobalNginxPending(ctx context.Context, content string) error {
-	rules, err := s.store.ListEnabled(ctx)
+	rules, err := s.store.ListEnabledLocal(ctx)
 	if err != nil {
 		return err
 	}

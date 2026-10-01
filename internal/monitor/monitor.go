@@ -57,6 +57,38 @@ type HealthRecorder interface {
 	PruneRouteHealth(ctx context.Context) error
 }
 
+// CloudflareRouteStatus 是 Cloudflare 隧道域名的巡检快照。
+type CloudflareRouteStatus struct {
+	TunnelID int64
+	Name     string
+	Domain   string
+	State    string
+	Reason   string
+	Detail   string
+	Known    bool
+}
+
+// CloudflareHealthSample 是 Cloudflare 隧道的状态变更样本。
+type CloudflareHealthSample struct {
+	TunnelID int64
+	Name     string
+	Domain   string
+	State    string
+	Reason   string
+	Detail   string
+}
+
+// CloudflareHealthSource 提供 Cloudflare 隧道健康快照。
+type CloudflareHealthSource interface {
+	CloudflareRoutes(ctx context.Context) ([]CloudflareRouteStatus, error)
+}
+
+// CloudflareHealthRecorder 持久化 Cloudflare 隧道健康状态。
+type CloudflareHealthRecorder interface {
+	RecordCloudflareHealth(ctx context.Context, samples []CloudflareHealthSample) error
+	PruneCloudflareHealth(ctx context.Context) error
+}
+
 // ServerStatus 是巡检关心的公网服务端状态：只有 DesiredState 表示「用户要它运行」时才判定掉线。
 type ServerStatus struct {
 	ID              int64
@@ -113,14 +145,15 @@ type Checker struct {
 	health   HealthRecorder
 	metrics  MetricsRecorder
 
-	mu               sync.Mutex
-	cpuPrev          sysinfo.CPUSample
-	resourceAlerts   map[string]time.Time
-	failures         map[string]int
-	driftAlerted     map[int64]bool
-	driftNotified    map[int64]time.Time
-	lastHealthPrune  time.Time
-	lastMetricsPrune time.Time
+	mu                sync.Mutex
+	cpuPrev           sysinfo.CPUSample
+	resourceAlerts    map[string]time.Time
+	failures          map[string]int
+	driftAlerted      map[int64]bool
+	driftNotified     map[int64]time.Time
+	lastHealthPrune   time.Time
+	lastCFHealthPrune time.Time
+	lastMetricsPrune  time.Time
 }
 
 func New(settingsStore *settings.Store, notifySvc *notify.Service, logger *slog.Logger, source Source, health HealthRecorder, metricsRecorder MetricsRecorder) *Checker {
@@ -151,6 +184,7 @@ func (c *Checker) Run(ctx context.Context) {
 	c.checkServers(ctx)
 	c.checkAgents(ctx)
 	c.checkDrift(ctx)
+	c.checkCloudflare(ctx)
 }
 
 // runHostChecks 一次采样同时喂给「资源阈值告警」与「指标历史」。
@@ -340,6 +374,84 @@ func (c *Checker) checkRoutes(ctx context.Context) {
 			c.notify.Alert(ctx, notify.EventTunnelDown, "隧道已恢复",
 				fmt.Sprintf("%s 已重新在 frps 上注册", route.Domain))
 		}
+	}
+}
+
+// checkCloudflare 把 Cloudflare 隧道纳入现有巡检、通知与健康记录。
+func (c *Checker) checkCloudflare(ctx context.Context) {
+	source, ok := c.source.(CloudflareHealthSource)
+	if !ok {
+		return
+	}
+	recordHealth, _ := c.settings.GetBool(ctx, settings.KeyRouteHealthEnabled)
+	recorder, canRecord := c.source.(CloudflareHealthRecorder)
+	if !canRecord {
+		recordHealth = false
+	}
+	alertEnabled, _ := c.settings.GetBool(ctx, settings.KeyNotifyOnTunnelDown)
+	if !recordHealth && !alertEnabled {
+		return
+	}
+	routes, err := source.CloudflareRoutes(ctx)
+	if err != nil {
+		c.logger.Warn("巡检 Cloudflare 隧道状态失败", "module", "MONITOR", "error", err.Error())
+		return
+	}
+	if recordHealth {
+		samples := make([]CloudflareHealthSample, 0, len(routes))
+		for _, route := range routes {
+			if strings.TrimSpace(route.Domain) == "" {
+				continue
+			}
+			samples = append(samples, CloudflareHealthSample{
+				TunnelID: route.TunnelID,
+				Name:     route.Name,
+				Domain:   route.Domain,
+				State:    route.State,
+				Reason:   route.Reason,
+				Detail:   route.Detail,
+			})
+		}
+		if err := recorder.RecordCloudflareHealth(ctx, samples); err != nil {
+			c.logger.Warn("记录 Cloudflare 隧道健康失败", "module", "MONITOR", "error", err.Error())
+		}
+		c.pruneCloudflareHealthIfDue(ctx, recorder)
+	}
+	if !alertEnabled {
+		return
+	}
+	limit, _ := c.settings.GetInt(ctx, settings.KeyNotifyTunnelFailThreshold)
+	if limit <= 0 {
+		return
+	}
+	for _, route := range routes {
+		if !route.Known || strings.TrimSpace(route.Domain) == "" {
+			continue
+		}
+		_, event := c.track(fmt.Sprintf("cloudflare:%d:%s", route.TunnelID, route.Domain), route.State == HealthUp, limit)
+		switch event {
+		case failureEventDown:
+			c.notify.Alert(ctx, notify.EventTunnelDown, "Cloudflare 隧道连续不通",
+				fmt.Sprintf("%s 连续 %d 次巡检未连接：%s", route.Domain, limit, detailOr(route.Detail)))
+		case failureEventRecovered:
+			c.notify.Alert(ctx, notify.EventTunnelDown, "Cloudflare 隧道已恢复",
+				fmt.Sprintf("%s 已重新连接 Cloudflare 边缘", route.Domain))
+		}
+	}
+}
+
+func (c *Checker) pruneCloudflareHealthIfDue(ctx context.Context, recorder CloudflareHealthRecorder) {
+	c.mu.Lock()
+	due := c.lastCFHealthPrune.IsZero() || time.Since(c.lastCFHealthPrune) >= 24*time.Hour
+	if due {
+		c.lastCFHealthPrune = time.Now()
+	}
+	c.mu.Unlock()
+	if !due {
+		return
+	}
+	if err := recorder.PruneCloudflareHealth(ctx); err != nil {
+		c.logger.Warn("清理 Cloudflare 隧道健康记录失败", "module", "MONITOR", "error", err.Error())
 	}
 }
 

@@ -101,7 +101,7 @@ func (s *Service) Update(ctx context.Context) error {
 		return err
 	}
 
-	rules, err := s.proxyStore.ListEnabled(ctx)
+	rules, err := s.proxyStore.ListEnabledLocal(ctx)
 	if err != nil {
 		return err
 	}

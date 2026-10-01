@@ -33,6 +33,7 @@ func DefaultNetworkSettings() NetworkSettings {
 // IngressRule 对应 config.yml 的 ingress 条目。
 type IngressRule struct {
 	Hostname string `json:"hostname,omitempty" yaml:"hostname,omitempty"`
+	Path     string `json:"path,omitempty" yaml:"path,omitempty"`
 	Service  string `json:"service" yaml:"service"`
 }
 
@@ -53,6 +54,7 @@ type Tunnel struct {
 	LastError      string          `json:"last_error"`
 	MetricsPort    int             `json:"metrics_port"`
 	AutoStart      bool            `json:"auto_start"`
+	Managed        bool            `json:"managed"`
 	Hostnames      []string        `json:"hostnames"`
 	OriginService  string          `json:"origin_service"`
 	DNSWarning     string          `json:"dns_warning,omitempty"`
@@ -69,6 +71,7 @@ type CreateInput struct {
 	OriginService string          `json:"origin_service"`
 	Network       NetworkSettings `json:"network"`
 	AutoStart     bool            `json:"auto_start"`
+	Managed       bool            `json:"managed"`
 }
 
 // AppSettings 是模块级配置；默认 token 只回显掩码，不返回明文。

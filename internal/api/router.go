@@ -28,14 +28,14 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		authHandler:       NewAuthHandler(deps.Auth, deps.Notify),
 		proxyHandler:      NewProxyHandler(deps.Config, deps.Proxy, logsHandler, deps.Traffic),
 		nginxHandler:      NewNginxHandler(deps.Proxy),
-		statusHandler:     NewStatusHandler(deps.Config, deps.Proxy, deps.DDNS, deps.ACME, deps.StartedAt, deps.Config.NginxPIDFile),
+		statusHandler:     NewStatusHandler(deps.Config, deps.Proxy, deps.DDNS, deps.ACME, deps.Cloudflare, deps.StartedAt, deps.Config.NginxPIDFile),
 		ddnsHandler:       NewDDNSHandler(deps.DDNS),
 		certHandler:       NewCertHandler(deps.ACME),
 		settingsHandler:   NewSettingsHandler(deps.Settings, deps.Proxy, deps.Notify),
 		chinaCIDRHandler:  NewChinaCIDRHandler(deps.ChinaCIDR),
 		logsHandler:       logsHandler,
 		backupHandler:     NewBackupHandler(deps.Backup, deps.Settings),
-		statusPageHandler: NewStatusPageHandler(deps.Settings, deps.FRPMulti),
+		statusPageHandler: NewStatusPageHandler(deps.Settings, deps.FRPMulti, deps.Cloudflare),
 		metricsHandler:    NewMetricsHandler(deps.Metrics),
 		discoveryHandler:  NewDiscoveryHandler(deps.Discovery),
 		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti, deps.Auth),
@@ -201,16 +201,28 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("POST /api/cloudflare/tunnels/{id}/start", cf.Start)
 		protect("POST /api/cloudflare/tunnels/{id}/stop", cf.Stop)
 		protect("POST /api/cloudflare/tunnels/{id}/restart", cf.Restart)
+		protect("POST /api/cloudflare/tunnels/{id}/credentials/refresh", cf.RefreshCredentials)
 		protect("GET /api/cloudflare/tunnels/{id}/status", cf.Status)
 		protect("GET /api/cloudflare/tunnels/{id}/logs", cf.Logs)
 		protect("GET /api/cloudflare/tunnels/{id}/config", cf.Config)
+		protect("GET /api/cloudflare/tunnels/{id}/routes", cf.Routes)
+		protect("PUT /api/cloudflare/tunnels/{id}/routes", cf.ReplaceRoutes)
+		protect("GET /api/cloudflare/tunnels/{id}/drift", cf.Drift)
+		protect("POST /api/cloudflare/tunnels/{id}/sync", cf.SyncRoutes)
+		protect("GET /api/cloudflare/tunnels/{id}/diagnostics", cf.Diagnostics)
 		protect("GET /api/cloudflare/binary", cf.BinaryInfo)
 		protect("POST /api/cloudflare/binary/download", cf.DownloadBinary)
+		protect("GET /api/cloudflare/binary/latest", cf.LatestBinary)
+		protect("POST /api/cloudflare/binary/rollback", cf.RollbackBinary)
 		protect("GET /api/cloudflare/settings", cf.AppSettings)
 		protect("PUT /api/cloudflare/settings", cf.SaveAppSettings)
 		protect("POST /api/cloudflare/settings/test", cf.TestToken)
 		protect("POST /api/cloudflare/enabled", cf.SetEnabled)
 		protect("GET /api/cloudflare/ingress-candidates", cf.IngressCandidates)
+		protect("GET /api/cloudflare/zones", cf.Zones)
+		protect("GET /api/cloudflare/access-status", cf.AccessStatus)
+		protect("GET /api/cloudflare/preflight", cf.Preflight)
+		protect("POST /api/cloudflare/routes/test", cf.TestRoute)
 	}
 
 	if deps.StaticFS != nil {

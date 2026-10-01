@@ -74,3 +74,29 @@ func TestSetEnabledBlocksStart(t *testing.T) {
 		t.Fatalf("重新启用失败：%v %#v", err, settings)
 	}
 }
+
+func TestManagedTunnelPersists(t *testing.T) {
+	dir := t.TempDir()
+	conn, err := db.Open(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if err := db.Migrate(context.Background(), conn, filepath.Join("..", "..", "migrations")); err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(conn)
+	item, err := store.Create(context.Background(), CreateInput{
+		Name:      "managed",
+		Mode:      ModeAccountLocal,
+		Network:   DefaultNetworkSettings(),
+		Managed:   true,
+		AutoStart: true,
+	}, "remote-tunnel", "account", "encrypted", "", "/tmp/config.yml", "/tmp/creds.json", "/tmp/cloudflared.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !item.Managed || !item.AutoStart || item.TunnelID != "remote-tunnel" {
+		t.Fatalf("托管隧道字段未持久化：%#v", item)
+	}
+}

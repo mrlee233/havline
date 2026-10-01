@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/fonu/fonu/internal/proxy"
 )
 
 type tokenPayload struct {
@@ -86,6 +88,9 @@ func BuildConfig(tunnelID, credsPath string, network NetworkSettings, ingress []
 	for _, rule := range ingress {
 		if rule.Hostname != "" {
 			fmt.Fprintf(&b, "  - hostname: %s\n", rule.Hostname)
+			if path := strings.TrimSpace(rule.Path); path != "" && path != "*" {
+				fmt.Fprintf(&b, "    path: %s\n", path)
+			}
 			fmt.Fprintf(&b, "    service: %s\n", rule.Service)
 			continue
 		}
@@ -140,6 +145,33 @@ func BuildIngress(hostnames []string, service string) []IngressRule {
 	out := make([]IngressRule, 0, len(cleaned)+1)
 	for _, host := range cleaned {
 		out = append(out, IngressRule{Hostname: host, Service: service})
+	}
+	return append(out, IngressRule{Service: "http_status:404"})
+}
+
+// BuildIngressForRules 从反向代理规则派生 ingress，每条域名使用自己的回源地址。
+func BuildIngressForRules(rules []proxy.Rule) []IngressRule {
+	serviceByHost := map[string]string{}
+	for _, rule := range rules {
+		if !rule.CloudflareEnabled() {
+			continue
+		}
+		service := strings.TrimSpace(rule.Upstream)
+		if service == "" {
+			continue
+		}
+		for _, host := range rule.Hostnames() {
+			serviceByHost[host] = service
+		}
+	}
+	hosts := make([]string, 0, len(serviceByHost))
+	for host := range serviceByHost {
+		hosts = append(hosts, host)
+	}
+	sort.Strings(hosts)
+	out := make([]IngressRule, 0, len(hosts)+1)
+	for _, host := range hosts {
+		out = append(out, IngressRule{Hostname: host, Service: serviceByHost[host]})
 	}
 	return append(out, IngressRule{Service: "http_status:404"})
 }

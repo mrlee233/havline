@@ -18,7 +18,7 @@ import (
 	"github.com/fonu/fonu/internal/config"
 )
 
-var metricsPortPattern = regexp.MustCompile(`starting metrics server on 127\.0\.0\.1:(\d+)/metrics`)
+var metricsPortPattern = regexp.MustCompile(`(?i)starting metrics server on 127\.0\.0\.1:(\d+)/metrics`)
 
 type processState struct {
 	cmd         *exec.Cmd

@@ -746,6 +746,15 @@ const healthItems = computed(() => [
     icon: GlobeOutline,
     tone: 'green',
   },
+  {
+    name: 'Cloudflare 隧道',
+    desc: '无公网 IP 的 Cloudflare 出口',
+    meta: status.value?.cloudflare_message || '未创建隧道',
+    status: status.value?.cloudflare_status,
+    label: status.value?.cloudflare_status === 'ok' ? '运行中' : status.value?.cloudflare_status === 'warning' ? '部分在线' : status.value?.cloudflare_status === 'none' ? '未配置' : '需关注',
+    icon: CloudOutline,
+    tone: 'blue',
+  },
 ])
 
 const accessColumns = computed<DataTableColumns<AccessLogEntry>>(() => [

@@ -101,6 +101,10 @@ func (h *CloudflareHandler) Restart(w http.ResponseWriter, r *http.Request) {
 	h.tunnelAction(w, r, h.svc.Restart)
 }
 
+func (h *CloudflareHandler) RefreshCredentials(w http.ResponseWriter, r *http.Request) {
+	h.tunnelAction(w, r, h.svc.RefreshCredentials)
+}
+
 func (h *CloudflareHandler) tunnelAction(w http.ResponseWriter, r *http.Request, fn func(context.Context, int64) (cloudflared.Tunnel, error)) {
 	id, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -156,6 +160,102 @@ func (h *CloudflareHandler) Config(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"content": content})
+}
+
+func (h *CloudflareHandler) Routes(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "隧道 ID 无效")
+		return
+	}
+	routes, err := h.svc.Routes(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, routes)
+}
+
+func (h *CloudflareHandler) ReplaceRoutes(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "隧道 ID 无效")
+		return
+	}
+	var request struct {
+		Routes []cloudflared.RouteInput `json:"routes"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	routes, err := h.svc.ReplaceRoutes(r.Context(), id, request.Routes)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, routes)
+}
+
+func (h *CloudflareHandler) Drift(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "隧道 ID 无效")
+		return
+	}
+	result, err := h.svc.Drift(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CloudflareHandler) SyncRoutes(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "隧道 ID 无效")
+		return
+	}
+	if err := h.svc.PushTunnel(r.Context(), id); err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (h *CloudflareHandler) Diagnostics(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "隧道 ID 无效")
+		return
+	}
+	result, err := h.svc.Diagnostics(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CloudflareHandler) Preflight(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, h.svc.Preflight(r.Context()))
+}
+
+func (h *CloudflareHandler) TestRoute(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Service string `json:"service"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&request); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	result, err := h.svc.TestService(r.Context(), request.Service)
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *CloudflareHandler) BinaryInfo(w http.ResponseWriter, r *http.Request) {
@@ -225,13 +325,32 @@ func (h *CloudflareHandler) SetEnabled(w http.ResponseWriter, r *http.Request) {
 
 func (h *CloudflareHandler) DownloadBinary(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Mirror string `json:"mirror"`
+		Mirror  string `json:"mirror"`
+		Version string `json:"version"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&request); err != nil {
 		writeError(r, w, http.StatusBadRequest, "请求格式无效")
 		return
 	}
-	version, err := h.svc.DownloadBinary(r.Context(), request.Mirror)
+	version, err := h.svc.DownloadBinaryVersion(r.Context(), request.Mirror, request.Version)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": version})
+}
+
+func (h *CloudflareHandler) LatestBinary(w http.ResponseWriter, r *http.Request) {
+	version, err := h.svc.LatestBinaryVersion(r.Context())
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"version": version})
+}
+
+func (h *CloudflareHandler) RollbackBinary(w http.ResponseWriter, r *http.Request) {
+	version, err := h.svc.RollbackBinary()
 	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return
@@ -246,6 +365,25 @@ func (h *CloudflareHandler) IngressCandidates(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"hostnames": hosts})
+}
+
+func (h *CloudflareHandler) Zones(w http.ResponseWriter, r *http.Request) {
+	zones, err := h.svc.Zones(r.Context())
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"zones": zones})
+}
+
+func (h *CloudflareHandler) AccessStatus(w http.ResponseWriter, r *http.Request) {
+	hostname := strings.TrimSpace(r.URL.Query().Get("hostname"))
+	enabled, name, err := h.svc.AccessStatus(r.Context(), hostname)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": enabled, "name": name})
 }
 
 func normalizeCloudflareNetwork(network cloudflared.NetworkSettings) cloudflared.NetworkSettings {

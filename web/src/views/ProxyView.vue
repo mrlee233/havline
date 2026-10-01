@@ -104,7 +104,7 @@
               :data="tableRules"
               :bordered="false"
               size="small"
-              :scroll-x="canReorder ? 1460 : 1420"
+              :scroll-x="canReorder ? 1610 : 1570"
               :row-key="(r: ProxyRule) => r.id"
               :row-props="rowProps"
             />
@@ -129,6 +129,28 @@
       </FonuCard>
     </div>
   </template>
+
+  <n-modal v-model:show="discoveryVisible" preset="card" :style="{ width: 'min(680px, 96vw)' }" title="发现本机服务">
+    <div class="discovery-list">
+      <div v-for="item in discoveryResults" :key="item.platform + item.port" class="discovery-item">
+        <div class="discovery-item__main">
+          <strong>{{ item.name }}</strong>
+          <span class="mono">{{ item.upstream }}</span>
+          <n-tag size="small" :type="item.detected ? 'success' : 'default'" :bordered="false">
+            {{ item.detected ? '检测到服务' : '端口未开放' }}
+          </n-tag>
+        </div>
+        <n-button size="small" type="primary" :disabled="!item.detected" @click="publishDiscovered(item)">
+          发布
+        </n-button>
+      </div>
+    </div>
+    <template #footer>
+      <div class="cf-modal__footer">
+        <n-button @click="discoveryVisible = false">关闭</n-button>
+      </div>
+    </template>
+  </n-modal>
 
   <n-modal v-model:show="showDetailPanel" :mask-closable="true" transform-origin="center">
     <div v-if="selectedRule" class="proxy-detail-modal">
@@ -205,6 +227,10 @@
                     {{ selectedRule.https_enabled ? 'HTTPS' : 'HTTP' }}
                   </n-tag>
                 </span>
+              </div>
+              <div class="overview-strip__item">
+                <span class="overview-strip__label">出口</span>
+                <span class="overview-strip__value">{{ exitLabel(selectedRule) }}</span>
               </div>
             </div>
 
@@ -450,6 +476,33 @@
                 <div class="field-stack">
                   <n-input v-model:value="form.upstream" placeholder="例如：http://192.168.1.100:5173" />
                   <p class="field-hint">支持 http://、https://，也可以是 IP 地址或内网域名</p>
+                </div>
+              </n-form-item>
+
+              <n-form-item label="出口">
+                <div class="field-stack">
+                  <div class="exit-options">
+                    <n-checkbox v-model:checked="form.exit_local">本机 Nginx</n-checkbox>
+                    <n-checkbox v-model:checked="form.exit_cloudflare">Cloudflare 隧道</n-checkbox>
+                  </div>
+                  <p class="field-hint">可多选；关闭本机出口后，该规则只通过 Cloudflare 隧道访问。</p>
+                </div>
+              </n-form-item>
+
+              <n-form-item v-if="form.exit_cloudflare" label="Cloudflare 隧道">
+                <div class="field-stack">
+                  <n-select
+                    v-model:value="form.cf_tunnel_id"
+                    :options="cfTunnelOptions"
+                    placeholder="选择自动托管隧道"
+                  />
+                  <p v-if="cfTunnelOptions.length === 0" class="field-hint field-hint--warning">
+                    还没有自动托管隧道，请先到
+                    <router-link to="/cloudflare">Cloudflare 隧道</router-link>
+                    新建并开启「自动托管」。
+                  </p>
+                  <p class="field-hint">域名的根 Zone 必须已加入当前 Cloudflare 账号，且 API Token 的 Zone Resources 包含该域名。</p>
+                  <p v-if="!form.exit_local" class="field-hint">仅走 Cloudflare 出口时，HTTPS 由 Cloudflare 边缘提供，不需要在 Fonu 申请本机证书。</p>
                 </div>
               </n-form-item>
 
@@ -859,7 +912,7 @@ import {
   WarningOutline,
 } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
-import type { ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
+import type { CfTunnel, DiscoveredService, ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import EmptyState from '../components/EmptyState.vue'
 import FonuCard from '../components/FonuCard.vue'
@@ -876,6 +929,9 @@ import { renderTableRowActions } from '../utils/tableActions'
 const message = useMessage()
 const dialog = useDialog()
 const rules = ref<ProxyRule[]>([])
+const cfTunnels = ref<CfTunnel[]>([])
+const discoveryVisible = ref(false)
+const discoveryResults = ref<DiscoveredService[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const loadError = ref('')
@@ -930,6 +986,15 @@ const httpsOptions = [
   { label: 'HTTP', value: 'off' },
 ]
 
+const cfTunnelOptions = computed(() =>
+  cfTunnels.value
+    .filter((tunnel) => tunnel.managed)
+    .map((tunnel) => ({
+      label: `${tunnel.name}${tunnel.status === 'connected' ? '（已连接）' : ''}`,
+      value: tunnel.id,
+    })),
+)
+
 const defaultSecurityForm = () => ({
   ip_blacklist_text: '',
   ip_blacklist_mode: false,
@@ -960,6 +1025,9 @@ const form = reactive({
   http_redirect: true,
   enabled: true,
   name: '',
+  exit_local: true,
+  exit_cloudflare: false,
+  cf_tunnel_id: null as number | null,
   ...defaultSecurityForm(),
 })
 
@@ -1374,6 +1442,17 @@ function ruleTitle(rule: ProxyRule): string {
   return ruleName(rule)
 }
 
+function ruleExits(rule: ProxyRule): string[] {
+  return rule.exits?.length ? rule.exits : ['local']
+}
+
+function exitLabel(rule: ProxyRule): string {
+  const labels: string[] = []
+  if (ruleExits(rule).includes('local')) labels.push('本机 Nginx')
+  if (ruleExits(rule).includes('cloudflare')) labels.push('Cloudflare')
+  return labels.join(' + ') || '未设置'
+}
+
 function listenLabel(rule: ProxyRule): string {
   const stacks = []
   if (rule.listen_ipv4) stacks.push('IPv4')
@@ -1399,7 +1478,14 @@ function hostAccessUrl(rule: ProxyRule, hostPart: string): string {
 }
 
 function ruleAccessUrls(rule: ProxyRule): string[] {
-  return ruleHosts(rule).map((host) => hostAccessUrl(rule, host))
+  const exits = ruleExits(rule)
+  if (exits.includes('local')) {
+    return ruleHosts(rule).map((host) => hostAccessUrl(rule, host))
+  }
+  if (exits.includes('cloudflare')) {
+    return ruleHosts(rule).map((host) => `https://${host.replace(/:\d+$/, '')}`)
+  }
+  return []
 }
 
 import { copyText } from '../utils/clipboard'
@@ -1548,6 +1634,26 @@ function renderProtocol(row: ProxyRule): VNode {
   return h('div', { class: 'proto-tags' }, tags)
 }
 
+function renderExits(row: ProxyRule): VNode {
+  const exits = ruleExits(row)
+  return h(
+    'div',
+    { class: 'proto-tags' },
+    exits.map((exit) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          type: exit === 'cloudflare' ? 'info' : 'default',
+          bordered: false,
+          round: true,
+        },
+        () => (exit === 'cloudflare' ? 'Cloudflare' : '本机'),
+      ),
+    ),
+  )
+}
+
 function rowProps(row: ProxyRule) {
   return {
     class: showDetailPanel.value && selectedRuleId.value === row.id ? 'proxy-row--active' : '',
@@ -1598,6 +1704,12 @@ const columns = computed<DataTableColumns<ProxyRule>>(() => {
     key: 'https_enabled',
     width: 88,
     render: (row) => renderProtocol(row),
+  },
+  {
+    title: '出口',
+    key: 'exits',
+    width: 150,
+    render: (row) => renderExits(row),
   },
   {
     title: '安全',
@@ -1825,6 +1937,11 @@ async function load() {
   loadError.value = ''
   try {
     rules.value = asList(await api.listProxies())
+    try {
+      cfTunnels.value = asList(await api.listCfTunnels())
+    } catch {
+      cfTunnels.value = []
+    }
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
   } finally {
@@ -1842,7 +1959,17 @@ function resetForm() {
   form.http_redirect = true
   form.enabled = true
   form.name = ''
+  form.exit_local = true
+  form.exit_cloudflare = false
+  form.cf_tunnel_id = null
   Object.assign(form, defaultSecurityForm())
+}
+
+function loadExitsToForm(rule?: ProxyRule | null) {
+  const exits = rule?.exits?.length ? rule.exits : ['local']
+  form.exit_local = exits.includes('local')
+  form.exit_cloudflare = exits.includes('cloudflare')
+  form.cf_tunnel_id = rule?.cf_tunnel_id || null
 }
 
 function loadSecurityToForm(rule?: ProxyRule | null) {
@@ -1923,6 +2050,16 @@ function buildPayload(): ProxySavePayload {
   if (!form.listen_ipv4 && !form.listen_ipv6) {
     throw new Error('至少需要启用 IPv4 或 IPv6 监听')
   }
+  if (!form.exit_local && !form.exit_cloudflare) {
+    throw new Error('至少需要选择一个出口')
+  }
+  if (form.exit_cloudflare && !form.cf_tunnel_id) {
+    throw new Error('请选择 Cloudflare 隧道')
+  }
+  const exits = [
+    ...(form.exit_local ? ['local'] : []),
+    ...(form.exit_cloudflare ? ['cloudflare'] : []),
+  ]
   return {
     upstream: form.upstream,
     listen_port: form.listen_port,
@@ -1934,6 +2071,8 @@ function buildPayload(): ProxySavePayload {
     enabled: form.enabled,
     name: form.name.trim(),
     security: buildSecurityPayload(),
+    exits,
+    cf_tunnel_id: form.exit_cloudflare ? form.cf_tunnel_id! : 0,
   }
 }
 
@@ -1941,20 +2080,26 @@ async function scanServices() {
   scanning.value = true
   try {
     const items = await api.scanDiscovery('127.0.0.1')
-    const found = items.find((i) => i.detected)
-    if (found) {
-      resetForm()
-      form.upstream = found.upstream
-      showModal.value = true
-      message.success(`检测到 ${found.name}，请填写前端域名`)
-    } else {
-      message.info('未检测到常见服务')
-    }
+    discoveryResults.value = asList(items)
+    discoveryVisible.value = true
+    if (!items.some((item) => item.detected)) message.info('未检测到常见服务，可检查端口或手动填写目标地址')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '扫描失败')
   } finally {
     scanning.value = false
   }
+}
+
+function publishDiscovered(item: DiscoveredService) {
+  discoveryVisible.value = false
+  openCreate()
+  form.name = item.name
+  form.upstream = item.upstream
+  if (cfTunnelOptions.value.length > 0) {
+    form.exit_cloudflare = true
+    form.cf_tunnel_id = Number(cfTunnelOptions.value[0].value)
+  }
+  message.info('已填入服务信息，请填写域名后保存')
 }
 
 function openCreate() {
@@ -1973,7 +2118,11 @@ async function toggleRuleEnabled(row: ProxyRule, enabled: boolean) {
   try {
     const updated = await api.updateProxy(row.id, { enabled })
     rules.value = rules.value.map((rule) => (rule.id === updated.id ? updated : rule))
-    message.success(enabled ? '已启用' : '已停用')
+    if (updated.sync_warning) {
+      message.warning(updated.sync_warning)
+    } else {
+      message.success(enabled ? '已启用' : '已停用')
+    }
   } catch (error) {
     rules.value = rules.value.map((rule) => (rule.id === row.id ? { ...rule, enabled: prev } : rule))
     const msg = error instanceof Error ? error.message : '更新失败'
@@ -2002,6 +2151,7 @@ function openDuplicate(rule: ProxyRule) {
     enabled: rule.enabled,
     name: duplicateName(rule),
   })
+  loadExitsToForm(rule)
   loadSecurityToForm(rule)
   syncSecurityExpanded()
   formTab.value = 'basic'
@@ -2024,6 +2174,7 @@ function openEdit(rule: ProxyRule, tab: 'basic' | 'security' | 'nginx' = 'basic'
     enabled: rule.enabled,
     name: rule.name ?? '',
   })
+  loadExitsToForm(rule)
   loadSecurityToForm(rule)
   syncSecurityExpanded()
   if (tab === 'nginx') {
@@ -2097,11 +2248,13 @@ async function save() {
       return
     }
     if (editing.value) {
-      await api.updateProxy(editing.value.id, payload)
-      message.success('规则已保存')
+      const result = await api.updateProxy(editing.value.id, payload)
+      if (result.sync_warning) message.warning(result.sync_warning)
+      else message.success('规则已保存')
     } else {
-      await api.createProxy(payload)
-      message.success('规则已创建')
+      const result = await api.createProxy(payload)
+      if (result.sync_warning) message.warning(result.sync_warning)
+      else message.success('规则已创建')
     }
     showModal.value = false
     await load()
@@ -3285,6 +3438,37 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   font-size: 12px;
   color: var(--fonu-text-muted);
   line-height: 1.5;
+}
+
+.field-hint--warning { color: var(--fonu-warning); }
+
+.exit-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.discovery-list {
+  display: grid;
+  gap: 8px;
+}
+
+.discovery-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--fonu-border);
+  border-radius: var(--fonu-radius-sm);
+}
+
+.discovery-item__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .proxy-modal__pane :deep(.n-form-item .n-form-item-blank) {

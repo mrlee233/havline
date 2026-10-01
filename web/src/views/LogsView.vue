@@ -66,6 +66,26 @@
         />
       </n-tab-pane>
 
+      <n-tab-pane name="cloudflare" tab="Cloudflare 隧道">
+        <LogToolbar v-model:keyword="cfKeyword" @refresh="loadCfLogs" />
+        <div class="remote-nginx-bar">
+          <n-select
+            v-model:value="cfTunnelId"
+            :options="cfTunnelOptions"
+            placeholder="选择 Cloudflare 隧道"
+            size="small"
+            class="remote-nginx-bar__server"
+          />
+          <n-select v-model:value="cfLines" :options="cfLineOptions" size="small" style="width: 110px" />
+        </div>
+        <pre v-if="filteredCfLogLines.length" class="cf-log-pre">{{ filteredCfLogLines.join('\n') }}</pre>
+        <EmptyState
+          v-else-if="!cfLoading"
+          title="暂无 Cloudflare 隧道日志"
+          :description="cfError || '选择隧道并启动 cloudflared 后，连接与错误日志会显示在这里。'"
+        />
+      </n-tab-pane>
+
       <n-tab-pane name="remote-nginx" tab="公网 Nginx">
         <LogToolbar v-model:keyword="nginxKeyword" @refresh="loadRemoteNginxLogs" />
         <div class="remote-nginx-bar">
@@ -178,7 +198,7 @@ import {
 } from 'naive-ui'
 import { api, asList } from '../api/client'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
-import type { AccessLogEntry, ProxyRule, SystemLogEntry } from '../api/types'
+import type { AccessLogEntry, CfTunnel, ProxyRule, SystemLogEntry } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
 import FonuCard from '../components/FonuCard.vue'
 import LoadError from '../components/LoadError.vue'
@@ -282,7 +302,7 @@ const LogToolbar = defineComponent({
 
 const message = useMessage()
 const route = useRoute()
-const LOG_TABS = ['system', 'frp', 'remote-nginx', 'access', 'nginx'] as const
+const LOG_TABS = ['system', 'frp', 'cloudflare', 'remote-nginx', 'access', 'nginx'] as const
 type LogTab = (typeof LOG_TABS)[number]
 
 function resolveTab(queryTab: unknown): LogTab {
@@ -408,6 +428,13 @@ const frpKeyword = ref('')
 const frpLevel = ref('')
 const frpPage = ref(1)
 const loadingFrp = ref(false)
+const cfTunnels = ref<CfTunnel[]>([])
+const cfTunnelId = ref<number | null>(null)
+const cfLines = ref(200)
+const cfKeyword = ref('')
+const cfRawLog = ref('')
+const cfLoading = ref(false)
+const cfError = ref('')
 const frpPageSize = 50
 const frpLevelText: Record<string, string> = { I: '信息', W: '警告', E: '错误', D: '调试' }
 // 工具条的级别选项值是 INFO / WARN / ERROR，而 frpc 的级别是单字母 I/W/E/D，需转换后再比较
@@ -511,6 +538,60 @@ function frpRowClassName(row: FrpLogEntry) {
   if (row.level === 'W') return 'log-row log-row--warn'
   return 'log-row'
 }
+
+const cfTunnelOptions = computed(() =>
+  cfTunnels.value.map((tunnel) => ({
+    label: `${tunnel.name}${tunnel.status === 'connected' ? '（已连接）' : ''}`,
+    value: tunnel.id,
+  })),
+)
+
+const cfLineOptions = [
+  { label: '200 行', value: 200 },
+  { label: '500 行', value: 500 },
+  { label: '2000 行', value: 2000 },
+]
+
+const filteredCfLogLines = computed(() => {
+  const keyword = cfKeyword.value.trim().toLowerCase()
+  const lines = cfRawLog.value ? cfRawLog.value.split('\n') : []
+  if (!keyword) return lines
+  return lines.filter((line) => line.toLowerCase().includes(keyword))
+})
+
+async function loadCfTunnels() {
+  try {
+    cfTunnels.value = asList(await api.listCfTunnels())
+  } catch {
+    cfTunnels.value = []
+  }
+  if (cfTunnelId.value === null || !cfTunnels.value.some((tunnel) => tunnel.id === cfTunnelId.value)) {
+    cfTunnelId.value = cfTunnels.value[0]?.id ?? null
+  }
+}
+
+async function loadCfLogs() {
+  if (cfTunnelId.value === null) {
+    cfRawLog.value = ''
+    cfError.value = '还没有 Cloudflare 隧道'
+    return
+  }
+  cfLoading.value = true
+  cfError.value = ''
+  try {
+    const result = await api.getCfTunnelLogs(cfTunnelId.value, cfLines.value)
+    cfRawLog.value = result.output || ''
+  } catch (error) {
+    cfRawLog.value = ''
+    cfError.value = error instanceof Error ? error.message : '读取 Cloudflare 日志失败'
+  } finally {
+    cfLoading.value = false
+  }
+}
+
+watch([cfTunnelId, cfLines], () => {
+  if (cfTunnelId.value !== null) void loadCfLogs()
+})
 
 // 公网 Nginx 日志（VPS 侧，需 agent ≥ 0.10.0）：路径由 agent 从 nginx -T 解析，前端只展示原始行
 const nginxTargets = ref<import('../api/types').FrpServer[]>([])
@@ -780,7 +861,7 @@ async function loadSystemLogs() {
 async function loadAll() {
   pageError.value = ''
   try {
-    await Promise.all([loadAccess(), loadErrorLogs(), loadSystemLogs(), loadFrpLogs()])
+    await Promise.all([loadAccess(), loadErrorLogs(), loadSystemLogs(), loadFrpLogs(), loadCfTunnels()])
   } catch (error) {
     pageError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
   }
@@ -815,6 +896,9 @@ watch(tab, (name) => {
   if (name === 'access') loadAccess()
   else if (name === 'nginx') loadErrorLogs()
   else if (name === 'system') loadSystemLogs()
+  else if (name === 'cloudflare') {
+    void loadCfTunnels().then(() => loadCfLogs())
+  }
 })
 
 onMounted(() => {
@@ -927,6 +1011,20 @@ onMounted(() => {
   flex-wrap: wrap;
   gap: var(--fonu-space-3);
   margin-bottom: var(--fonu-space-2);
+}
+
+.cf-log-pre {
+  max-height: 620px;
+  margin: 0 var(--fonu-space-5);
+  padding: var(--fonu-space-4);
+  overflow: auto;
+  border: 1px solid var(--fonu-border);
+  border-radius: var(--fonu-radius-sm);
+  background: var(--fonu-bg);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .remote-nginx-bar__server {

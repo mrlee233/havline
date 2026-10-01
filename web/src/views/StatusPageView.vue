@@ -19,10 +19,21 @@
       <p v-else-if="error" class="status-page__error">{{ error }}</p>
 
       <div v-if="page && page.routes.length" class="status-page__list">
-        <div v-for="route in page.routes" :key="route.domain" class="status-row">
-          <StatusBadge :kind="kindOf(route.state)" :text="stateText(route.state)" />
-          <span class="status-row__domain mono">{{ route.domain }}</span>
-          <span class="status-row__uptime mono">{{ route.uptime_pct.toFixed(1) }}%（24h）</span>
+        <div v-for="route in page.routes" :key="route.domain" class="status-route">
+          <div class="status-row">
+            <StatusBadge :kind="kindOf(route.state)" :text="stateText(route.state)" />
+            <span class="status-row__domain mono">{{ route.domain }}</span>
+            <span v-if="route.source" class="status-row__source">{{ route.source === 'cloudflare' ? 'Cloudflare' : '公网反代' }}</span>
+            <span class="status-row__uptime mono">{{ route.uptime_pct.toFixed(1) }}%（24h）</span>
+          </div>
+          <div v-if="route.incidents?.length" class="incident-list">
+            <div v-for="incident in route.incidents.slice(0, 3)" :key="incident.from" class="incident-row">
+              <span class="incident-row__dot" />
+              <span class="mono">{{ formatDate(incident.from) }} 起</span>
+              <span>{{ incident.minutes }} 分钟</span>
+              <span>{{ incident.detail || incident.reason || '服务不可用' }}</span>
+            </div>
+          </div>
         </div>
       </div>
       <p v-else-if="page && !error" class="status-page__hint">还没有巡检记录。</p>
@@ -107,7 +118,13 @@ onMounted(load)
   border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm);
 }
 .status-row__domain { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.status-row__source { flex: none; font-size: 11.5px; color: var(--fonu-text-muted); }
 .status-row__uptime { flex: none; font-size: 12.5px; color: var(--fonu-text-secondary); }
+.status-route { border-bottom: 1px solid var(--fonu-border); }
+.status-route:last-child { border-bottom: none; }
+.incident-list { display: grid; gap: 5px; padding: 0 var(--fonu-space-3) 10px; }
+.incident-row { display: flex; align-items: center; gap: 10px; color: var(--fonu-text-muted); font-size: 12px; flex-wrap: wrap; }
+.incident-row__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--fonu-error); }
 .status-page__hint { margin: var(--fonu-space-3) 0 0; font-size: 12.5px; color: var(--fonu-text-muted); }
 .status-page__hint--foot { margin-top: var(--fonu-space-5); }
 </style>

@@ -43,6 +43,13 @@ import type {
   CfTunnelPayload,
   CfAppSettings,
   CfAppSettingsInput,
+  CfDriftResult,
+  CfDiagnosticsResult,
+  CfAccessStatus,
+  CfZone,
+  CfTunnelRoutes,
+  CfPreflightResult,
+  CfRouteTestResult,
 } from './types'
 
 export function asList<T>(value: T[] | null | undefined): T[] {
@@ -495,20 +502,46 @@ export const api = {
     request<CfTunnel>(`/api/cloudflare/tunnels/${id}/stop`, { method: 'POST' }),
   restartCfTunnel: (id: number) =>
     request<CfTunnel>(`/api/cloudflare/tunnels/${id}/restart`, { method: 'POST' }),
+  refreshCfCredentials: (id: number) =>
+    request<CfTunnel>(`/api/cloudflare/tunnels/${id}/credentials/refresh`, { method: 'POST' }),
   getCfTunnelStatus: (id: number) =>
     request<CfRuntimeStatus>(`/api/cloudflare/tunnels/${id}/status`),
   getCfTunnelLogs: (id: number, lines = 200) =>
     request<{ output: string }>(`/api/cloudflare/tunnels/${id}/logs?lines=${lines}`),
   getCfTunnelConfig: (id: number) =>
     request<{ content: string }>(`/api/cloudflare/tunnels/${id}/config`),
+  getCfTunnelRoutes: (id: number) =>
+    request<CfTunnelRoutes>(`/api/cloudflare/tunnels/${id}/routes`),
+  replaceCfTunnelRoutes: (id: number, routes: Array<{ hostname: string; path: string; service: string }>) =>
+    request<CfTunnelRoutes>(`/api/cloudflare/tunnels/${id}/routes`, {
+      method: 'PUT',
+      body: JSON.stringify({ routes }),
+    }),
+  getCfTunnelDrift: (id: number) => request<CfDriftResult>(`/api/cloudflare/tunnels/${id}/drift`),
+  syncCfTunnelRoutes: (id: number) =>
+    request<{ ok: boolean }>(`/api/cloudflare/tunnels/${id}/sync`, { method: 'POST' }),
+  getCfTunnelDiagnostics: (id: number) =>
+    request<CfDiagnosticsResult>(`/api/cloudflare/tunnels/${id}/diagnostics`),
   getCfBinary: () => request<{ version: string; mirrors: CfMirror[] }>('/api/cloudflare/binary'),
-  downloadCfBinary: (mirror: string) =>
+  downloadCfBinary: (mirror: string, version = '') =>
     request<{ ok: boolean; version: string }>('/api/cloudflare/binary/download', {
       method: 'POST',
-      body: JSON.stringify({ mirror }),
+      body: JSON.stringify({ mirror, version }),
     }),
+  getLatestCfBinary: () => request<{ version: string }>('/api/cloudflare/binary/latest'),
+  rollbackCfBinary: () =>
+    request<{ ok: boolean; version: string }>('/api/cloudflare/binary/rollback', { method: 'POST' }),
   getCfIngressCandidates: () =>
     request<{ hostnames: string[] }>('/api/cloudflare/ingress-candidates'),
+  getCfZones: () => request<{ zones: CfZone[] }>('/api/cloudflare/zones'),
+  getCfAccessStatus: (hostname: string) =>
+    request<CfAccessStatus>(`/api/cloudflare/access-status?hostname=${encodeURIComponent(hostname)}`),
+  getCfPreflight: () => request<CfPreflightResult>('/api/cloudflare/preflight'),
+  testCfRoute: (service: string) =>
+    request<CfRouteTestResult>('/api/cloudflare/routes/test', {
+      method: 'POST',
+      body: JSON.stringify({ service }),
+    }),
   getCfSettings: () => request<CfAppSettings>('/api/cloudflare/settings'),
   saveCfSettings: (payload: CfAppSettingsInput) =>
     request<CfAppSettings>('/api/cloudflare/settings', { method: 'PUT', body: JSON.stringify(payload) }),

@@ -119,6 +119,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		conn.Close()
 		return nil, err
 	}
+	proxySvc.SetExitSync(cloudflareSvc)
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
 	updaterClient := updater.NewClient(cfg.UpdaterSocket)
@@ -156,7 +157,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	frpMultiSvc.SetBaseContext(ctx)
 	go frpMultiSvc.StartAgentTunnels(ctx)
 	go frpMultiSvc.StartAgentCertificateRenewal(ctx)
-	go cloudflareSvc.StartAuto(ctx)
+	go cloudflareSvc.StartAll(ctx)
 	intervalMinutes, _ := settingsStore.GetInt(ctx, settings.KeyDDNSCheckInterval)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 5
@@ -166,7 +167,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		chinaHours = 24
 	}
 	// 巡检间隔比其它任务短：「连续 N 次不通」需要足够采样次数才能判定
-	monitorChecker := monitor.New(settingsStore, notifySvc, logger, monitorSource{frp: frpMultiSvc, logger: logger, traffic: trafficCollector}, healthRecorder{frp: frpMultiSvc}, metricsStore)
+	monitorChecker := monitor.New(settingsStore, notifySvc, logger, monitorSource{frp: frpMultiSvc, cloudflare: cloudflareSvc, logger: logger, traffic: trafficCollector}, healthRecorder{frp: frpMultiSvc}, metricsStore)
 	// 自动备份：启动时会先跑一轮，靠「最新备份是否在 24h 内」避免频繁重启重复备份
 	backupRunner := backup.NewAutoRunner(backupSvc, settingsStore, notifySvc, logger)
 	sched := scheduler.New(

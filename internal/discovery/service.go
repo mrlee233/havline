@@ -38,6 +38,10 @@ var catalog = []catalogEntry{
 	{Name: "PhotoPrism", Port: 2342, Platform: "photoprism", Keywords: []string{"photoprism"}},
 	{Name: "qBittorrent", Port: 8080, Platform: "qbittorrent", Keywords: []string{"qbittorrent"}},
 	{Name: "Portainer", Port: 9000, Platform: "portainer", Keywords: []string{"portainer"}},
+	{Name: "Home Assistant", Port: 8123, Platform: "home-assistant", Keywords: []string{"home assistant", "homeassistant"}},
+	{Name: "Immich", Port: 2283, Platform: "immich", Keywords: []string{"immich"}},
+	{Name: "AdGuard Home", Port: 3000, Platform: "adguard-home", Keywords: []string{"adguard home", "adguardhome"}},
+	{Name: "Synology DSM", Port: 5000, Platform: "synology", Keywords: []string{"synology", "diskstation"}},
 }
 
 func New() *Service {

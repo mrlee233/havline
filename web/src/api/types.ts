@@ -50,6 +50,9 @@ export interface ProxyRule {
   name: string
   sort_order: number
   security: ProxySecurityConfig
+  exits: string[]
+  cf_tunnel_id: number
+  sync_warning?: string
   created_at: string
   updated_at: string
 }
@@ -108,6 +111,8 @@ export interface ProxySavePayload {
   enabled?: boolean
   name?: string
   security?: ProxySecurityPayload
+  exits?: string[]
+  cf_tunnel_id?: number
 }
 
 export interface AuthStatus {
@@ -165,6 +170,10 @@ export interface DashboardStatus {
   mem_total_bytes: number
   disk_used_bytes: number
   disk_total_bytes: number
+  cloudflare_count: number
+  cloudflare_online: number
+  cloudflare_status: string
+  cloudflare_message?: string
 }
 
 export interface DDNSDomainRecord {
@@ -1024,9 +1033,19 @@ export interface MetricsHistory {
 export interface StatusPageRoute {
   domain: string
   state: string
+  source?: 'frp' | 'cloudflare' | string
   uptime_pct: number
   down_minutes: number
   unknown_minutes: number
+  incidents: StatusPageIncident[]
+}
+
+export interface StatusPageIncident {
+  from: string
+  to?: string
+  reason?: string
+  detail?: string
+  minutes: number
 }
 
 export interface StatusPagePayload {
@@ -1064,6 +1083,7 @@ export interface CfTunnel {
   last_error?: string
   metrics_port?: number
   auto_start: boolean
+  managed: boolean
   hostnames?: string[]
   origin_service?: string
   dns_warning?: string
@@ -1090,6 +1110,11 @@ export interface CfMirror {
   base: string
 }
 
+export interface CfZone {
+  id: string
+  name: string
+}
+
 export interface CfTunnelPayload {
   name: string
   mode: string
@@ -1098,6 +1123,7 @@ export interface CfTunnelPayload {
   origin_service?: string
   network: CfNetworkSettings
   auto_start: boolean
+  managed: boolean
 }
 
 export interface CfAppSettings {
@@ -1118,4 +1144,60 @@ export interface CfAppSettingsInput {
   api_token: string
   mirror: string
   network: CfNetworkSettings
+}
+
+export interface CfDriftResult {
+  tunnel_id: number
+  managed: boolean
+  has_drift: boolean
+  items: string[]
+}
+
+export interface CfRouteView {
+  id?: number
+  hostname: string
+  path: string
+  service: string
+  source: 'rule' | 'config' | string
+}
+
+export interface CfTunnelRoutes {
+  managed: boolean
+  routes: CfRouteView[]
+  catch_all: string
+}
+
+export interface CfDiagnosticCheck {
+  name: string
+  status: 'ok' | 'warning' | 'error' | string
+  message: string
+}
+
+export interface CfDiagnosticsResult {
+  tunnel_id: number
+  generated_at: string
+  checks: CfDiagnosticCheck[]
+}
+
+export interface CfPreflightCheck {
+  name: string
+  status: 'ok' | 'error' | string
+  message: string
+  action?: string
+}
+
+export interface CfPreflightResult {
+  ready: boolean
+  checks: CfPreflightCheck[]
+}
+
+export interface CfRouteTestResult {
+  ok: boolean
+  message: string
+  latency_ms: number
+}
+
+export interface CfAccessStatus {
+  enabled: boolean
+  name?: string
 }

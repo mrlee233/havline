@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/fonu/fonu/internal/cloudflared"
 	"github.com/fonu/fonu/internal/frp"
 	"github.com/fonu/fonu/internal/monitor"
 	"github.com/fonu/fonu/internal/traffic"
@@ -13,9 +14,59 @@ import (
 // monitorSource 把 frp 服务适配成 monitor.Source：monitor 只关心「状态快照」，
 // 怎么从 frp / agent 取是这里的事，两边因此互不依赖。
 type monitorSource struct {
-	frp     *frp.Service
-	logger  *slog.Logger
-	traffic *traffic.Collector
+	frp        *frp.Service
+	cloudflare *cloudflared.Service
+	logger     *slog.Logger
+	traffic    *traffic.Collector
+}
+
+func (s monitorSource) CloudflareRoutes(ctx context.Context) ([]monitor.CloudflareRouteStatus, error) {
+	if s.cloudflare == nil {
+		return []monitor.CloudflareRouteStatus{}, nil
+	}
+	statuses, err := s.cloudflare.HealthStatuses(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]monitor.CloudflareRouteStatus, 0, len(statuses))
+	for _, item := range statuses {
+		out = append(out, monitor.CloudflareRouteStatus{
+			TunnelID: item.TunnelID,
+			Name:     item.Name,
+			Domain:   item.Domain,
+			State:    item.State,
+			Reason:   item.Reason,
+			Detail:   item.Detail,
+			Known:    item.Known,
+		})
+	}
+	return out, nil
+}
+
+func (s monitorSource) RecordCloudflareHealth(ctx context.Context, samples []monitor.CloudflareHealthSample) error {
+	if s.cloudflare == nil {
+		return nil
+	}
+	converted := make([]cloudflared.HealthSample, 0, len(samples))
+	for _, sample := range samples {
+		converted = append(converted, cloudflared.HealthSample{
+			TunnelID: sample.TunnelID,
+			Name:     sample.Name,
+			Domain:   sample.Domain,
+			State:    sample.State,
+			Reason:   sample.Reason,
+			Detail:   sample.Detail,
+		})
+	}
+	return s.cloudflare.RecordHealth(ctx, converted)
+}
+
+func (s monitorSource) PruneCloudflareHealth(ctx context.Context) error {
+	if s.cloudflare == nil {
+		return nil
+	}
+	_, err := s.cloudflare.PruneHealth(ctx)
+	return err
 }
 
 func (s monitorSource) Routes(ctx context.Context) ([]monitor.RouteStatus, error) {

@@ -3,12 +3,19 @@ package proxy
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/fonu/fonu/internal/validate"
+)
+
+const (
+	ExitLocal      = "local"
+	ExitCloudflare = "cloudflare"
 )
 
 type Host struct {
@@ -32,6 +39,9 @@ type Rule struct {
 	Name         string         `json:"name"`
 	SortOrder    int            `json:"sort_order"`
 	Security     SecurityConfig `json:"security"`
+	Exits        []string       `json:"exits"`
+	CFTunnelID   int64          `json:"cf_tunnel_id"`
+	SyncWarning  string         `json:"sync_warning,omitempty"`
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 }
@@ -98,6 +108,34 @@ func (r Rule) Hostnames() []string {
 	return names
 }
 
+// UsesExit 判断规则是否启用了指定出口；空值按旧数据兼容为本机出口。
+func (r Rule) UsesExit(exit string) bool {
+	if len(r.Exits) == 0 {
+		return exit == ExitLocal
+	}
+	for _, item := range r.Exits {
+		if item == exit {
+			return true
+		}
+	}
+	return false
+}
+
+// HasExit 判断出口列表是否包含指定出口；空值按旧数据兼容为本机出口。
+func HasExit(exits []string, exit string) bool {
+	return Rule{Exits: exits}.UsesExit(exit)
+}
+
+// LocalEnabled 判断规则当前是否需要生成本机 Nginx 配置。
+func (r Rule) LocalEnabled() bool {
+	return r.Enabled && r.UsesExit(ExitLocal)
+}
+
+// CloudflareEnabled 判断规则当前是否需要同步到 Cloudflare 隧道。
+func (r Rule) CloudflareEnabled() bool {
+	return r.Enabled && r.UsesExit(ExitCloudflare) && r.CFTunnelID > 0
+}
+
 func (r Rule) PortGroups() []PortGroup {
 	groups := map[int][]string{}
 	ports := make([]int, 0)
@@ -130,6 +168,8 @@ type CreateInput struct {
 	Enabled      bool
 	Name         string
 	Security     SecurityInput
+	Exits        []string
+	CFTunnelID   int64
 }
 
 type UpdateInput struct {
@@ -143,6 +183,8 @@ type UpdateInput struct {
 	Enabled      *bool
 	Name         *string
 	Security     *SecurityInput
+	Exits        *[]string
+	CFTunnelID   *int64
 }
 
 type Store struct {
@@ -175,7 +217,7 @@ func (s *Store) List(ctx context.Context) ([]Rule, error) {
 	}
 	q := s.querier()
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, created_at, updated_at
+		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, COALESCE(exits_json, '["local"]'), COALESCE(cf_tunnel_id, 0), created_at, updated_at
 		FROM proxy_rules
 		ORDER BY sort_order ASC, id ASC
 	`)
@@ -200,7 +242,7 @@ func (s *Store) List(ctx context.Context) ([]Rule, error) {
 
 func (s *Store) Get(ctx context.Context, id int64) (Rule, error) {
 	row := s.querier().QueryRowContext(ctx, `
-		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, created_at, updated_at
+		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, COALESCE(exits_json, '["local"]'), COALESCE(cf_tunnel_id, 0), created_at, updated_at
 		FROM proxy_rules WHERE id = ?
 	`, id)
 	rule, err := scanRule(row)
@@ -243,11 +285,19 @@ func (s *Store) Create(ctx context.Context, in CreateInput) (Rule, error) {
 	if err != nil {
 		return Rule{}, err
 	}
+	exits, cfTunnelID, err := normalizeExits(in.Exits, in.CFTunnelID)
+	if err != nil {
+		return Rule{}, err
+	}
+	exitsJSON, err := marshalExits(exits)
+	if err != nil {
+		return Rule{}, err
+	}
 
 	res, err := s.querier().ExecContext(ctx, `
-		INSERT INTO proxy_rules(upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, name, sort_order, security_json, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-	`, upstream, in.ListenPort, boolInt(in.ListenIPv4), boolInt(in.ListenIPv6), boolInt(in.HTTPSEnabled), boolInt(in.HTTPRedirect), boolInt(in.Enabled), name, sortOrder, securityJSON)
+		INSERT INTO proxy_rules(upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, name, sort_order, security_json, exits_json, cf_tunnel_id, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+	`, upstream, in.ListenPort, boolInt(in.ListenIPv4), boolInt(in.ListenIPv6), boolInt(in.HTTPSEnabled), boolInt(in.HTTPRedirect), boolInt(in.Enabled), name, sortOrder, securityJSON, exitsJSON, cfTunnelID)
 	if err != nil {
 		return Rule{}, err
 	}
@@ -278,6 +328,8 @@ func (s *Store) Update(ctx context.Context, id int64, in UpdateInput) (Rule, err
 	enabled := current.Enabled
 	name := current.Name
 	hosts := current.Hosts
+	exits := current.Exits
+	cfTunnelID := current.CFTunnelID
 
 	if in.Upstream != nil {
 		upstream, err = validate.Upstream(*in.Upstream)
@@ -315,6 +367,20 @@ func (s *Store) Update(ctx context.Context, id int64, in UpdateInput) (Rule, err
 			return Rule{}, err
 		}
 	}
+	if in.Exits != nil || in.CFTunnelID != nil {
+		rawExits := exits
+		if in.Exits != nil {
+			rawExits = *in.Exits
+		}
+		rawTunnelID := cfTunnelID
+		if in.CFTunnelID != nil {
+			rawTunnelID = *in.CFTunnelID
+		}
+		exits, cfTunnelID, err = normalizeExits(rawExits, rawTunnelID)
+		if err != nil {
+			return Rule{}, err
+		}
+	}
 	if in.Hosts != nil {
 		hosts, err = parseHosts(*in.Hosts, listenPort)
 		if err != nil {
@@ -336,6 +402,10 @@ func (s *Store) Update(ctx context.Context, id int64, in UpdateInput) (Rule, err
 	if err != nil {
 		return Rule{}, err
 	}
+	exitsJSON, err := marshalExits(exits)
+	if err != nil {
+		return Rule{}, err
+	}
 
 	if in.ListenPort != nil && *in.ListenPort != oldListenPort && in.Hosts == nil {
 		for _, host := range current.Hosts {
@@ -350,9 +420,9 @@ func (s *Store) Update(ctx context.Context, id int64, in UpdateInput) (Rule, err
 
 	_, err = s.querier().ExecContext(ctx, `
 		UPDATE proxy_rules
-		SET upstream = ?, listen_port = ?, listen_ipv4 = ?, listen_ipv6 = ?, https_enabled = ?, http_redirect = ?, enabled = ?, name = ?, security_json = ?, updated_at = datetime('now')
+		SET upstream = ?, listen_port = ?, listen_ipv4 = ?, listen_ipv6 = ?, https_enabled = ?, http_redirect = ?, enabled = ?, name = ?, security_json = ?, exits_json = ?, cf_tunnel_id = ?, updated_at = datetime('now')
 		WHERE id = ?
-	`, upstream, listenPort, boolInt(listenIPv4), boolInt(listenIPv6), boolInt(httpsEnabled), boolInt(httpRedirect), boolInt(enabled), name, securityJSON, id)
+	`, upstream, listenPort, boolInt(listenIPv4), boolInt(listenIPv6), boolInt(httpsEnabled), boolInt(httpRedirect), boolInt(enabled), name, securityJSON, exitsJSON, cfTunnelID, id)
 	if err != nil {
 		return Rule{}, err
 	}
@@ -423,7 +493,7 @@ func (s *Store) Delete(ctx context.Context, id int64) error {
 
 func (s *Store) ListEnabled(ctx context.Context) ([]Rule, error) {
 	rows, err := s.querier().QueryContext(ctx, `
-		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, created_at, updated_at
+		SELECT id, upstream, listen_port, listen_ipv4, listen_ipv6, https_enabled, http_redirect, enabled, nginx_mode, name, sort_order, security_json, COALESCE(exits_json, '["local"]'), COALESCE(cf_tunnel_id, 0), created_at, updated_at
 		FROM proxy_rules WHERE enabled = 1 ORDER BY sort_order ASC, id ASC
 	`)
 	if err != nil {
@@ -443,6 +513,21 @@ func (s *Store) ListEnabled(ctx context.Context) ([]Rule, error) {
 		return nil, err
 	}
 	return s.attachHosts(ctx, rules)
+}
+
+// ListEnabledLocal 只返回需要生成本机 Nginx 配置的启用规则。
+func (s *Store) ListEnabledLocal(ctx context.Context) ([]Rule, error) {
+	rules, err := s.ListEnabled(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Rule, 0, len(rules))
+	for _, rule := range rules {
+		if rule.UsesExit(ExitLocal) {
+			out = append(out, rule)
+		}
+	}
+	return out, nil
 }
 
 func validateCreateInput(in CreateInput) (string, []Host, error) {
@@ -654,6 +739,8 @@ func scanRule(row rowScanner) (Rule, error) {
 	var enabled int
 	var nginxMode string
 	var securityJSON string
+	var exitsJSON string
+	var cfTunnelID int64
 	var createdAt string
 	var updatedAt string
 	if err := row.Scan(
@@ -669,6 +756,8 @@ func scanRule(row rowScanner) (Rule, error) {
 		&rule.Name,
 		&rule.SortOrder,
 		&securityJSON,
+		&exitsJSON,
+		&cfTunnelID,
 		&createdAt,
 		&updatedAt,
 	); err != nil {
@@ -688,9 +777,65 @@ func scanRule(row rowScanner) (Rule, error) {
 		return Rule{}, err
 	}
 	rule.Security = security
+	rule.Exits = parseExits(exitsJSON)
+	rule.CFTunnelID = cfTunnelID
 	rule.CreatedAt = parseTime(createdAt)
 	rule.UpdatedAt = parseTime(updatedAt)
 	return rule, nil
+}
+
+func normalizeExits(raw []string, cfTunnelID int64) ([]string, int64, error) {
+	if len(raw) == 0 {
+		raw = []string{ExitLocal}
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		exit := strings.ToLower(strings.TrimSpace(item))
+		switch exit {
+		case ExitLocal, ExitCloudflare:
+		default:
+			return nil, 0, fmt.Errorf("不支持的出口: %s", item)
+		}
+		if _, ok := seen[exit]; ok {
+			continue
+		}
+		seen[exit] = struct{}{}
+		out = append(out, exit)
+	}
+	sort.Strings(out)
+	_, usesCloudflare := seen[ExitCloudflare]
+	if usesCloudflare && cfTunnelID <= 0 {
+		return nil, 0, fmt.Errorf("选择 Cloudflare 出口时需要指定隧道")
+	}
+	if !usesCloudflare {
+		cfTunnelID = 0
+	}
+	return out, cfTunnelID, nil
+}
+
+func marshalExits(exits []string) (string, error) {
+	normalized, _, err := normalizeExits(exits, 1)
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func parseExits(raw string) []string {
+	var exits []string
+	if err := json.Unmarshal([]byte(raw), &exits); err != nil {
+		return []string{ExitLocal}
+	}
+	normalized, _, err := normalizeExits(exits, 1)
+	if err != nil {
+		return []string{ExitLocal}
+	}
+	return normalized
 }
 
 func parseTime(v string) time.Time {
