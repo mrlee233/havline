@@ -1033,13 +1033,18 @@ Havline 适合做飞牛 Docker 应用，不适合首发做成 CGI 或原生应�
 7. 构建 amd64 / arm64 镜像。
 8. 用 `fnpack build` 打包并在飞牛测试设备安装验证。
 
-当前已经在仓库内生成：
+当前打包工程位于主仓库同级的飞牛工作目录中，不进入主仓库：
 
 ```text
-fnos/havline/
+F:\Fonu-main\fnos\
+├── fnpack.exe
+├── build.ps1
+├── README.md
+└── havline/
 ```
 
-并补上了首发骨架所需的基础配置。
+主程序仍位于 `F:\Fonu-main\havline`，打包工程通过主仓库的 `VERSION` 和
+`fnos/build.ps1` 保持版本同步。
 
 阶段 1 暂不实现：
 

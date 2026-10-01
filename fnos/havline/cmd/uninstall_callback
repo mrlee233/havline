@@ -1,8 +1,0 @@
-#!/bin/bash
-set -u
-
-if [ "${wizard_uninstall_mode:-keep}" = "purge" ]; then
-  rm -rf "$TRIM_PKGVAR"
-fi
-
-exit 0

@@ -1,8 +1,0 @@
-#!/bin/bash
-set -euo pipefail
-
-mkdir -p "$TRIM_PKGVAR" "$TRIM_PKGVAR/backups"
-chown -R "$TRIM_USERNAME:$TRIM_GROUPNAME" "$TRIM_PKGVAR"
-
-echo "Havline 数据目录已准备：$TRIM_PKGVAR"
-exit 0
