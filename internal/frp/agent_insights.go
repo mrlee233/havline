@@ -32,7 +32,7 @@ func (s *Service) AgentNginxLogs(ctx context.Context, serverID int64, kind strin
 	return client.NginxLogs(ctx, kind, lines)
 }
 
-// AgentCerts 列出 VPS 证书目录下的域名与到期时间，供与 Fonu 证书库交叉核对
+// AgentCerts 列出 VPS 证书目录下的域名与到期时间，供与 Havline 证书库交叉核对
 func (s *Service) AgentCerts(ctx context.Context, serverID int64) (map[string]any, error) {
 	client, ok := s.agentClient(ctx, serverID)
 	if !ok {

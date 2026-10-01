@@ -12,9 +12,9 @@
       @expand="collapsed = false"
     >
       <router-link class="brand" :class="{ 'brand--collapsed': collapsed }" :to="{ name: 'dashboard' }">
-        <img class="brand__logo" :src="logoImg" alt="Fonu" />
+        <img class="brand__logo" :src="brandLogo" alt="Havline" />
         <div v-if="!collapsed" class="brand__text">
-          <div class="brand__name">Fonu</div>
+          <div class="brand__name">Havline</div>
           <div class="brand__tagline">让 NAS 访问更简单</div>
         </div>
       </router-link>
@@ -31,7 +31,7 @@
       <div v-if="!collapsed" class="sider-footer">
         <div class="sider-footer__version-row">
           <div class="sider-footer__title">
-            <span class="sider-footer__brand">Fonu</span>
+            <span class="sider-footer__brand">Havline</span>
             <span class="sider-footer__version">v{{ appVersion }}</span>
           </div>
           <a
@@ -141,7 +141,7 @@ import { GITHUB_REPO, GITHUB_REPO_URL } from '../constants/app'
 import { useTheme } from '../composables/useTheme'
 import { fetchLatestRelease, isNewerVersion } from '../utils/version'
 import type { UpdateStatus } from '../api/types'
-import logoImg from '../assets/brand/logo.png'
+import brandLogo from '../assets/brand/havline-logo.svg'
 import UpdateModal from '../components/UpdateModal.vue'
 
 const route = useRoute()
@@ -262,7 +262,7 @@ onUnmounted(() => {
 .app-layout {
   min-height: 100vh;
   height: 100vh;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .app-layout :deep(.n-layout-scroll-container) {
@@ -270,8 +270,8 @@ onUnmounted(() => {
 }
 
 .app-sider {
-  background: var(--fonu-surface) !important;
-  border-right: 1px solid var(--fonu-border) !important;
+  background: var(--havline-surface) !important;
+  border-right: 1px solid var(--havline-border) !important;
   min-height: 100vh;
 }
 
@@ -283,9 +283,9 @@ onUnmounted(() => {
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-5) var(--fonu-space-4);
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-5) var(--havline-space-4);
+  border-bottom: 1px solid var(--havline-border);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -293,40 +293,37 @@ onUnmounted(() => {
 }
 
 .brand:hover {
-  background: var(--fonu-bg-muted);
+  background: var(--havline-bg-muted);
 }
 
 .brand--collapsed {
   justify-content: center;
-  padding: var(--fonu-space-4) 0;
+  padding: var(--havline-space-4) 0;
 }
 
 .brand__logo {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
 }
 
 .brand__name {
   font-size: 18px;
   font-weight: 700;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   line-height: 1.2;
 }
 
 .brand__tagline {
   font-size: 11px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   margin-top: 2px;
   line-height: 1.3;
 }
 
 .app-menu {
   flex: 1;
-  padding: var(--fonu-space-3);
+  padding: var(--havline-space-3);
 }
 
 .app-menu :deep(.n-menu-item) {
@@ -334,23 +331,23 @@ onUnmounted(() => {
 }
 
 .app-menu :deep(.n-menu-item-content) {
-  border-radius: var(--fonu-radius-sm) !important;
+  border-radius: var(--havline-radius-sm) !important;
   padding-left: 14px !important;
 }
 
 .app-menu :deep(.n-menu-item-content--selected) {
-  background: var(--fonu-brand-soft) !important;
+  background: var(--havline-brand-soft) !important;
   font-weight: 600;
 }
 
 .app-menu :deep(.n-menu-item-content--selected .n-menu-item-content-header),
 .app-menu :deep(.n-menu-item-content--selected .n-menu-item-content-header *) {
-  color: var(--fonu-brand-text) !important;
+  color: var(--havline-brand-text) !important;
 }
 
 .app-menu :deep(.n-menu-item-content--selected .n-icon),
 .app-menu :deep(.n-menu-item-content--selected .n-menu-item-content__icon) {
-  color: var(--fonu-brand) !important;
+  color: var(--havline-brand) !important;
 }
 
 .app-menu :deep(.n-menu-item-content--selected::before) {
@@ -358,8 +355,8 @@ onUnmounted(() => {
 }
 
 .sider-footer {
-  padding: var(--fonu-space-4);
-  border-top: 1px solid var(--fonu-border);
+  padding: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
 }
 
 .sider-footer__version-row {
@@ -367,7 +364,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .sider-footer__title {
@@ -380,12 +377,12 @@ onUnmounted(() => {
 .sider-footer__brand {
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .sider-footer__version {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .sider-footer__update {
@@ -398,7 +395,7 @@ onUnmounted(() => {
   font-size: 11px;
   font-weight: 500;
   font-family: inherit;
-  color: var(--fonu-brand);
+  color: var(--havline-brand);
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
@@ -417,15 +414,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
   font-size: 12px;
-  color: var(--fonu-success);
+  color: var(--havline-success);
   font-weight: 500;
 }
 
 .sider-footer__status-icon {
   font-size: 8px;
-  color: var(--fonu-success);
+  color: var(--havline-success);
 }
 
 .sider-footer__github {
@@ -433,13 +430,13 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   text-decoration: none;
   transition: color 0.15s;
 }
 
 .sider-footer__github:hover {
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .sider-footer__github :deep(.n-icon) {
@@ -450,53 +447,53 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .topbar {
   flex-shrink: 0;
-  height: var(--fonu-topbar-height);
-  padding: 0 var(--fonu-space-5);
+  height: var(--havline-topbar-height);
+  padding: 0 var(--havline-space-5);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
-  background: var(--fonu-surface);
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-4);
+  background: var(--havline-surface);
+  border-bottom: 1px solid var(--havline-border);
 }
 
 .topbar__datetime {
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .topbar__right {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
 }
 
 .user-btn {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
-  padding: 0 var(--fonu-space-2);
+  gap: var(--havline-space-3);
+  padding: 0 var(--havline-space-2);
 }
 
 .user-btn__icon,
 .user-btn__chevron {
   font-size: 18px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .user-name {
   font-size: 14px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .content {
   flex: 1;
-  padding: var(--fonu-space-5);
+  padding: var(--havline-space-5);
   overflow: auto;
 }
 
@@ -507,7 +504,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .topbar,
   .content {
-    padding-inline: var(--fonu-space-4);
+    padding-inline: var(--havline-space-4);
   }
 
   .user-name,

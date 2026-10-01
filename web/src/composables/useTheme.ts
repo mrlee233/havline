@@ -1,7 +1,7 @@
 import { computed, ref, watch } from 'vue'
 import { darkTheme, type GlobalThemeOverrides } from 'naive-ui'
 
-const themeKey = 'fonu-theme'
+const themeKey = 'havline-theme'
 const themeMode = ref(localStorage.getItem(themeKey) ?? 'system')
 
 function systemDark() {
@@ -14,7 +14,7 @@ const shared = {
   primaryColorPressed: '#047857',
   primaryColorSuppl: '#34D399',
   borderRadius: '8px',
-  fontFamily: 'var(--fonu-font)',
+  fontFamily: 'var(--havline-font)',
 }
 
 const lightOverrides: GlobalThemeOverrides = {

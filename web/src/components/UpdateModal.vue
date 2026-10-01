@@ -3,7 +3,7 @@
     <div class="update-modal">
       <div class="update-modal__header">
         <div>
-          <h3 class="update-modal__title">升级 Fonu</h3>
+          <h3 class="update-modal__title">升级 Havline</h3>
           <p class="update-modal__subtitle">升级完成后容器会重启，数据目录不会被删除</p>
         </div>
         <n-button quaternary size="small" :disabled="applying" @click="show = false">关闭</n-button>
@@ -34,7 +34,7 @@
         </div>
 
         <p class="update-modal__hint">
-          升级会重新构建应用镜像并只重建 <span class="mono">fonu</span> 容器。构建期间管理页面可能短暂无法访问，
+          升级会重新构建应用镜像并只重建 <span class="mono">havline</span> 容器。构建期间管理页面可能短暂无法访问，
           浏览器会自动等待服务恢复。
         </p>
 
@@ -127,7 +127,7 @@ async function pollStatus() {
     localMessage.value = ''
     if (status.value.phase === 'success') {
       applying.value = false
-      message.success('Fonu 已升级完成')
+      message.success('Havline 已升级完成')
       emit('updated')
       window.setTimeout(() => window.location.reload(), 1500)
       return
@@ -153,9 +153,9 @@ useVisibilityPolling(pollStatus, 2000, { enabled: applying })
 .update-modal {
   width: 560px;
   max-width: 94vw;
-  background: var(--fonu-surface);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow-md);
+  background: var(--havline-surface);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow-md);
   overflow: hidden;
 }
 
@@ -163,54 +163,54 @@ useVisibilityPolling(pollStatus, 2000, { enabled: applying })
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-5) var(--fonu-space-5) var(--fonu-space-3);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-5) var(--havline-space-5) var(--havline-space-3);
 }
 
 .update-modal__title {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .update-modal__subtitle {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .update-modal__body {
   display: grid;
-  gap: var(--fonu-space-4);
-  padding: 0 var(--fonu-space-5) var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  padding: 0 var(--havline-space-5) var(--havline-space-4);
 }
 
 .update-modal__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .update-modal__grid > div {
   display: grid;
   gap: 3px;
   padding: 10px 12px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
 }
 
 .update-modal__label {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .update-modal__hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .update-modal__log {
@@ -218,10 +218,10 @@ useVisibilityPolling(pollStatus, 2000, { enabled: applying })
   margin: 0;
   padding: 12px;
   overflow: auto;
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg-muted);
-  color: var(--fonu-text-secondary);
-  font-family: var(--fonu-mono);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg-muted);
+  color: var(--havline-text-secondary);
+  font-family: var(--havline-mono);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -230,9 +230,9 @@ useVisibilityPolling(pollStatus, 2000, { enabled: applying })
 .update-modal__footer {
   display: flex;
   justify-content: flex-end;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-4) var(--fonu-space-5);
-  border-top: 1px solid var(--fonu-border);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  border-top: 1px solid var(--havline-border);
 }
 
 @media (max-width: 640px) {

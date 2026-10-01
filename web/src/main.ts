@@ -6,7 +6,7 @@ import router from './router'
 const app = createApp(App)
 
 app.config.errorHandler = (err, _instance, info) => {
-  console.error('[fonu]', info, err)
+  console.error('[havline]', info, err)
 }
 
 app.use(router).use(naive).mount('#app')

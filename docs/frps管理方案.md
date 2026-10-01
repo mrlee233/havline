@@ -1,6 +1,6 @@
 # FRPS 服务端自动管理方案（frps-manager）
 
-> 目标：frpc 端在 Fonu 提交穿透规则后，frps 端**自动完成反向代理配置与生效**，实现域名无端口访问（`http://tv.36800.cc`），并自动管理 VPS 侧证书。本文是基于现有项目（Fonu v1.1.0 FRP 多服务端模块）的实施方案，不引入新服务、不改 frp 二进制。
+> 目标：frpc 端在 Havline 提交穿透规则后，frps 端**自动完成反向代理配置与生效**，实现域名无端口访问（`http://tv.36800.cc`），并自动管理 VPS 侧证书。本文是基于现有项目（Havline v1.1.0 FRP 多服务端模块）的实施方案，不引入新服务、不改 frp 二进制。
 
 ## 1. 现状与问题
 
@@ -10,28 +10,28 @@
 | --- | --- | --- |
 | tcp 规则注册（远程端口） | ✅ 自动（frpc 登录时向 frps 动态注册） | 无 |
 | http 规则域名路由 | ⚠️ 需 frps.toml 预先配置 `vhostHTTPPort` | 首次使用 http 类型时 VPS 要手工改配置+重启 |
-| frps.toml 生成 | ✅ Fonu 一键生成，用户手动复制到 VPS | 每次变更都要 SSH 手工同步 |
+| frps.toml 生成 | ✅ Havline 一键生成，用户手动复制到 VPS | 每次变更都要 SSH 手工同步 |
 | VPS 端口释放（80/443 被占） | ❌ 手动 SSH 停 Nginx | `port unavailable` 最常见根因 |
 | 改配置后生效 | ❌ 手动 `pkill frps` 重启（frp 无热加载） | 容易忘、容易误 |
 | VPS 侧证书 | ❌ 无 | HTTPS 要在 VPS 手工装证书 |
-| 配置漂移检测 | ❌ 无 | VPS 上的文件与 Fonu 数据库可能不一致 |
+| 配置漂移检测 | ❌ 无 | VPS 上的文件与 Havline 数据库可能不一致 |
 
 ## 2. 总体设计
 
-在 Fonu（frpc 所在机器）新增 **frps-manager** 子系统：Fonu 通过 **SSH** 连接 VPS，执行「检测 → 生成 → 推送 → 生效 → 验证」闭环。VPS 侧**零安装**（只要求 frps + SSH）。
+在 Havline（frpc 所在机器）新增 **frps-manager** 子系统：Havline 通过 **SSH** 连接 VPS，执行「检测 → 生成 → 推送 → 生效 → 验证」闭环。VPS 侧**零安装**（只要求 frps + SSH）。
 
 ```text
-Fonu (NAS)                                VPS (38.95.74.87)
+Havline (NAS)                                VPS (38.95.74.87)
 ┌─────────────────────────────┐           ┌──────────────────────────┐
 │ FRP 模块（现有）             │           │ frps (7000/80/443/7500)  │
 │  规则/服务端 CRUD            │           │  ↑ frpc 动态注册端口      │
 │ frps-manager（新增）         │   SSH     │  frps.toml (推送产物)     │
-│  检测→生成→推送→reload→验证  │ ────────→ │  /etc/fonu/frps/         │
-│  证书申请→推送→挂载          │           │  /etc/fonu/frps/certs/   │
+│  检测→生成→推送→reload→验证  │ ────────→ │  /etc/havline/frps/         │
+│  证书申请→推送→挂载          │           │  /etc/havline/frps/certs/   │
 └─────────────────────────────┘           └──────────────────────────┘
 ```
 
-核心思路：**frps 不认识"反代"，它只认 frps.toml**。因此"自动反代"= ① 规则变化时重算出应然的 frps.toml（含 vhost 端口、subDomainHost、TLS 配置）→ ② 与 VPS 现状 diff → ③ 无变化则跳过，有变化则原子推送 → ④ 通过 frps **admin API 热重载**（无需重启进程）→ ⑤ 回读验证。证书同理：Fonu 证书页现有 ACME 能力签好后把证书文件推到 VPS 并写入 frps.toml 的 `transport.tls`/`webServer.tls` 段。
+核心思路：**frps 不认识"反代"，它只认 frps.toml**。因此"自动反代"= ① 规则变化时重算出应然的 frps.toml（含 vhost 端口、subDomainHost、TLS 配置）→ ② 与 VPS 现状 diff → ③ 无变化则跳过，有变化则原子推送 → ④ 通过 frps **admin API 热重载**（无需重启进程）→ ⑤ 回读验证。证书同理：Havline 证书页现有 ACME 能力签好后把证书文件推到 VPS 并写入 frps.toml 的 `transport.tls`/`webServer.tls` 段。
 
 ## 3. 服务端模型扩展（frp_servers 表）
 
@@ -44,7 +44,7 @@ Fonu (NAS)                                VPS (38.95.74.87)
 | `ssh_user` | TEXT | 建议 root 或具备 sudo 的用户 |
 | `ssh_auth` | TEXT | `password` / `key` |
 | `ssh_secret_enc` | TEXT | 密码或私钥（加密） |
-| `frps_dir` | TEXT | VPS 上 frps 目录，默认 `/etc/fonu/frps` |
+| `frps_dir` | TEXT | VPS 上 frps 目录，默认 `/etc/havline/frps` |
 | `frps_bin` | TEXT | frps 二进制路径，默认 `/usr/local/bin/frps` |
 | `mgmt_enabled` | INTEGER | 是否启用自动管理（0/1，默认 0=纯手动，向后兼容） |
 
@@ -64,7 +64,7 @@ cat /proc/$(pidof frps)/cmdline         # 实际使用的配置路径
 cat <配置路径>                           # 现有 frps.toml 内容（做 diff）
 ```
 
-返回结构化报告：frps 版本/运行状态/配置路径、80/443 占用者判定（frps/nginx/其他/空闲）、现有 frps.toml 与 Fonu 期望配置的 **diff 摘要**、待办建议（如「80 被 nginx 占用，需释放」）。这就是用户之前反复手工排查的自动化。
+返回结构化报告：frps 版本/运行状态/配置路径、80/443 占用者判定（frps/nginx/其他/空闲）、现有 frps.toml 与 Havline 期望配置的 **diff 摘要**、待办建议（如「80 被 nginx 占用，需释放」）。这就是用户之前反复手工排查的自动化。
 
 ### 4.2 下发（Apply）——「自动反代」的主流程
 
@@ -74,7 +74,7 @@ cat <配置路径>                           # 现有 frps.toml 内容（做 dif
    - 存在 http/https/tcpmux 规则 → 输出 `vhostHTTPPort = 80`、`vhostHTTPSPort = 443`（去端口访问的关键）；
    - 存在 subdomain 规则 → 输出 `subDomainHost = <用户在服务端表单新填的主域>`；
    - 证书启用时输出 `transport.tls.force` / `webServer.tls` 段；
-2. **SSH 推送（原子）**：新内容写 `/etc/fonu/frps/frps.toml.new` → `mv` 原子替换 → 旧文件留 `frps.toml.bak`（回滚点）；
+2. **SSH 推送（原子）**：新内容写 `/etc/havline/frps/frps.toml.new` → `mv` 原子替换 → 旧文件留 `frps.toml.bak`（回滚点）；
 3. **热重载**：调 frps admin API `PUT /api/reload`（frps webServer 7500 已有 Basic Auth 凭据）——**不杀进程**，连接不断；API 不可用时降级 `systemctl restart frps`（nohup 场景提示用户）；
 4. **验证**：重读 VPS 上的 frps.toml 确认与期望一致 + `ss` 确认 80/443 已由 frps 监听 + 通过公网侧发起一次探测请求；
 5. 全程动作与输出写入系统日志（复用 logstore），UI 弹窗展示每步结果。
@@ -88,14 +88,14 @@ cat <配置路径>                           # 现有 frps.toml 内容（做 dif
 
 ### 4.4 证书管理（VPS 侧 HTTPS）
 
-复用 Fonu 证书页现有 ACME（lego）能力，证书签发在 NAS 侧完成（DNS-01，无需 VPS 参与），然后：
+复用 Havline 证书页现有 ACME（lego）能力，证书签发在 NAS 侧完成（DNS-01，无需 VPS 参与），然后：
 
 1. 证书页选「部署到 VPS」→ 选目标服务端；
-2. SSH 推送 `fullchain.pem` / `privkey.pem` 到 `/etc/fonu/frps/certs/<域名>/`（0600）；
+2. SSH 推送 `fullchain.pem` / `privkey.pem` 到 `/etc/havline/frps/certs/<域名>/`（0600）；
 3. frps.toml 写入 `webServer.tls.certFile/keyFile`（管理面板 HTTPS）；对外流量 TLS 若需要也在 frps 侧终止时，走 `transport.tls` 相关段（v0.71 支持 `transport.tls.force` + 证书）；
-4. 续期：Fonu 证书定时任务续期成功后自动重推 + reload（证书 60 天滚动，VPS 侧无感）。
+4. 续期：Havline 证书定时任务续期成功后自动重推 + reload（证书 60 天滚动，VPS 侧无感）。
 
-> 设计取舍：对外业务的 HTTPS 终止仍推荐在 **Fonu Nginx（NAS 侧）**（本手册方案 A 架构），frps 侧证书用于 webServer 管理面板与 `tls.force` 场景。若用户想让 VPS 终止 TLS，同一套推送机制也覆盖。
+> 设计取舍：对外业务的 HTTPS 终止仍推荐在 **Havline Nginx（NAS 侧）**（本手册方案 A 架构），frps 侧证书用于 webServer 管理面板与 `tls.force` 场景。若用户想让 VPS 终止 TLS，同一套推送机制也覆盖。
 
 ## 5. API 与 UI
 
@@ -133,8 +133,8 @@ cat <配置路径>                           # 现有 frps.toml 内容（做 dif
 ## 7. 安全设计
 
 1. SSH 凭据 secret.Box 加密落库，API 永不回显（同 token 掩码机制）；
-2. 推荐文档引导用户用**密钥登录**（Fonu 可一键生成 ed25519 密钥对、展示公钥让用户贴到 VPS `authorized_keys`）；
-3. 所有远程命令为**固定白名单模板**（版本/端口/状态/替换文件/reload），不拼接用户输入，杜绝命令注入；SFTP 只写 `/etc/fonu/frps/` 前缀内路径；
+2. 推荐文档引导用户用**密钥登录**（Havline 可一键生成 ed25519 密钥对、展示公钥让用户贴到 VPS `authorized_keys`）；
+3. 所有远程命令为**固定白名单模板**（版本/端口/状态/替换文件/reload），不拼接用户输入，杜绝命令注入；SFTP 只写 `/etc/havline/frps/` 前缀内路径；
 4. 危险动作（释放端口、重启 frps）二次确认 + 动作日志；
 5. Apply 幂等：重复执行无副作用（diff 无变化即跳过）；
 6. frps admin API 调用走本机 127.0.0.1:7500（SSH 远端执行 curl），不暴露公网。

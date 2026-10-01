@@ -5,14 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fonu/fonu/internal/db"
-	"github.com/fonu/fonu/internal/secret"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/db"
+	"github.com/havline/havline/internal/secret"
+	"github.com/havline/havline/internal/settings"
 )
 
 func TestStoreSaveTelegramPersistsType(t *testing.T) {
 	dir := t.TempDir()
-	conn, err := db.Open(filepath.Join(dir, "fonu.db"))
+	conn, err := db.Open(filepath.Join(dir, "havline.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestStoreSaveTelegramPersistsType(t *testing.T) {
 
 func TestStoreMigratesLegacyWebhookURL(t *testing.T) {
 	dir := t.TempDir()
-	conn, err := db.Open(filepath.Join(dir, "fonu.db"))
+	conn, err := db.Open(filepath.Join(dir, "havline.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -166,7 +166,7 @@ type ServerOptions struct {
 	TCPMuxHTTPConnectPort int    `json:"tcpmux_http_connect_port,omitempty"`
 	FrpsLogToFile         bool   `json:"frps_log_to_file"`
 	FrpsLogMaxDays        int    `json:"frps_log_max_days,omitempty"`
-	// frps 管理接口（webServer），仅用于 Fonu 拉取穿透流量等只读信息，不写入 frpc.toml
+	// frps 管理接口（webServer），仅用于 Havline 拉取穿透流量等只读信息，不写入 frpc.toml
 	DashboardAddr             string `json:"dashboard_addr,omitempty"`
 	DashboardPort             int    `json:"dashboard_port,omitempty"`
 	DashboardUser             string `json:"dashboard_user,omitempty"`

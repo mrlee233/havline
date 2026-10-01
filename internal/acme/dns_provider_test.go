@@ -3,7 +3,7 @@ package acme
 import (
 	"testing"
 
-	"github.com/fonu/fonu/internal/ddns"
+	"github.com/havline/havline/internal/ddns"
 )
 
 func TestValidateDNSCredentialsVolcengine(t *testing.T) {

@@ -35,11 +35,11 @@ withDefaults(
 
 <style scoped>
 .stat-card {
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
-  padding: var(--fonu-space-5);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-5);
   min-height: 140px;
   display: flex;
   flex-direction: column;
@@ -47,21 +47,21 @@ withDefaults(
 }
 
 .stat-card:hover {
-  box-shadow: var(--fonu-shadow-md);
+  box-shadow: var(--havline-shadow-md);
 }
 
 .stat-card__header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--fonu-space-2);
-  margin-bottom: var(--fonu-space-3);
+  gap: var(--havline-space-2);
+  margin-bottom: var(--havline-space-3);
 }
 
 .stat-card__title-row {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .stat-card__icon {
@@ -76,8 +76,8 @@ withDefaults(
 }
 
 .stat-card__icon--brand {
-  background: var(--fonu-brand-soft);
-  color: var(--fonu-brand);
+  background: var(--havline-brand-soft);
+  color: var(--havline-brand);
 }
 
 .stat-card__icon--blue {
@@ -98,7 +98,7 @@ withDefaults(
 .stat-card__label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .stat-card__value,
@@ -106,7 +106,7 @@ withDefaults(
   font-size: 26px;
   font-weight: 700;
   line-height: 1.25;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   word-break: break-all;
   letter-spacing: -0.02em;
 }
@@ -116,9 +116,9 @@ withDefaults(
 }
 
 .stat-card__sub {
-  margin-top: var(--fonu-space-2);
+  margin-top: var(--havline-space-2);
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 </style>

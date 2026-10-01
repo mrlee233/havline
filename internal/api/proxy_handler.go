@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/logstore"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/traffic"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/logstore"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/traffic"
 )
 
 type ProxyHandler struct {

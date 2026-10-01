@@ -1,7 +1,7 @@
 # 公网反代「部署设置」对齐本地反代 —— 方案设计
 
 > 目标：把本地反向代理（`ProxyView.vue` 规则弹窗）中真正有价值的安全与运维设置，按公网反代的语义迁移到
-> 「公网反代」页（`/public-proxy`，`ProxyRemoteView.vue`）的「部署设置」中，由 fonu-agent 生成对应的 Nginx vhost 配置。
+> 「公网反代」页（`/public-proxy`，`ProxyRemoteView.vue`）的「部署设置」中，由 havline-agent 生成对应的 Nginx vhost 配置。
 >
 > 原则：**公网反代只管「公网入口」这一层**。凡是会破坏 frps vhost 路由、或本质属于「本机内网分流」的选项，
 > 一律不迁移（见「明确不做」一节）。
@@ -22,7 +22,7 @@
 - 
 **高级**：仅 TLS 1.3、安全响应头、限流、连接数限制
 
-第一梯队 7 项都是 agent 模板内改动 + Fonu 参数透传，风险低、见效快；第二梯队 3 项需要 agent 多写一个 http 上下文文件。说一声我从第一梯队开始做，或者指定要哪几项。
+第一梯队 7 项都是 agent 模板内改动 + Havline 参数透传，风险低、见效快；第二梯队 3 项需要 agent 多写一个 http 上下文文件。说一声我从第一梯队开始做，或者指定要哪几项。
 
 
 
@@ -50,7 +50,7 @@
 - `basic_auth_user`（密码由 agent 自动生成并落盘 htpasswd）；
 - 默认头：Host / X-Real-IP / X-Forwarded-For。
 
-Fonu 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAgentRoute` → `AgentClient.SyncRouteEx`
+Havline 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAgentRoute` → `AgentClient.SyncRouteEx`
 → `PUT /api/v1/routes`。
 
 ---
@@ -73,9 +73,9 @@ Fonu 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAge
 
 | # | 功能 | 关键约束 |
 | --- | --- | --- |
-| 8 | **请求限流** | `limit_req_zone` 只能出现在 `http` 块。agent 需额外生成 `fonu-limits.conf`（宝塔将 vhost 目录 include 在 `http{}` 内，因此该文件顶层指令即 http 上下文），各域名 server 内 `limit_req zone=fonu_<域名>_req burst=N nodelay;` |
-| 9 | **连接数限制** | 同上，`limit_conn_zone` + `limit_conn fonu_<域名>_conn N;` |
-| 10 | **仅中国大陆 IP** | 需 `geo` 模块 + 中国 IP 段下发到 VPS（Fonu 已有 china cidr 模块，7456 条 v4），下发体积最大、成本最高，建议最后做 |
+| 8 | **请求限流** | `limit_req_zone` 只能出现在 `http` 块。agent 需额外生成 `havline-limits.conf`（宝塔将 vhost 目录 include 在 `http{}` 内，因此该文件顶层指令即 http 上下文），各域名 server 内 `limit_req zone=havline_<域名>_req burst=N nodelay;` |
+| 9 | **连接数限制** | 同上，`limit_conn_zone` + `limit_conn havline_<域名>_conn N;` |
+| 10 | **仅中国大陆 IP** | 需 `geo` 模块 + 中国 IP 段下发到 VPS（Havline 已有 china cidr 模块，7456 条 v4），下发体积最大、成本最高，建议最后做 |
 
 ### 明确不做（字段 / 语义不匹配）
 
@@ -109,13 +109,13 @@ Fonu 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAge
 
 - 这些字段**只作用于公网 Nginx 模板，绝不写入 frpc.toml**（与现有 `websocket` / `redirect_https` 等一致，在 `ProxyOptions` 上以注释标明）；
 - 「启用 HTTPS」采用**反向字段 `https_disabled`**：字段缺省时保持现有行为（证书推送成功即启用 TLS），
-  保证新 Fonu + 旧 agent、旧数据不出现行为突变。
+  保证新 Havline + 旧 agent、旧数据不出现行为突变。
 
 ---
 
 ## 四、实施步骤
 
-### 阶段 1：第一梯队后端（agent + Fonu）
+### 阶段 1：第一梯队后端（agent + Havline）
 
 1. `internal/agent/server.go`
    - `routeRequest` 增加第一梯队字段；
@@ -149,8 +149,8 @@ Fonu 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAge
 
 ### 阶段 3：第二梯队（按需）
 
-7. agent 增加 `fonu-limits.conf` 生成器（http 上下文 zone 定义）+ 每域名 server 引用；
-8. 中国 IP：Fonu 将 china cidr 列表推送到 agent（`/var/lib/fonu-agent/geo/china.conf`），agent 生成 `geo` 块。
+7. agent 增加 `havline-limits.conf` 生成器（http 上下文 zone 定义）+ 每域名 server 引用；
+8. 中国 IP：Havline 将 china cidr 列表推送到 agent（`/var/lib/havline-agent/geo/china.conf`），agent 生成 `geo` 块。
 
 ---
 
@@ -159,7 +159,7 @@ Fonu 侧对应链路：`ProxyOptions`（`internal/frp/model.go`）→ `DeployAge
 每次改动后全量跑（项目既有闭环）：
 
 ```powershell
-cd f:\Fonu-main\Fonu-1.0.2
+cd f:\Havline-main\Havline-1.0.2
 gofmt -w internal/agent/server.go internal/frp/model.go internal/frp/agent_client.go internal/frp/service.go
 go build ./... ; go vet ./internal/frp ./internal/agent ./internal/api
 go test ./internal/frp ./internal/api
@@ -170,7 +170,7 @@ agent 二进制需按既有流程交叉编译（amd64 + arm64）并升级：
 
 ```powershell
 $env:GOOS='linux'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'
-go build -trimpath -o internal/frp/agentbin/fonu-agent-linux-amd64.new ./cmd/fonu-agent
+go build -trimpath -o internal/frp/agentbin/havline-agent-linux-amd64.new ./cmd/havline-agent
 # arm64 同理；Move-Item 覆盖后，在「公网 Agent」页执行「升级 Agent」
 ```
 
@@ -178,7 +178,7 @@ VPS 侧实测（部署 7023 规则后）：
 
 ```bash
 nginx -t                                   # 语法
-cat /www/server/panel/vhost/nginx/fonu-7023.36800.cc.conf   # 配置内容（或页面「查看配置」）
+cat /www/server/panel/vhost/nginx/havline-7023.36800.cc.conf   # 配置内容（或页面「查看配置」）
 curl -I http://7023.36800.cc               # 强制跳转 → 301
 curl -sI -H 'Host: 7023.36800.cc' http://127.0.0.1:9080    # 回源自检
 curl -k -sI https://7023.36800.cc          # 响应头（HSTS / X-Frame-Options）
@@ -196,8 +196,8 @@ for i in $(seq 1 50); do curl -s -o /dev/null -w '%{http_code} ' http://7023.368
 
 | 场景 | 期望行为 |
 | --- | --- |
-| 新 Fonu + 旧 agent | 旧 agent 忽略未知 JSON 字段（Go 默认行为），新选项静默不生效 → **部署前必须先「升级 Agent」**，页面提示 |
-| 旧 Fonu + 新 agent | 新字段缺省，行为与现状一致（`https_disabled` 缺省 = 启用 TLS） |
+| 新 Havline + 旧 agent | 旧 agent 忽略未知 JSON 字段（Go 默认行为），新选项静默不生效 → **部署前必须先「升级 Agent」**，页面提示 |
+| 旧 Havline + 新 agent | 新字段缺省，行为与现状一致（`https_disabled` 缺省 = 启用 TLS） |
 | frps v0.68.0 / v0.71.0 | 与本方案无关（作用于 Nginx vhost，不依赖 dashboard API） |
 | 回滚 | 关闭对应开关后重新部署即可恢复；agent 侧每域名配置为整文件覆盖写，无残留 |
 

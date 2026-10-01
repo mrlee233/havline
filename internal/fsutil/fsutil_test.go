@@ -200,7 +200,7 @@ func TestReadVersionRejectsTraversal(t *testing.T) {
 }
 
 func TestVersionsDirIsHidden(t *testing.T) {
-	path := filepath.Join("/etc/nginx/sites-enabled", "fonuagent-https.conf")
+	path := filepath.Join("/etc/nginx/sites-enabled", "havlineagent-https.conf")
 	base := filepath.Base(VersionsDir(path))
 	if !strings.HasPrefix(base, ".") {
 		t.Fatalf("版本目录应以点号开头，避免被 nginx 的 include * 加载：%s", base)
@@ -208,7 +208,7 @@ func TestVersionsDirIsHidden(t *testing.T) {
 }
 
 func TestMigrateLegacyVersions(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "fonuagent-https.conf")
+	path := filepath.Join(t.TempDir(), "havlineagent-https.conf")
 	legacy := path + ".versions"
 	if err := os.MkdirAll(legacy, 0o700); err != nil {
 		t.Fatal(err)

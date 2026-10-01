@@ -69,7 +69,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_
       throw new Error(
         timeoutMs > REQUEST_TIMEOUT_MS
           ? '证书操作超时，请稍后在证书列表查看状态，或在「日志 → 实时日志」查看 Nginx 输出'
-          : '请求超时，请检查 Fonu 服务或 Nginx 状态',
+          : '请求超时，请检查 Havline 服务或 Nginx 状态',
       )
     }
     throw error
@@ -440,7 +440,7 @@ export const api = {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `fonu-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`
+    link.download = `havline-backup-${new Date().toISOString().slice(0, 10)}.tar.gz`
     link.click()
     URL.revokeObjectURL(url)
   },

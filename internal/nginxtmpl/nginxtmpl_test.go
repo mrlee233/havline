@@ -58,10 +58,10 @@ func TestAccessDirectives(t *testing.T) {
 }
 
 func TestLimitDirectives(t *testing.T) {
-	got := LimitDirectives(LimitConfig{Zone: "fonu_rule_7", Rate: 10, Burst: 20, Conn: 30}, "        ")
+	got := LimitDirectives(LimitConfig{Zone: "havline_rule_7", Rate: 10, Burst: 20, Conn: 30}, "        ")
 	for _, want := range []string{
-		"limit_conn fonu_rule_7_conn 30;",
-		"limit_req zone=fonu_rule_7_req burst=20 nodelay;",
+		"limit_conn havline_rule_7_conn 30;",
+		"limit_req zone=havline_rule_7_req burst=20 nodelay;",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("限流指令缺少 %q：%s", want, got)
@@ -74,10 +74,10 @@ func TestLimitDirectives(t *testing.T) {
 }
 
 func TestZoneDirectives(t *testing.T) {
-	if got := RateLimitZone("fonu_app_req", 10); got != "limit_req_zone $binary_remote_addr zone=fonu_app_req:10m rate=10r/s;\n" {
+	if got := RateLimitZone("havline_app_req", 10); got != "limit_req_zone $binary_remote_addr zone=havline_app_req:10m rate=10r/s;\n" {
 		t.Fatalf("RateLimitZone() = %q", got)
 	}
-	if got := ConnLimitZone("fonu_app_conn"); got != "limit_conn_zone $binary_remote_addr zone=fonu_app_conn:10m;\n" {
+	if got := ConnLimitZone("havline_app_conn"); got != "limit_conn_zone $binary_remote_addr zone=havline_app_conn:10m;\n" {
 		t.Fatalf("ConnLimitZone() = %q", got)
 	}
 	if got := RateLimitZone("", 10); got != "" {
@@ -86,8 +86,8 @@ func TestZoneDirectives(t *testing.T) {
 }
 
 func TestZoneName(t *testing.T) {
-	if got := ZoneName("fonu", "App.Example.com"); got != "fonu_app_example_com" {
-		t.Fatalf("ZoneName() = %q, 期望 fonu_app_example_com", got)
+	if got := ZoneName("havline", "App.Example.com"); got != "havline_app_example_com" {
+		t.Fatalf("ZoneName() = %q, 期望 havline_app_example_com", got)
 	}
 }
 

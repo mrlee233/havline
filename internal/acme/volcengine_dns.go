@@ -6,7 +6,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
 
-	"github.com/fonu/fonu/internal/ddns"
+	"github.com/havline/havline/internal/ddns"
 )
 
 type volcengineDNS struct {

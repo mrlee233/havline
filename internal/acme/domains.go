@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/validate"
 )
 
 func NormalizeCertDomains(raw []string) ([]string, error) {

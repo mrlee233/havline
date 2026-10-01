@@ -33,7 +33,7 @@ const router = createRouter({
           path: 'dashboard',
           name: 'dashboard',
           component: DashboardView,
-          meta: { title: '仪表盘', description: '查看 Fonu 运行状态与关键指标' },
+          meta: { title: '仪表盘', description: '查看 Havline 运行状态与关键指标' },
         },
         {
           path: 'ddns',
@@ -57,13 +57,13 @@ const router = createRouter({
           path: 'frp',
           name: 'frp',
           component: FrpView,
-          meta: { title: '内网穿透', description: '通过 FRP 将公网流量转发到 Fonu Nginx' },
+          meta: { title: '内网穿透', description: '通过 FRP 将公网流量转发到 Havline Nginx' },
         },
         {
           path: 'frp-agent',
           name: 'frp-agent',
           component: AgentView,
-          meta: { title: '公网 Agent', description: '管理部署在公网 VPS 上的 fonu-agent 与 frps' },
+          meta: { title: '公网 Agent', description: '管理部署在公网 VPS 上的 havline-agent 与 frps' },
         },
         {
           path: 'cloudflare',

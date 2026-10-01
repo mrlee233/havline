@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/fonu/fonu/internal/ddns"
+	"github.com/havline/havline/internal/ddns"
 )
 
 type DDNSHandler struct {

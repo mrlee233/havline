@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 // ParseServerEndpoints 从 Nginx 配置文本里抽取各 server 块的 (server_name, listen 端口) 组合，

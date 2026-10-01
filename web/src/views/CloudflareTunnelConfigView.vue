@@ -27,7 +27,7 @@
       </StatCard>
     </div>
 
-    <FonuCard class="section-card" title="基础配置" subtitle="手工隧道可在这里修改；托管隧道由反向代理规则派生">
+    <HavlineCard class="section-card" title="基础配置" subtitle="手工隧道可在这里修改；托管隧道由反向代理规则派生">
       <div class="section-body">
         <n-alert v-if="tunnel.managed" type="info" :bordered="false">
           这是自动托管隧道。暴露域名与回源请到
@@ -38,9 +38,9 @@
           <n-button type="primary" @click="basicVisible = true">编辑基础配置</n-button>
         </div>
       </div>
-    </FonuCard>
+    </HavlineCard>
 
-    <FonuCard class="section-card" title="路由" subtitle="流量通过以下路由到应用程序和服务">
+    <HavlineCard class="section-card" title="路由" subtitle="流量通过以下路由到应用程序和服务">
       <div class="section-body">
         <div class="topology-canvas" :style="{ height: `${topologyHeight}px` }">
           <div class="topology-graph">
@@ -142,9 +142,9 @@
           <strong class="mono">{{ routeData?.catch_all || 'http_status:404' }}</strong>
         </div>
       </div>
-    </FonuCard>
+    </HavlineCard>
 
-    <FonuCard class="section-card" title="运行控制" subtitle="进程操作会立即作用在本机 cloudflared">
+    <HavlineCard class="section-card" title="运行控制" subtitle="进程操作会立即作用在本机 cloudflared">
       <div class="section-body">
         <n-space>
           <n-button type="success" :disabled="runtimeState === 'connected'" @click="runAction('启动')">启动</n-button>
@@ -152,7 +152,7 @@
           <n-button @click="runAction('重启')">重启</n-button>
         </n-space>
       </div>
-    </FonuCard>
+    </HavlineCard>
   </template>
 
   <n-modal v-model:show="basicVisible" preset="card" :style="{ width: 'min(720px, 96vw)' }" title="基础配置">
@@ -187,7 +187,7 @@
       </n-form-item>
       <div class="config-form__footer">
         <n-switch v-model:value="form.autoStart" />
-        <span>随 Fonu 自动启动</span>
+        <span>随 Havline 自动启动</span>
       </div>
     </n-form>
     <template #footer>
@@ -242,7 +242,7 @@ import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NPopconfirm, 
 import { AddOutline, ArrowBackOutline, CloudOutline, GitNetworkOutline, LayersOutline, PulseOutline, ServerOutline, TimeOutline } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
 import type { CfRouteView, CfRuntimeStatus, CfTunnel, CfTunnelPayload, CfTunnelRoutes, CfZone } from '../api/types'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -550,20 +550,20 @@ onMounted(load)
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
-.section-card + .section-card { margin-top: var(--fonu-space-4); }
+.section-card + .section-card { margin-top: var(--havline-space-4); }
 .config-basic-action { display: flex; justify-content: flex-end; }
 .topology-canvas {
   position: relative;
   width: 100%;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
   overflow-x: auto;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background-color: var(--fonu-bg);
-  background-image: radial-gradient(var(--fonu-border) 0.8px, transparent 0.8px);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background-color: var(--havline-bg);
+  background-image: radial-gradient(var(--havline-border) 0.8px, transparent 0.8px);
   background-size: 10px 10px;
 }
 .topology-graph {
@@ -584,7 +584,7 @@ onMounted(load)
 }
 .topology-domain__name {
   white-space: nowrap;
-  color: var(--fonu-brand-text);
+  color: var(--havline-brand-text);
   text-decoration: underline;
 }
 .topology-node-copy {
@@ -602,7 +602,7 @@ onMounted(load)
 }
 .topology-lines path {
   fill: none;
-  stroke: var(--fonu-border);
+  stroke: var(--havline-border);
   stroke-width: 1.5;
 }
 .topology-add {
@@ -619,10 +619,10 @@ onMounted(load)
   align-items: center;
   gap: 8px;
   padding: 9px 14px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 999px;
-  background: var(--fonu-surface);
-  box-shadow: var(--fonu-shadow);
+  background: var(--havline-surface);
+  box-shadow: var(--havline-shadow);
   white-space: nowrap;
 }
 .topology-exit { left: 320px; min-width: 100px; }
@@ -638,15 +638,15 @@ onMounted(load)
   min-width: 260px;
   height: 44px;
   padding: 7px 8px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-surface);
-  color: var(--fonu-text-secondary);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-surface);
+  color: var(--havline-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
 .topology-service .mono { white-space: nowrap; }
-.topology-service :deep(.n-icon) { flex: none; color: var(--fonu-brand); }
+.topology-service :deep(.n-icon) { flex: none; color: var(--havline-brand); }
 .config-form { max-width: 780px; }
 .config-form__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .config-origin {
@@ -662,7 +662,7 @@ onMounted(load)
   align-items: center;
   justify-content: center;
   min-width: 22px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   white-space: nowrap;
 }
 .config-form__footer { display: flex; align-items: center; gap: 10px; font-size: 13px; }
@@ -672,21 +672,21 @@ onMounted(load)
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 var(--fonu-space-4);
+  margin: 0 0 var(--havline-space-4);
   padding: 10px 12px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
 }
-.hostname-preview span { color: var(--fonu-text-muted); font-size: 12px; }
-.hostname-preview strong { color: var(--fonu-text); }
+.hostname-preview span { color: var(--havline-text-muted); font-size: 12px; }
+.hostname-preview strong { color: var(--havline-text); }
 .routes-table { overflow-x: auto; }
 .routes-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
-  margin-bottom: var(--fonu-space-3);
+  gap: var(--havline-space-3);
+  margin-bottom: var(--havline-space-3);
 }
 .routes-table__head,
 .routes-table__row {
@@ -698,11 +698,11 @@ onMounted(load)
   padding: 10px 0;
 }
 .routes-table__actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.routes-table__head { color: var(--fonu-text-muted); font-size: 12px; border-bottom: 1px solid var(--fonu-border); }
-.routes-table__row { border-bottom: 1px solid var(--fonu-border); }
+.routes-table__head { color: var(--havline-text-muted); font-size: 12px; border-bottom: 1px solid var(--havline-border); }
+.routes-table__row { border-bottom: 1px solid var(--havline-border); }
 .routes-table__row:last-child { border-bottom: none; }
-.routes-empty { padding: 20px 0; color: var(--fonu-text-muted); }
-.routes-catchall { margin-top: 12px; padding: 10px 12px; background: var(--fonu-bg); border-radius: var(--fonu-radius-sm); font-size: 13px; }
+.routes-empty { padding: 20px 0; color: var(--havline-text-muted); }
+.routes-catchall { margin-top: 12px; padding: 10px 12px; background: var(--havline-bg); border-radius: var(--havline-radius-sm); font-size: 13px; }
 @media (max-width: 900px) {
   .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .config-form__grid { grid-template-columns: 1fr; }

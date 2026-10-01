@@ -470,7 +470,7 @@ export interface FrpServerOptions {
   frps_log_to_file?: boolean
   /** 文件日志保留天数，默认 3 */
   frps_log_max_days?: number
-  /** frps 管理接口（webServer），仅用于 Fonu 拉取穿透流量等只读信息 */
+  /** frps 管理接口（webServer），仅用于 Havline 拉取穿透流量等只读信息 */
   dashboard_addr?: string
   dashboard_port?: number
   dashboard_user?: string

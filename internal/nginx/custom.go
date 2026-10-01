@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/fsutil"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/fsutil"
 )
 
 const maxCustomBackups = 10
@@ -220,7 +220,7 @@ client_max_body_size 50m;
 }
 
 func GenerateGlobalFramework(cfg config.Config) string {
-	return fmt.Sprintf(`# 以下部分由 Fonu 自动生成，请勿在此编辑
+	return fmt.Sprintf(`# 以下部分由 Havline 自动生成，请勿在此编辑
 
 # 主进程
 worker_processes auto;
@@ -240,8 +240,8 @@ http {
     default_type  application/octet-stream;
 
     # 访问日志格式与路径
-    log_format fonu_access '$time_iso8601 $host $server_port $request_method $request_uri $status $request_time $remote_addr $upstream_addr $request_length $bytes_sent';
-    access_log %s fonu_access;
+    log_format havline_access '$time_iso8601 $host $server_port $request_method $request_uri $status $request_time $remote_addr $upstream_addr $request_length $bytes_sent';
+    access_log %s havline_access;
 
     # 传输优化
     sendfile on;

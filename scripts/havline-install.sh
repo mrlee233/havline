@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fonu Linux 安装脚本（随 tar.gz 一起分发）
+# Havline Linux 安装脚本（随 tar.gz 一起分发）
 #
 #   sudo bash ./install.sh                 安装并启动
 #   sudo bash ./install.sh --port 8080     换监听端口
@@ -9,24 +9,24 @@
 # 用 `bash ./install.sh` 而不是 `./install.sh`：Windows 上打出来的 tar 不带执行位
 # （本机 tar 不支持 --mode，待装本时无法保留 +x），显式调 bash 就不需要先 chmod。
 #
-# 关于初始口令：Fonu 首次启动会随机生成一个 16 位管理员口令（用户名 admin），
+# 关于初始口令：Havline 首次启动会随机生成一个 16 位管理员口令（用户名 admin），
 # 打进攻日志与日志文件（<数据目录>/logs/app.log），本脚本装完会直接把它打印出来。
 # 忘了 / 想重新初始化：sudo bash ./install.sh --reset-admin
 #
 # 安装布局（与 Docker 版同一套环境变量，见 Dockerfile 的 ENV 块）：
-#   /opt/fonu/fonu                 主程序
-#   /opt/fonu/migrations/*.sql      迁移脚本（程序按工作目录找它，必须与二进制同级）
-#   /var/lib/fonu/                  数据目录（库、日志、证书、nginx 与 frp 的运行数据）
-#   /etc/fonu/fonu.env              环境变量（含随机生成的会话密钥，0600）
-#   /etc/systemd/system/fonu.service
+#   /opt/havline/havline                 主程序
+#   /opt/havline/migrations/*.sql      迁移脚本（程序按工作目录找它，必须与二进制同级）
+#   /var/lib/havline/                  数据目录（库、日志、证书、nginx 与 frp 的运行数据）
+#   /etc/havline/havline.env              环境变量（含随机生成的会话密钥，0600）
+#   /etc/systemd/system/havline.service
 set -euo pipefail
 
-PREFIX=/opt/fonu
-DATA_DIR=/var/lib/fonu
-ENV_DIR=/etc/fonu
-ENV_FILE=$ENV_DIR/fonu.env
-UNIT=/etc/systemd/system/fonu.service
-SERVICE_NAME=fonu
+PREFIX=/opt/havline
+DATA_DIR=/var/lib/havline
+ENV_DIR=/etc/havline
+ENV_FILE=$ENV_DIR/havline.env
+UNIT=/etc/systemd/system/havline.service
+SERVICE_NAME=havline
 PORT=6893
 UNINSTALL=0
 PURGE=0
@@ -91,17 +91,17 @@ print_initial_password() {
 
 # 重置管理员：删掉 admins 行后重启，启动流程会重新生成一个随机口令并写进日志
 reset_admin() {
-  if [ ! -f "$DATA_DIR/fonu.db" ]; then
-    echo "找不到数据库 $DATA_DIR/fonu.db，无需重置" >&2
+  if [ ! -f "$DATA_DIR/havline.db" ]; then
+    echo "找不到数据库 $DATA_DIR/havline.db，无需重置" >&2
     exit 1
   fi
   systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-  local backup="$DATA_DIR/fonu.db.bak.$(date +%Y%m%d-%H%M%S)"
-  cp "$DATA_DIR/fonu.db" "$backup"
+  local backup="$DATA_DIR/havline.db.bak.$(date +%Y%m%d-%H%M%S)"
+  cp "$DATA_DIR/havline.db" "$backup"
   if command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$DATA_DIR/fonu.db" 'DELETE FROM sessions; DELETE FROM admins;'
+    sqlite3 "$DATA_DIR/havline.db" 'DELETE FROM sessions; DELETE FROM admins;'
   elif command -v python3 >/dev/null 2>&1; then
-    python3 - "$DATA_DIR/fonu.db" <<'PY'
+    python3 - "$DATA_DIR/havline.db" <<'PY'
 import sqlite3, sys
 conn = sqlite3.connect(sys.argv[1])
 conn.execute('DELETE FROM sessions')
@@ -130,7 +130,7 @@ if [ "$RESET_ADMIN" -eq 1 ]; then
   reset_admin
 fi
 
-for f in fonu migrations; do
+for f in havline migrations; do
   if [ ! -e "$SCRIPT_DIR/$f" ]; then
     echo "安装包不完整：缺少 $f（请在解压后的目录里运行 ./install.sh）" >&2
     exit 1
@@ -164,7 +164,7 @@ install -d -m 0750 "$DATA_DIR"
 install -d -m 0750 "$ENV_DIR"
 install -d -m 0755 "$PREFIX/migrations"
 
-install -m 0755 "$SCRIPT_DIR/fonu" "$PREFIX/fonu"
+install -m 0755 "$SCRIPT_DIR/havline" "$PREFIX/havline"
 rm -f "$PREFIX"/migrations/*.sql
 cp "$SCRIPT_DIR"/migrations/*.sql "$PREFIX/migrations/"
 install -m 0644 "$SCRIPT_DIR/VERSION" "$PREFIX/VERSION" 2>/dev/null || true
@@ -173,11 +173,11 @@ install -m 0644 "$SCRIPT_DIR/VERSION" "$PREFIX/VERSION" 2>/dev/null || true
 if [ ! -f "$ENV_FILE" ]; then
   SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')
   cat > "$ENV_FILE" <<EOF
-# Fonu 环境变量（由 install.sh 生成）。修改后：systemctl restart $SERVICE_NAME
-FONU_DATA_DIR=$DATA_DIR
-FONU_LISTEN=:$PORT
-FONU_SESSION_SECRET=$SECRET
-FONU_NGINX_MIME_TYPES=$MIME_TYPES
+# Havline 环境变量（由 install.sh 生成）。修改后：systemctl restart $SERVICE_NAME
+HAVLINE_DATA_DIR=$DATA_DIR
+HAVLINE_LISTEN=:$PORT
+HAVLINE_SESSION_SECRET=$SECRET
+HAVLINE_NGINX_MIME_TYPES=$MIME_TYPES
 TZ=${TZ:-Asia/Shanghai}
 EOF
   chmod 0600 "$ENV_FILE"
@@ -188,18 +188,18 @@ fi
 
 cat > "$UNIT" <<EOF
 [Unit]
-Description=Fonu 自托管网关管理面板
-Documentation=https://github.com/fonu/fonu
+Description=Havline 自托管网关管理面板
+Documentation=https://github.com/havline/havline
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# Fonu 会管理同机的 nginx（改配置 / reload / 绑 80·443）并拉起 frpc，需要相应权限
+# Havline 会管理同机的 nginx（改配置 / reload / 绑 80·443）并拉起 frpc，需要相应权限
 User=root
 WorkingDirectory=$PREFIX
 EnvironmentFile=$ENV_FILE
-ExecStart=$PREFIX/fonu
+ExecStart=$PREFIX/havline
 Restart=on-failure
 RestartSec=3
 # 日志进 journald：journalctl -u $SERVICE_NAME -f

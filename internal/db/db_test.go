@@ -8,7 +8,7 @@ import (
 
 func TestMigrate(t *testing.T) {
 	dir := t.TempDir()
-	conn, err := Open(filepath.Join(dir, "fonu.db"))
+	conn, err := Open(filepath.Join(dir, "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

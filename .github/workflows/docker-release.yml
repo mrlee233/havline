@@ -60,7 +60,7 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/fonu:${{ steps.version.outputs.version }}-${{ matrix.arch }}
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/havline:${{ steps.version.outputs.version }}-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
@@ -91,7 +91,7 @@ jobs:
 
       - name: Create multi-arch manifest
         env:
-          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/fonu
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/havline
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           if [ -z "${IMAGE}" ]; then

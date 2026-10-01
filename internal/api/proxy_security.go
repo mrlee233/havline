@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 type securityRequest struct {

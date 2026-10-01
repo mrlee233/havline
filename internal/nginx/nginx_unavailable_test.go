@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestApplyWithoutNginxBinary(t *testing.T) {
@@ -20,7 +20,7 @@ func TestApplyWithoutNginxBinary(t *testing.T) {
 
 	cfg := config.Config{
 		DataDir:        dir,
-		NginxBin:       "fonu-missing-nginx-binary",
+		NginxBin:       "havline-missing-nginx-binary",
 		NginxPIDFile:   filepath.Join(dir, "nginx", "nginx.pid"),
 		NginxMimeTypes: mimePath,
 	}

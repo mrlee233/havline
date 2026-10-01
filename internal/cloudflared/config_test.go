@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestDecodeToken(t *testing.T) {

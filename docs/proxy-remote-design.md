@@ -16,12 +16,12 @@
 | 框架 | Vue 3 + `<script setup lang="ts">` + Vite 6 |
 | 组件库 | **naive-ui**（`n-select` `n-button` `n-modal` `n-form` `n-switch` `n-input` `n-input-number` `n-tag`） |
 | 图标 | `@vicons/ionicons5`（本页目前未用图标） |
-| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` 双主题，`--fonu-*` 前缀 |
-| 共享组件 | `PageHeader` `FonuCard` `LoadError` `EmptyState` `StatusBadge`（本页**未用** `StatusBadge`） |
+| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` 双主题，`--havline-*` 前缀 |
+| 共享组件 | `PageHeader` `HavlineCard` `LoadError` `EmptyState` `StatusBadge`（本页**未用** `StatusBadge`） |
 | 工具 | `utils/format.ts`（已用 `formatBytes` / `formatRate`） |
 | 同族页面 | `ProxyView`（本地反代，交互参照）、`AgentView`（已按 v2 重构，同为公网侧） |
 
-**结论**：沿用既有体系（naive-ui + `--fonu-*` + 共享组件），**不引入**第二套框架/令牌。
+**结论**：沿用既有体系（naive-ui + `--havline-*` + 共享组件），**不引入**第二套框架/令牌。
 
 ---
 
@@ -35,7 +35,7 @@
 | 2 | **没有统计区** | 全页无 `.stats-row` / `.stat-card`，而数据齐全（规则数、已部署数、健康通过数、流量、连接数） | 与所有标准页（Dashboard/Ddns/Certificates/Proxy）不一致，一眼看不到全局 |
 | 3 | **硬编码颜色 6 处** | `#f0c36d`、`#e79b9b`、`#dc2626`、`#16a34a`、`rgba(240,195,109,.12)`、`rgba(34,197,94,.12)` | 违反令牌规则；暗色主题下对比度未验证 |
 | 4 | **自造状态组件** | `nginxState()` 返回自造 `n-tag`；`healthBadges()` 自造 `.health-badge/.health-ok/.health-bad` | 与 `StatusBadge` + `utils/status.ts` 语义分叉，同类状态在不同页面长得不一样 |
-| 5 | **「使用说明」整卡占位** | 一整张 `FonuCard` 只有一段 `form-hint` | 占掉整行网格，信息密度低（`AgentView` 已把这类内容改成 `n-alert` + 入口行） |
+| 5 | **「使用说明」整卡占位** | 一整张 `HavlineCard` 只有一段 `form-hint` | 占掉整行网格，信息密度低（`AgentView` 已把这类内容改成 `n-alert` + 入口行） |
 | 6 | **空态与折叠区未令牌化** | 自造 `.empty-route` div；`<details class="raw-routes">` 原生折叠 | 空态应为 `EmptyState`；原生折叠样式不随主题 |
 | 7 | **loading 粒度粗** | 单个 `refreshing` 同时驱动「刷新」「重新检测」与轮询 | 轮询时按钮闪 loading；无法区分"在部署"与"在刷新" |
 | 8 | **切换服务端不重置** | `watch(selectedId)` 不存在 | 上一台的健康/流量/agent 状态残留在新服务端视图里（串台） |
@@ -95,11 +95,11 @@
 - **Layout**：状态提示 → 统计区（4 列）→ 环境与 Nginx（2 列）→ 规则台账（整宽）→ 入口行；左对齐，无居中、无渐变。
 - **Signature**：**规则行左侧的「四段健康徽标串」**（DNS · 证书 · 隧道 · 服务），一眼扫完所有规则的健康。
 
-**Color**：沿用 5 个语义令牌（同 `AgentView` v2）：`--fonu-brand` 正常 / `--fonu-warning` 待处理 / `--fonu-error` 需人工干预 / 中性 `--fonu-text-*` / `--fonu-info` 引导。**页面零硬编码色值**（现状 6 处全部替换：`#16a34a`→`--fonu-brand`、`#dc2626`→`--fonu-error`、`#f0c36d`→`--fonu-warning`、`#e79b9b`→`--fonu-error`、两处 `rgba(...)`→`--fonu-brand-soft` / `--fonu-warning` 的 soft 变体或 `--fonu-bg-muted`）。
+**Color**：沿用 5 个语义令牌（同 `AgentView` v2）：`--havline-brand` 正常 / `--havline-warning` 待处理 / `--havline-error` 需人工干预 / 中性 `--havline-text-*` / `--havline-info` 引导。**页面零硬编码色值**（现状 6 处全部替换：`#16a34a`→`--havline-brand`、`#dc2626`→`--havline-error`、`#f0c36d`→`--havline-warning`、`#e79b9b`→`--havline-error`、两处 `rgba(...)`→`--havline-brand-soft` / `--havline-warning` 的 soft 变体或 `--havline-bg-muted`）。
 
-**Type**：沿用 `--fonu-font` / `--fonu-mono`；页内 4 档字号（12 / 12.5 / 13 / 18-30）+ 3 档字重，与 `CertificatesView` 统计卡规格一致。
+**Type**：沿用 `--havline-font` / `--havline-mono`；页内 4 档字号（12 / 12.5 / 13 / 18-30）+ 3 档字重，与 `CertificatesView` 统计卡规格一致。
 
-**Spacing & Radius**：只用 `--fonu-space-1…6` 与 `--fonu-radius(-sm)`、`--fonu-shadow`；`style="width: 220px"` → `.proxy-remote-select`。
+**Spacing & Radius**：只用 `--havline-space-1…6` 与 `--havline-radius(-sm)`、`--havline-shadow`；`style="width: 220px"` → `.proxy-remote-select`。
 
 ---
 
@@ -187,10 +187,10 @@ timer = window.setInterval(() => {
 
 ## 十、验收清单
 
-- [ ] 复用项目真实栈与令牌（naive-ui + `--fonu-*` + `PageHeader/FonuCard/LoadError/EmptyState/StatusBadge`），未新增第二套
+- [ ] 复用项目真实栈与令牌（naive-ui + `--havline-*` + `PageHeader/HavlineCard/LoadError/EmptyState/StatusBadge`），未新增第二套
 - [ ] 单一设计方向（部署台账）落地；零硬编码色值；`style="width: …"` 清零
 - [ ] 交互状态齐全：hover / pressed / focused（键盘实测）/ disabled / loading / empty / error
-- [ ] 无障碍：对比度 AA（亮+暗，重点验 `--fonu-brand` / `--fonu-warning` / `--fonu-error` 在 `--fonu-surface` 上）、键盘可达全部动作、装饰图标 `aria-hidden`、健康徽标有可读文本
+- [ ] 无障碍：对比度 AA（亮+暗，重点验 `--havline-brand` / `--havline-warning` / `--havline-error` 在 `--havline-surface` 上）、键盘可达全部动作、装饰图标 `aria-hidden`、健康徽标有可读文本
 - [ ] 最窄 320px 无横向溢出；≤760px 规则行纵向堆叠、动作按钮铺满且 ≥44px
 - [ ] **功能可见性：对照第三节 A–Q，每项有明确位置；#1 错误可见、#8 切换不串台、#7 loading 分粒度 三项缺陷已修**
 - [ ] 回归：部署/移除/保存部署设置三条路径真机验证；`vue-tsc` 0 错误 + `vite build` 成功
@@ -210,4 +210,4 @@ timer = window.setInterval(() => {
 合计约 **5.5–6 小时**，单文件改动（`ProxyRemoteView.vue`），**不涉及后端与 agent**。
 能力缺口 R（批量部署）与 S（配置回滚）不在本轮：R 可后续单独做（纯前端循环 + 进度），S 需 agent 侧新增历史接口。
 
-验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/fonu/web/dist` 后 `go build ./...`。
+验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/havline/web/dist` 后 `go build ./...`。

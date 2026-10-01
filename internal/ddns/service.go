@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/publicip"
-	"github.com/fonu/fonu/internal/secret"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/publicip"
+	"github.com/havline/havline/internal/secret"
+	"github.com/havline/havline/internal/settings"
 )
 
 type Service struct {

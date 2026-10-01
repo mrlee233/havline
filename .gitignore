@@ -2,7 +2,7 @@ bin/
 .data/
 web/node_modules/
 web/dist/
-cmd/fonu/web/dist/
+cmd/havline/web/dist/
 dist/
 *.db
 /data/
@@ -11,11 +11,15 @@ dist/
 .env.local
 .DS_Store
 .cursor/
+.playwright-cli/
+output/
+web/public/111favicon.png
+web/src/assets/brand/logo00.png
 # scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪
 scripts/*
 !scripts/agent-install.sh
 !scripts/build-linux.ps1
-!scripts/fonu-install.sh
+!scripts/havline-install.sh
 !scripts/upgrade.sh
 !scripts/upgrade-hub.sh
 # 本地压缩包与导出产物不入库（如 web/src.rar）

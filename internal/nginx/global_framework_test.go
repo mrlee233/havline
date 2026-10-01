@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/config"
 )
 
 func TestGenerateGlobalFrameworkIncludesComments(t *testing.T) {
 	cfg := config.Config{DataDir: t.TempDir()}
 	out := GenerateGlobalFramework(cfg)
 	for _, want := range []string{
-		"# 以下部分由 Fonu 自动生成",
+		"# 以下部分由 Havline 自动生成",
 		"# 主进程",
 		"# MIME 类型",
 		"# 访问日志格式与路径",

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
+	"github.com/havline/havline/internal/auth"
 )
 
 // 令牌管理挂在 AuthHandler 上：它已经持有 auth.Service，不必再加一层 handler。

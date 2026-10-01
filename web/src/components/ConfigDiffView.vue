@@ -46,24 +46,24 @@ function sign(kind: DiffLine['kind']): string {
 </script>
 
 <style scoped>
-.config-diff { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: hidden; }
+.config-diff { border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); overflow: hidden; }
 .config-diff__head {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3);
-  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
-  background: var(--fonu-bg-muted); font-size: 12px; color: var(--fonu-text-secondary);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3);
+  padding: 6px var(--havline-space-3); border-bottom: 1px solid var(--havline-border);
+  background: var(--havline-bg-muted); font-size: 12px; color: var(--havline-text-secondary);
 }
-.config-diff__stats { display: flex; gap: 8px; font-family: var(--fonu-mono); }
-.config-diff__add { color: var(--fonu-brand-text); }
-.config-diff__del { color: var(--fonu-error); }
-.config-diff__body { max-height: 420px; overflow: auto; background: var(--fonu-surface); }
+.config-diff__stats { display: flex; gap: 8px; font-family: var(--havline-mono); }
+.config-diff__add { color: var(--havline-brand-text); }
+.config-diff__del { color: var(--havline-error); }
+.config-diff__body { max-height: 420px; overflow: auto; background: var(--havline-surface); }
 .config-diff__row {
   display: flex; gap: 8px; padding: 1px 10px;
-  font-family: var(--fonu-mono); font-size: 12px; line-height: 1.6;
+  font-family: var(--havline-mono); font-size: 12px; line-height: 1.6;
 }
-.config-diff__row--add { background: var(--fonu-brand-soft); }
-.config-diff__row--del { background: var(--fonu-error-soft); }
-.config-diff__sign { flex: none; width: 10px; color: var(--fonu-text-muted); }
-.config-diff__row--add .config-diff__sign { color: var(--fonu-brand-text); }
-.config-diff__row--del .config-diff__sign { color: var(--fonu-error); }
+.config-diff__row--add { background: var(--havline-brand-soft); }
+.config-diff__row--del { background: var(--havline-error-soft); }
+.config-diff__sign { flex: none; width: 10px; color: var(--havline-text-muted); }
+.config-diff__row--add .config-diff__sign { color: var(--havline-brand-text); }
+.config-diff__row--del .config-diff__sign { color: var(--havline-error); }
 .config-diff__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 </style>

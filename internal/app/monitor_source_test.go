@@ -3,8 +3,8 @@ package app
 import (
 	"testing"
 
-	"github.com/fonu/fonu/internal/frp"
-	"github.com/fonu/fonu/internal/monitor"
+	"github.com/havline/havline/internal/frp"
+	"github.com/havline/havline/internal/monitor"
 )
 
 // monitor 与 frp 两侧的状态字面量必须一致，落库前由 healthStateValue 翻译一次；

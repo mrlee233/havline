@@ -17,14 +17,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/nginxtmpl"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/nginxtmpl"
 )
 
 const (
-	httpsProxyConfigName = "fonuagent-https.conf"
-	httpsProxyCertPath   = "/etc/fonu-agent/tls/agent.crt"
-	httpsProxyKeyPath    = "/etc/fonu-agent/tls/agent.key"
+	httpsProxyConfigName = "havlineagent-https.conf"
+	httpsProxyCertPath   = "/etc/havline-agent/tls/agent.crt"
+	httpsProxyKeyPath    = "/etc/havline-agent/tls/agent.key"
 )
 
 type httpsProxyRequest struct {
@@ -119,7 +119,7 @@ func (s *Server) applyHTTPSProxy(req httpsProxyRequest, port int) error {
 	if err != nil {
 		return err
 	}
-	tlsDir := "/etc/fonu-agent/tls"
+	tlsDir := "/etc/havline-agent/tls"
 	if err := os.MkdirAll(tlsDir, 0o750); err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (s *Server) ensureNginxDir() (string, error) {
 }
 
 func renderHTTPSProxy(port int, certPath, keyPath string) string {
-	return fmt.Sprintf(`# Managed by fonu-agent. Do not edit.
+	return fmt.Sprintf(`# Managed by havline-agent. Do not edit.
 server {
     listen %d ssl default_server;
     server_name _;

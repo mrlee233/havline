@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestChinaOnlyBypassGeoWithoutUserWhitelist(t *testing.T) {
@@ -44,10 +44,10 @@ func TestChinaOnlyBypassGeoWithoutUserWhitelist(t *testing.T) {
 		t.Fatalf("generate: %v", err)
 	}
 	for _, want := range []string{
-		"geo $fonu_client_ip $fonu_rule_3_china_bypass",
+		"geo $havline_client_ip $havline_rule_3_china_bypass",
 		"192.168.0.0/16 1;",
 		"10.0.0.0/8 1;",
-		"if ($fonu_rule_3_china_bypass = 1)",
+		"if ($havline_rule_3_china_bypass = 1)",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("missing %q in:\n%s", want, content)

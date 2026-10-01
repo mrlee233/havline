@@ -42,7 +42,7 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 	}
 
 	var b strings.Builder
-	b.WriteString("# 由 Fonu 生成：与本服务端的 frpc 配置同源（bindPort/auth 与客户端一致）\n")
+	b.WriteString("# 由 Havline 生成：与本服务端的 frpc 配置同源（bindPort/auth 与客户端一致）\n")
 	b.WriteString("# 格式：frp v0.52.0+ 的 TOML 配置（INI 自 v0.52.0 起已被官方弃用）\n")
 	b.WriteString("# 用法：保存为 VPS 上的 frps.toml，执行 ./frps -c frps.toml\n\n")
 	// TOML 规范：顶层标量键必须写在任何 [table] 段之前，否则会被归入上一个表
@@ -118,7 +118,7 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 			b.WriteString("\nauth.method = \"token\"\n")
 			b.WriteString(fmt.Sprintf("auth.token = %q\n", token))
 		} else {
-			b.WriteString("\n# 注意：frpc 侧为 Token 认证但尚未保存 Token；保存后在 Fonu 重新生成本文件以保持两端一致\n")
+			b.WriteString("\n# 注意：frpc 侧为 Token 认证但尚未保存 Token；保存后在 Havline 重新生成本文件以保持两端一致\n")
 		}
 	case "none":
 		b.WriteString("\n# frpc 侧为无认证（auth.method = \"none\"），frps 无需 [auth] 配置；\n")
@@ -143,7 +143,7 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 				b.WriteString(fmt.Sprintf("webServer.password = %q\n", password))
 			}
 		}
-		b.WriteString("\n# 安全提示：webServer 暴露穿透流量与连接信息，建议用防火墙限制仅 Fonu 所在机器访问该端口\n")
+		b.WriteString("\n# 安全提示：webServer 暴露穿透流量与连接信息，建议用防火墙限制仅 Havline 所在机器访问该端口\n")
 	}
 
 	if hasSubdomain {

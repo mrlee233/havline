@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/validate"
 )
 
 const sessionTTL = 7 * 24 * time.Hour

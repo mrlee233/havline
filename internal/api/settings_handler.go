@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/settings"
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/settings"
+	"github.com/havline/havline/internal/validate"
 )
 
 type SettingsHandler struct {

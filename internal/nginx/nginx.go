@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/proxy"
 )
 
 const (

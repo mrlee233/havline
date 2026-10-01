@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fonu/fonu/internal/cloudflared"
+	"github.com/havline/havline/internal/cloudflared"
 )
 
 type CloudflareHandler struct {

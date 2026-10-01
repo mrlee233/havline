@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/cloudflared"
-	"github.com/fonu/fonu/internal/frp"
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/cloudflared"
+	"github.com/havline/havline/internal/frp"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/settings"
 )
 
 // statusPageWindow / statusPageLimit 匿名访问的限流窗口与配额：
@@ -99,7 +99,7 @@ func (h *StatusPageHandler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	payload := statusPagePayload{
-		Title:        "Fonu 服务状态",
+		Title:        "Havline 服务状态",
 		CodeRequired: codeRequired,
 		CheckedAt:    time.Now().UTC().Format(time.RFC3339),
 		Routes:       make([]statusPageRoute, 0),

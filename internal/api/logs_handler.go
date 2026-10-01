@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/logstore"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/logstore"
 )
 
 type LogsHandler struct {

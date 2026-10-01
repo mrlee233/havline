@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/fonu/fonu/internal/chinacidr"
+	"github.com/havline/havline/internal/chinacidr"
 )
 
 type ChinaCIDRHandler struct {

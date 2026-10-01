@@ -24,12 +24,12 @@ import (
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 
-	certstore "github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/ddns"
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/settings"
+	certstore "github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/ddns"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/settings"
 )
 
 type Service struct {

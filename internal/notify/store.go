@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fonu/fonu/internal/secret"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/secret"
+	"github.com/havline/havline/internal/settings"
 )
 
 type Store struct {

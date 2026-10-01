@@ -14,14 +14,14 @@
 推荐采用**自动为主、安全优先、旧模式显式兼容**的三层策略：
 
 1. **默认模式：SSH 隧道 + 回环监听**
-   - `fonu-agent` 默认只监听 `127.0.0.1:7700`。
-   - 中央 Fonu 使用现有 SSH 凭据建立本地转发：
+   - `havline-agent` 默认只监听 `127.0.0.1:7700`。
+   - 中央 Havline 使用现有 SSH 凭据建立本地转发：
 
      ```text
-     中央 Fonu 127.0.0.1:<随机本地端口>
+     中央 Havline 127.0.0.1:<随机本地端口>
        → SSH 加密连接
        → VPS 127.0.0.1:7700
-       → fonu-agent
+       → havline-agent
      ```
 
    - 不开放公网 Agent 端口，不需要域名、证书、云安全组或防火墙修改。
@@ -30,7 +30,7 @@
    - Agent 仍只监听回环地址。
    - HTTPS 不作为首次安装选项；Agent 安全安装完成后，用户可在「公网 Agent」页切换到该高级模式。
    - 切换时自动配置 Nginx HTTPS 反代，并使用自签名证书。
-   - 中央 Fonu 首次安装时记录证书指纹，后续按指纹校验。
+   - 中央 Havline 首次安装时记录证书指纹，后续按指纹校验。
    - 适用于希望免维护常驻 SSH 隧道、且愿意开放一个 HTTPS 端口的用户。
 
 3. **兼容模式：显式公网明文 HTTP**
@@ -38,7 +38,7 @@
    - UI 持续显示高危警告。
    - 不允许自动降级到该模式。
 
-默认安装与升级过程不需要用户设置 `FONU_AGENT_LISTEN`、TLS 证书或防火墙规则。
+默认安装与升级过程不需要用户设置 `HAVLINE_AGENT_LISTEN`、TLS 证书或防火墙规则。
 
 ---
 
@@ -49,7 +49,7 @@
 当前入口：
 
 ```go
-listenv := flag.String("listen", envOr("FONU_AGENT_LISTEN", ":7700"), ...)
+listenv := flag.String("listen", envOr("HAVLINE_AGENT_LISTEN", ":7700"), ...)
 ```
 
 `internal/agent.NewServer` 空配置时同样回落到：
@@ -73,7 +73,7 @@ cfg.ListenAddr = ":7700"
   API: http://<VPS-IP>:7700
   ```
 
-### 2.3 中央 Fonu 连接
+### 2.3 中央 Havline 连接
 
 安装完成后，`AgentInstall` 写入：
 
@@ -81,7 +81,7 @@ cfg.ListenAddr = ":7700"
 AgentURL = fmt.Sprintf("http://%s:%d", server.SSHHost, 7700)
 ```
 
-中央 Fonu 后续直接访问 VPS 公网 IP 的 7700 端口。
+中央 Havline 后续直接访问 VPS 公网 IP 的 7700 端口。
 
 ### 2.4 当前问题
 
@@ -99,13 +99,13 @@ AgentURL = fmt.Sprintf("http://%s:%d", server.SSHHost, 7700)
 ### 3.1 必须实现
 
 1. 新安装默认不监听公网网卡。
-2. 安装过程自动建立中央 Fonu 到 Agent 的安全连接。
+2. 安装过程自动建立中央 Havline 到 Agent 的安全连接。
 3. 不需要用户手工配置网络或证书。
 4. Agent 升级时可自动迁移旧监听配置。
 5. 旧部署仍可显式使用公网 HTTP。
 6. 传输失败时给出可执行的诊断信息。
-7. 中央 Fonu 重启后可自动恢复连接。
-8. Agent 与中央 Fonu 的版本兼容策略保持清晰。
+7. 中央 Havline 重启后可自动恢复连接。
+8. Agent 与中央 Havline 的版本兼容策略保持清晰。
 
 ### 3.2 非目标
 
@@ -155,7 +155,7 @@ AgentURL = fmt.Sprintf("http://%s:%d", server.SSHHost, 7700)
 | 防火墙 | 需要放行一个 HTTPS 端口 |
 | 证书 | 自动生成和固定，不需要公网 CA |
 | 复杂度 | 中 |
-| 主要优势 | 中央 Fonu 可直接连接，不依赖常驻 SSH |
+| 主要优势 | 中央 Havline 可直接连接，不依赖常驻 SSH |
 | 主要限制 | 云安全组仍需用户放行端口 |
 
 结论：作为可选直连模式。
@@ -181,26 +181,26 @@ AgentURL = fmt.Sprintf("http://%s:%d", server.SSHHost, 7700)
 
 ```mermaid
 flowchart LR
-    Web[Fonu Web] --> API[Fonu 后端]
+    Web[Havline Web] --> API[Havline 后端]
     API --> Tunnel[SSH 隧道管理器]
     Tunnel -->|127.0.0.1:自动分配端口| SSH[SSH 加密连接]
     SSH --> VPSLoopback[VPS 127.0.0.1:7700]
-    VPSLoopback --> Agent[fonu-agent]
+    VPSLoopback --> Agent[havline-agent]
 ```
 
 ### 5.2 角色职责
 
 | 组件 | 职责 |
 | --- | --- |
-| Fonu 后端 | 决定 transport、启动隧道、调用 AgentClient |
+| Havline 后端 | 决定 transport、启动隧道、调用 AgentClient |
 | 隧道管理器 | 建立 SSH 本地转发、保持连接、重连、健康检查 |
-| fonu-agent | 默认只监听回环，不再负责公网暴露 |
-| 安装脚本 | 写入 `FONU_AGENT_LISTEN=127.0.0.1:7700`，禁止默认可公开 |
+| havline-agent | 默认只监听回环，不再负责公网暴露 |
+| 安装脚本 | 写入 `HAVLINE_AGENT_LISTEN=127.0.0.1:7700`，禁止默认可公开 |
 | UI | 显示安全模式、连接状态、可选迁移和显式旧模式警告 |
 
 ### 5.3 连接抽象
 
-中央 Fonu 不再把“公网 IP + 7700”当作 Agent 的唯一定义。新增 transport 概念：
+中央 Havline 不再把“公网 IP + 7700”当作 Agent 的唯一定义。新增 transport 概念：
 
 ```text
 tunnel     SSH 本地转发，默认
@@ -310,7 +310,7 @@ const defaultListenAddr = "127.0.0.1:7700"
 
 以下位置同步：
 
-- `cmd/fonu-agent/main.go`
+- `cmd/havline-agent/main.go`
 - `internal/agent.NewServer`
 - `scripts/agent-install.sh`
 - `internal/frp/agent_installer.go` 内嵌安装脚本
@@ -329,7 +329,7 @@ VPS公网IP:7700
 则必须显式设置：
 
 ```dotenv
-FONU_AGENT_ALLOW_REMOTE=1
+HAVLINE_AGENT_ALLOW_REMOTE=1
 ```
 
 否则 Agent 拒绝启动并输出：
@@ -337,21 +337,21 @@ FONU_AGENT_ALLOW_REMOTE=1
 ```text
 检测到 Agent 将监听非回环地址，但未显式允许远程访问。
 默认安全模式只监听 127.0.0.1:7700。
-如确认需要公网明文访问，请设置 FONU_AGENT_ALLOW_REMOTE=1。
+如确认需要公网明文访问，请设置 HAVLINE_AGENT_ALLOW_REMOTE=1。
 ```
 
 ### 7.3 旧配置迁移
 
-旧版本 `agent.env` 可能没有 `FONU_AGENT_LISTEN`，此时：
+旧版本 `agent.env` 可能没有 `HAVLINE_AGENT_LISTEN`，此时：
 
 1. 新 Agent 默认监听回环；
 2. 安装脚本显式写入：
 
    ```dotenv
-   FONU_AGENT_LISTEN=127.0.0.1:7700
+   HAVLINE_AGENT_LISTEN=127.0.0.1:7700
    ```
 
-3. 中央 Fonu 在执行「升级 Agent」时同步建立隧道；
+3. 中央 Havline 在执行「升级 Agent」时同步建立隧道；
 4. 升级完成后切换 transport；
 5. 旧公网地址从 `agent_url` 中移除；
 6. 不停留手工维护窗口。
@@ -376,12 +376,12 @@ Agent `/api/v1/status` 新增：
 ### 8.1 新安装
 
 1. 用户填写 VPS SSH 信息。
-2. 中央 Fonu 通过 SSH 探测系统与 Nginx。
+2. 中央 Havline 通过 SSH 探测系统与 Nginx。
 3. 分配 `agent_local_port`。
 4. 上传 Agent 二进制。
 5. 安装脚本写入：
    - Token；
-   - `FONU_AGENT_LISTEN=127.0.0.1:7700`；
+   - `HAVLINE_AGENT_LISTEN=127.0.0.1:7700`；
    - systemd 服务。
 6. 启动 Agent。
 7. 通过 SSH 本地转发建立隧道。
@@ -413,7 +413,7 @@ Agent `/api/v1/status` 新增：
 
 1. 读取启用管理且 transport=tunnel 的服务端。
 2. 逐个调用 `Tunnel.Ensure`。
-3. 启动失败不阻塞整个 Fonu 启动。
+3. 启动失败不阻塞整个 Havline 启动。
 4. UI 显示重连状态。
 5. 后台按指数退避继续重试。
 
@@ -426,7 +426,7 @@ Agent `/api/v1/status` 新增：
 - 不希望长期维护 SSH 隧道；
 - 可以接受开放一个 HTTPS 端口；
 - 没有域名或不想申请公网证书；
-- 希望 Agent API 可被中央 Fonu直接访问。
+- 希望 Agent API 可被中央 Havline直接访问。
 
 ### 9.2 安装后切换流程
 
@@ -436,8 +436,8 @@ Agent `/api/v1/status` 新增：
 2. 切换流程生成自签名证书：
 
    ```text
-   /etc/fonu-agent/tls/agent.crt
-   /etc/fonu-agent/tls/agent.key
+   /etc/havline-agent/tls/agent.crt
+   /etc/havline-agent/tls/agent.key
    ```
 
 3. 自动寻找可用端口：
@@ -449,8 +449,8 @@ Agent `/api/v1/status` 新增：
    ```nginx
    server {
        listen 7443 ssl;
-       ssl_certificate /etc/fonu-agent/tls/agent.crt;
-       ssl_certificate_key /etc/fonu-agent/tls/agent.key;
+       ssl_certificate /etc/havline-agent/tls/agent.crt;
+       ssl_certificate_key /etc/havline-agent/tls/agent.key;
 
        location /api/v1/ {
            proxy_pass http://127.0.0.1:7700;
@@ -459,7 +459,7 @@ Agent `/api/v1/status` 新增：
    ```
 
 5. 返回证书 SHA-256 指纹。
-6. 中央 Fonu 保存 pin，并使用自定义校验。
+6. 中央 Havline 保存 pin，并使用自定义校验。
 
 ### 9.3 TLS 固定
 
@@ -494,7 +494,7 @@ VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 云厂商安全组始终不能自动修改。UI 必须提示：
 
 ```text
-请在云控制台放行 TCP 7443。主机防火墙需要你确认后由 Fonu 执行，Fonu 不会修改云安全组。
+请在云控制台放行 TCP 7443。主机防火墙需要你确认后由 Havline 执行，Havline 不会修改云安全组。
 ```
 
 ---
@@ -504,11 +504,11 @@ VerifyPeerCertificate(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 仅用于旧部署迁移或用户明确要求：
 
 ```dotenv
-FONU_AGENT_LISTEN=:7700
-FONU_AGENT_ALLOW_REMOTE=1
+HAVLINE_AGENT_LISTEN=:7700
+HAVLINE_AGENT_ALLOW_REMOTE=1
 ```
 
-中央 Fonu UI 必须：
+中央 Havline UI 必须：
 
 - 显示“公网明文传输”红色状态；
 - 不在新安装中默认选择；
@@ -638,7 +638,7 @@ Agent 监听：127.0.0.1:7700
 ### 14.1 单元测试
 
 - 默认监听地址是回环；
-- 非回环监听缺少 `FONU_AGENT_ALLOW_REMOTE` 时拒绝启动；
+- 非回环监听缺少 `HAVLINE_AGENT_ALLOW_REMOTE` 时拒绝启动；
 - 回环监听无需额外变量；
 - `agent_transport` 序列化与旧数据兼容；
 - 隧道本地端口分配、冲突与释放；
@@ -661,7 +661,7 @@ Agent 监听：127.0.0.1:7700
 至少覆盖：
 
 - Debian / Ubuntu / CentOS；
-- fnOS 中的 Fonu；
+- fnOS 中的 Havline；
 - 宝塔 Nginx；
 - 已存在 80 / 443 / 7443 占用的 VPS；
 - 云安全组只开放 SSH 的 VPS；
@@ -673,7 +673,7 @@ Agent 监听：127.0.0.1:7700
 - 公网扫描不到 7700；
 - 无需新增云安全组规则；
 - UI 显示隧道已连接；
-- Fonu 重启后自动恢复；
+- Havline 重启后自动恢复；
 - 「升级 Agent」可以自动迁移旧配置；
 - 失败时不会丢失旧连接。
 
@@ -684,7 +684,7 @@ Agent 监听：127.0.0.1:7700
 ### 阶段 1：默认回环与防误开
 
 - Agent 默认监听改为 `127.0.0.1:7700`；
-- 非回环监听要求 `FONU_AGENT_ALLOW_REMOTE=1`；
+- 非回环监听要求 `HAVLINE_AGENT_ALLOW_REMOTE=1`；
 - 安装脚本显式写入监听地址；
 - UI 显示监听范围。
 
@@ -729,7 +729,7 @@ Agent 监听：127.0.0.1:7700
 | --- | --- | --- | --- |
 | 1 | SSH 隧道作为唯一默认模式 | 首次安装不提供模式选择，统一安装为回环监听 + SSH 隧道；HTTPS 直连只作为安装后的高级切换项 | 现有安装流程已经依赖 SSH；默认路径必须最少输入、最少网络要求 |
 | 2 | 隧道本地端口使用固定范围 | 固定为 `17700-18700`，绑定 `127.0.0.1`；分配结果持久化；启动时先复用持久化端口，再在范围内顺序查找空闲端口；范围耗尽时明确报错，不使用临时端口 | 固定范围便于排查和审计；持久化避免每次重启变化；不回退临时端口避免地址漂移 |
-| 3 | 隧道跟随主应用生命周期 | 使用应用内 `agent_tunnel` 管理器，在 Fonu 启动后按服务端恢复；应用退出时统一关闭；断线后指数退避重连；首版不新增独立 systemd 服务 | 当前项目是单进程控制面，调度器、FRP、监控均在同一生命周期内，新增守护进程会扩大部署复杂度 |
+| 3 | 隧道跟随主应用生命周期 | 使用应用内 `agent_tunnel` 管理器，在 Havline 启动后按服务端恢复；应用退出时统一关闭；断线后指数退避重连；首版不新增独立 systemd 服务 | 当前项目是单进程控制面，调度器、FRP、监控均在同一生命周期内，新增守护进程会扩大部署复杂度 |
 | 4 | 公网 HTTP 保留整个 1.x 兼容期 | 自 `1.4.0` 起不再允许新安装选择 HTTP；存量连接继续可用但显示高危警告并提供迁移；计划在 `2.0.0` 移除 | 需要给旧 Agent 和环境留出迁移窗口，同时从版本边界上明确技术债的截止点 |
 | 5 | HTTPS 自签名证书使用短期自动轮换 | ECDSA P-256，有效期 365 天；剩余 30 天时自动轮换；轮换期间同时接受旧 pin 和新 pin，双 pin 窗口 7 天；优先通过现有 SSH 通道获取新指纹后再切换 | 避免长期证书失管；双 pin 防止轮换瞬间把所有中央连接锁死 |
 | 6 | 首版不自动改主机防火墙 | 首先只检测、展示和提示；SSH 隧道模式本身不需要放行新端口；HTTPS 高级模式后续再提供显式的“一键放行主机防火墙”操作，并始终不修改云厂商安全组 | 防火墙和云安全组属于高风险外部状态；首版先把安全默认值落地，避免自动变更导致 SSH 或现有服务失联 |

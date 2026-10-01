@@ -23,21 +23,21 @@ const { naiveTheme, themeOverrides } = useTheme()
 
 body {
   margin: 0;
-  font-family: var(--fonu-font);
-  background: var(--fonu-bg);
-  color: var(--fonu-text);
+  font-family: var(--havline-font);
+  background: var(--havline-bg);
+  color: var(--havline-text);
 }
 
 .mono {
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
 }
 
 .text-secondary {
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .text-muted {
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .page-shell,
@@ -47,27 +47,27 @@ body {
 
 .page-narrow {
   width: 100%;
-  max-width: var(--fonu-form-max);
+  max-width: var(--havline-form-max);
   margin-inline: auto;
 }
 
 .form-narrow {
-  max-width: var(--fonu-form-max);
+  max-width: var(--havline-form-max);
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   flex-wrap: wrap;
-  margin-bottom: var(--fonu-space-4);
-  padding-top: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
+  padding-top: var(--havline-space-4);
 }
 
 .n-data-table .n-data-table-th {
-  background: var(--fonu-bg-muted) !important;
+  background: var(--havline-bg-muted) !important;
   font-weight: 500;
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 </style>

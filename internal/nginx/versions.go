@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/fonu/fonu/internal/fsutil"
+	"github.com/havline/havline/internal/fsutil"
 )
 
 // maxConfigVersions 主配置保留的版本份数。Apply 每次保存都会留一份，fsutil 会跳过内容相同的版本，

@@ -22,8 +22,8 @@ defineProps<{
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-5);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-5);
   flex-wrap: wrap;
 }
 
@@ -32,21 +32,21 @@ defineProps<{
   font-size: 24px;
   font-weight: 700;
   line-height: 1.3;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   letter-spacing: -0.02em;
 }
 
 .page-header__desc {
-  margin: var(--fonu-space-2) 0 0;
+  margin: var(--havline-space-2) 0 0;
   font-size: 14px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.5;
 }
 
 .page-header__actions {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   flex-wrap: wrap;
 }
 </style>

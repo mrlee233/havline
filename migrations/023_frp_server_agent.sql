@@ -1,4 +1,4 @@
--- 公网 fonu-agent 远程管理配置
+-- 公网 havline-agent 远程管理配置
 ALTER TABLE frp_servers ADD COLUMN agent_url TEXT NOT NULL DEFAULT '';
 ALTER TABLE frp_servers ADD COLUMN agent_token_enc TEXT NOT NULL DEFAULT '';
 ALTER TABLE frp_servers ADD COLUMN ssh_host TEXT NOT NULL DEFAULT '';

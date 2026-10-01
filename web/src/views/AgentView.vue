@@ -137,7 +137,7 @@
           <div class="stat-card__label">端口监听</div>
           <div class="stat-card__sub">frps 运行所需端口</div>
         </div>
-        <FonuCard class="section-card vps-resource-card" title="VPS 资源">
+        <HavlineCard class="section-card vps-resource-card" title="VPS 资源">
           <div class="section-body">
             <p v-if="metricsError" class="form-hint">{{ metricsError }}</p>
             <div v-else-if="agentMetrics" class="res-strip">
@@ -156,16 +156,16 @@
             </div>
             <p v-else class="form-hint">{{ metricsLoading ? '正在采集 VPS 资源…' : '暂无 VPS 资源数据' }}</p>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="section-card vps-resource-card" title="VPS 证书">
+        <HavlineCard class="section-card vps-resource-card" title="VPS 证书">
           <div class="section-body">
             <p v-if="certsError" class="form-hint">{{ certsError }}</p>
             <div v-else-if="agentCerts.length > 0" class="cert-list">
               <div class="cert-row cert-row--head">
                 <span>域名</span>
                 <span>剩余天数</span>
-                <span>Fonu 证书库</span>
+                <span>Havline 证书库</span>
                 <span>到期时间</span>
               </div>
               <div v-for="item in agentCerts" :key="item.domain" class="cert-row">
@@ -173,19 +173,19 @@
                 <span :class="{ 'cert-days--warn': item.days_left < 30, 'cert-days--error': item.days_left < 0 }">
                   {{ item.days_left < 0 ? '已过期' : `${item.days_left} 天` }}
                 </span>
-                <span>{{ fonuCertDomains.has(item.domain) ? '有' : '无' }}</span>
+                <span>{{ havlineCertDomains.has(item.domain) ? '有' : '无' }}</span>
                 <span class="cert-muted">{{ item.not_after ? formatDate(item.not_after) : '未解析' }}</span>
               </div>
             </div>
             <p v-else class="form-hint">{{ certsLoading ? '正在读取 VPS 证书…' : 'VPS 证书目录为空' }}</p>
             <p v-if="certWarnings.length > 0" class="form-hint">{{ certWarnings.join('；') }}</p>
           </div>
-        </FonuCard>
+        </HavlineCard>
       </section>
 
       <!-- ② 环境与依赖 -->
       <section class="dep-grid" aria-label="环境与依赖">
-        <FonuCard class="section-card" title="Fonu Agent">
+        <HavlineCard class="section-card" title="Havline Agent">
           <div class="section-body">
             <div class="field-grid">
               <div><label>Agent 版本</label><span class="mono">{{ agentVersionText(agentStatus?.agent_version) }}</span></div>
@@ -201,9 +201,9 @@
               <n-button size="small" :loading="busy === 'probe'" :disabled="busy !== null && busy !== 'probe'" @click="probe(server)">探测环境</n-button>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="section-card" title="Nginx（公网反代依赖）">
+        <HavlineCard class="section-card" title="Nginx（公网反代依赖）">
           <div class="section-body">
             <div class="field-grid">
               <div><label>可用性</label><span class="field-tags"><StatusBadge :kind="nginxKind" :text="nginxText" /></span></div>
@@ -219,9 +219,9 @@
               <router-link to="/public-proxy"><n-button size="small" quaternary>去「公网反代」处理</n-button></router-link>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="section-card" title="frps 运行时">
+        <HavlineCard class="section-card" title="frps 运行时">
           <div class="section-body">
             <div class="field-grid">
               <div><label>已安装版本</label><span class="field-tags"><StatusBadge :kind="agentStatus?.frps_version ? 'success' : 'warning'" :text="installedFrpsVersion || '未安装'" /></span></div>
@@ -233,12 +233,12 @@
             </div>
             <p v-if="!frpsConsistency.ok && frpsConsistency.detail" class="form-hint">{{ frpsConsistency.detail }}</p>
           </div>
-        </FonuCard>
+        </HavlineCard>
       </section>
 
       <!-- ④ Agent 生命周期（SSH） + ③ frps 控制：两列并排（生命周期在左） -->
       <div class="control-grid">
-      <FonuCard class="section-card" title="Agent 生命周期（SSH）">
+      <HavlineCard class="section-card" title="Agent 生命周期（SSH）">
         <div class="section-body">
           <p class="form-hint">
             首次安装、升级、卸载需要 SSH（在「内网穿透」页服务端表单的「公网 Agent 管理」区填写）；安装成功后自动建立 SSH 隧道，不会默认暴露公网 7700。
@@ -256,7 +256,7 @@
             当前仍是公网明文 HTTP。点击「升级 Agent」可自动迁移到 SSH 隧道安全模式。
           </n-alert>
           <n-alert v-if="server.agent_transport === 'https-pin'" type="info" :bordered="false" class="agent-transport-warning">
-            HTTPS 直连使用证书指纹校验，证书到期前 30 天会自动轮换。请确认云安全组已放行 {{ agentHTTPSPort(server) || 'HTTPS' }} 端口，Fonu 不会自动修改云安全组。
+            HTTPS 直连使用证书指纹校验，证书到期前 30 天会自动轮换。请确认云安全组已放行 {{ agentHTTPSPort(server) || 'HTTPS' }} 端口，Havline 不会自动修改云安全组。
           </n-alert>
           <p v-if="server.agent_transport === 'https-pin' && server.agent_firewall_state" class="form-hint">主机防火墙：{{ server.agent_firewall_state }}</p>
           <p v-if="server.agent_transport_error" class="form-hint agent-transport-error">{{ server.agent_transport_error }}</p>
@@ -289,13 +289,13 @@
               <template #trigger>
                 <n-button size="small" type="warning" :disabled="busy !== null">卸载（含数据）</n-button>
               </template>
-              将删除 VPS 上的 fonu-agent、frps 单元与 /var/lib/fonu-agent（已注册的路由与证书一并丢失），确认继续？
+              将删除 VPS 上的 havline-agent、frps 单元与 /var/lib/havline-agent（已注册的路由与证书一并丢失），确认继续？
             </n-popconfirm>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard class="section-card" title="frps 控制">
+      <HavlineCard class="section-card" title="frps 控制">
         <div class="section-body">
           <div class="agent-actions">
             <n-button v-if="agentStatus?.frps_active" size="small" type="warning" :loading="busy === 'frps-stop'" :disabled="busy !== null && busy !== 'frps-stop'" @click="frpsAction(server, 'stop')">停止 frps</n-button>
@@ -326,12 +326,12 @@
             <span v-else class="form-hint">VPS 无 frps 二进制时使用：自动下载并注册 frps.service，完成后自动下发同源配置</span>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
       </div>
 
       <!-- ⑤ 输出与日志 -->
-      <FonuCard class="section-card" title="输出与日志">
+      <HavlineCard class="section-card" title="输出与日志">
         <template #header>
           <n-button size="small" quaternary :disabled="!opOutput.length" @click="opOutput = []">清空操作输出</n-button>
         </template>
@@ -356,7 +356,7 @@
             </n-tab-pane>
           </n-tabs>
         </div>
-      </FonuCard>
+      </HavlineCard>
         </div>
       </div>
 
@@ -371,7 +371,7 @@
           </div>
           <div class="config-modal__body">
             <p class="form-hint">
-              由 Fonu 本地生成；点「下发 frps 配置」后写入 VPS 的
+              由 Havline 本地生成；点「下发 frps 配置」后写入 VPS 的
               <span class="mono">{{ agentStatus?.frps_config_path || '/etc/frp/frps.toml' }}</span>，重启 frps 后生效。
               <br />
               密钥类字段（如 <span class="mono">auth.token</span>）在这里显示为掩码，下发时仍使用真实值。
@@ -487,7 +487,7 @@
 
       <section class="form-section">
         <h3><n-icon :component="ServerOutline" /> frps 管理接口</h3>
-        <p class="form-hint">用于 Fonu 拉取穿透规则的实时连接与流量信息；需在 frps 的 frps.toml 中开启 webServer（dashboard），与 frpc 连接用的令牌无关。</p>
+        <p class="form-hint">用于 Havline 拉取穿透规则的实时连接与流量信息；需在 frps 的 frps.toml 中开启 webServer（dashboard），与 frpc 连接用的令牌无关。</p>
         <div class="form-grid">
           <n-form-item label="管理地址"><n-input v-model:value="serverForm.options.dashboard_addr" placeholder="frps 机器的 IP 或域名，留空则不采集流量" /></n-form-item>
           <n-form-item label="管理端口"><n-input-number v-model:value="serverForm.options.dashboard_port" :min="0" :max="65535" placeholder="例如：7500" /></n-form-item>
@@ -693,7 +693,7 @@ import {
 } from '@vicons/ionicons5'
 import EmptyState from '../components/EmptyState.vue'
 import ConfiguredSecretField from '../components/ConfiguredSecretField.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -759,8 +759,8 @@ function portMeaning(port: string) {
   return `${portMeanings[port] ?? '端口'}：${portOn(port) ? '正在监听' : '未监听'}`
 }
 
-// frps 运行一致性（P0-3）：systemd 实际执行的启动命令，是否用的是 Fonu 下发的二进制与配置文件。
-// 不一致意味着：手工改过 unit，或者 Fonu 写入的 frps.toml 并不是 frps 实际加载的那一份。
+// frps 运行一致性（P0-3）：systemd 实际执行的启动命令，是否用的是 Havline 下发的二进制与配置文件。
+// 不一致意味着：手工改过 unit，或者 Havline 写入的 frps.toml 并不是 frps 实际加载的那一份。
 const frpsConsistency = computed(() => {
   const exec = agentStatus.value?.frps_unit_exec ?? ''
   if (!exec) return { ok: false, kind: 'warning' as const, text: '未获取', detail: '' }
@@ -768,7 +768,7 @@ const frpsConsistency = computed(() => {
   const config = agentStatus.value?.frps_config_path ?? ''
   const problems: string[] = []
   if (binary && !exec.includes(binary)) problems.push(`启动命令未使用配置的二进制（${binary}）`)
-  if (config && !exec.includes(config)) problems.push(`启动命令未使用 Fonu 下发的配置文件（${config}）`)
+  if (config && !exec.includes(config)) problems.push(`启动命令未使用 Havline 下发的配置文件（${config}）`)
   if (problems.length > 0) {
     return { ok: false, kind: 'warning' as const, text: '不一致', detail: problems.join('；') }
   }
@@ -782,10 +782,10 @@ const frpsVersionOptions = computed(() => releases.value.map((release) => ({ lab
 
 // O：最后检查时间（PageHeader 副标题，判断数据新鲜度）
 const headerDescription = computed(() => {
-  if (!server.value) return '管理公网 VPS 服务端（frps）与其上的 fonu-agent'
+  if (!server.value) return '管理公网 VPS 服务端（frps）与其上的 havline-agent'
   if (!statusLoaded.value) return '正在读取 VPS 状态…'
   const checkedAt = agentStatus.value?.checked_at
-  return checkedAt ? `管理部署在公网 VPS 上的 fonu-agent 与 frps · 检查于 ${formatRelativeTime(checkedAt)}` : '管理部署在公网 VPS 上的 fonu-agent 与 frps 服务'
+  return checkedAt ? `管理部署在公网 VPS 上的 havline-agent 与 frps · 检查于 ${formatRelativeTime(checkedAt)}` : '管理部署在公网 VPS 上的 havline-agent 与 frps 服务'
 })
 
 // 三态：未加载 / 加载中 / 失败——避免把"没拉到"显示成"未连接"
@@ -821,7 +821,7 @@ const statusAlert = computed<{ type: 'error' | 'warning'; text: string; action?:
   if (!agentStatusOk.value) {
     return {
       type: 'error',
-      text: 'Agent 未连接：请确认 VPS 上 fonu-agent 正在运行，且 Agent 地址与 Token 与页面一致。',
+      text: 'Agent 未连接：请确认 VPS 上 havline-agent 正在运行，且 Agent 地址与 Token 与页面一致。',
       action: { label: '探测环境', run: () => probe(current) },
     }
   }
@@ -891,7 +891,7 @@ async function load() {
     void loadServerDiagnostics(servers.value)
     void loadRuntimeVersion()
     if (server.value) await refreshAll({ silent: false })
-    void loadFonuCerts()
+    void loadHavlineCerts()
   } catch (error) { loadError.value = error instanceof Error ? error.message : '读取服务端失败' }
 }
 
@@ -949,12 +949,12 @@ const metricsUptimeText = computed(() =>
   agentMetrics.value?.uptime_seconds ? formatUptime(agentMetrics.value.uptime_seconds) : '—',
 )
 
-// VPS 证书清单（需 agent ≥ 0.11.0）：与 Fonu 证书库交叉核对，宝塔自签的证书也能看到
+// VPS 证书清单（需 agent ≥ 0.11.0）：与 Havline 证书库交叉核对，宝塔自签的证书也能看到
 const agentCerts = ref<import('../api/types').FrpAgentCertificate[]>([])
 const certWarnings = ref<string[]>([])
 const certsError = ref('')
 const certsLoading = ref(false)
-const fonuCertDomains = ref<Set<string>>(new Set())
+const havlineCertDomains = ref<Set<string>>(new Set())
 
 async function loadAgentCerts(serverID: number) {
   certsLoading.value = true
@@ -972,8 +972,8 @@ async function loadAgentCerts(serverID: number) {
   }
 }
 
-// Fonu 证书库里的域名（含通配符），用于判断「VPS 上有但 Fonu 没有」
-async function loadFonuCerts() {
+// Havline 证书库里的域名（含通配符），用于判断「VPS 上有但 Havline 没有」
+async function loadHavlineCerts() {
   try {
     const records = await api.listCertificates()
     const domains = new Set<string>()
@@ -981,9 +981,9 @@ async function loadFonuCerts() {
       domains.add(record.domain)
       for (const item of record.domains ?? []) domains.add(item)
     }
-    fonuCertDomains.value = domains
+    havlineCertDomains.value = domains
   } catch {
-    fonuCertDomains.value = new Set()
+    havlineCertDomains.value = new Set()
   }
 }
 
@@ -1074,7 +1074,7 @@ function pushAgentConfig(target: FrpServer) {
     () => ({ text: 'frps 同源配置已下发到 VPS，点「重启 frps」后生效', ok: true }))
 }
 
-// 配置查看：只读，展示 Fonu 本地生成的 frps.toml（即「下发」会写入 VPS 的内容）
+// 配置查看：只读，展示 Havline 本地生成的 frps.toml（即「下发」会写入 VPS 的内容）
 async function viewConfig(target: FrpServer) {
   configLoading.value = true
   try {
@@ -1241,8 +1241,8 @@ const serverHelpItems = computed(() => {
   const common = [
     { title: '基本信息', text: '主机地址和端口对应 frps 的 bindAddr / bindPort，多个服务端可并行配置，规则保存时选择归属。' },
     { title: '认证方式', text: '与 frps 的 auth 配置保持一致：无认证、令牌（auth.token）或 OIDC；令牌与密钥加密存储，编辑时留空保持不变。' },
-    { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Fonu 借此拉取穿透规则的实时连接与流量；不写入 frpc.toml，与连接认证无关。' },
-    { title: '描述', text: '仅用于在 Fonu 中区分多台服务端的备注信息。' },
+    { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Havline 借此拉取穿透规则的实时连接与流量；不写入 frpc.toml，与连接认证无关。' },
+    { title: '描述', text: '仅用于在 Havline 中区分多台服务端的备注信息。' },
   ]
   if (serverForm.options.auth_method === 'oidc') return [...common, { title: 'OIDC', text: '客户端 ID、密钥和令牌端点由身份提供商提供；受众与权限范围需与 frps 的 OIDC 校验配置匹配。' }]
   return common
@@ -1675,90 +1675,90 @@ useVisibilityPolling(() => {
 
 <style scoped>
 /* 分区：① 运行状态 → ② 环境与依赖 → ③ frps 控制 → ④ 生命周期 → ⑤ 输出与日志 */
-.page-alert { margin-bottom: var(--fonu-space-3); }
-.page-alert__body { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-4); }
-.entrance-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); padding: 10px var(--fonu-space-5); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-info-soft); }
-.entrance-row__text { font-size: 13px; color: var(--fonu-text); }
+.page-alert { margin-bottom: var(--havline-space-3); }
+.page-alert__body { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); }
+.entrance-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); padding: 10px var(--havline-space-5); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-info-soft); }
+.entrance-row__text { font-size: 13px; color: var(--havline-text); }
 
-.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
-.stat-card { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); padding: var(--fonu-space-4) var(--fonu-space-5); min-height: 118px; }
+.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
+.stat-card { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); padding: var(--havline-space-4) var(--havline-space-5); min-height: 118px; }
 .stat-card__icon { font-size: 18px; margin-bottom: 4px; }
-.stat-card__icon--blue { color: var(--fonu-info); }
-.stat-card__icon--green { color: var(--fonu-brand); }
-.stat-card__icon--amber { color: var(--fonu-warning); }
-.stat-card__icon--red { color: var(--fonu-error); }
-.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--fonu-text); letter-spacing: -0.03em; }
+.stat-card__icon--blue { color: var(--havline-info); }
+.stat-card__icon--green { color: var(--havline-brand); }
+.stat-card__icon--amber { color: var(--havline-warning); }
+.stat-card__icon--red { color: var(--havline-error); }
+.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--havline-text); letter-spacing: -0.03em; }
 .stat-card__value--sm { font-size: 18px; }
-.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--fonu-text); }
-.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--fonu-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .port-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.port-item { font-family: var(--fonu-mono); font-size: 12.5px; padding: 1px 6px; border-radius: 999px; background: var(--fonu-bg-muted); color: var(--fonu-text-muted); }
-.port-item--on { background: var(--fonu-brand-soft); color: var(--fonu-brand-text); }
+.port-item { font-family: var(--havline-mono); font-size: 12.5px; padding: 1px 6px; border-radius: 999px; background: var(--havline-bg-muted); color: var(--havline-text-muted); }
+.port-item--on { background: var(--havline-brand-soft); color: var(--havline-brand-text); }
 
-.dep-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+.dep-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
 /* 前四张卡每行三张（各占 2/6），VPS 资源与 VPS 证书各占 3/6 并排 */
 .dep-grid > .section-card { grid-column: span 2; }
 /* 三列下卡片较窄：短字段（版本/徽标）双列并排，长路径与命令用 .field-grid__wide 整行，控制卡片高度 */
-.dep-grid .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-2) var(--fonu-space-3); }
+.dep-grid .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-2) var(--havline-space-3); }
 /* frps 控制与 Agent 生命周期两列并排，卡片等高 */
-.control-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+.control-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
 .control-grid .section-card { margin-bottom: 0; }
-.section-card { margin-bottom: var(--fonu-space-4); }
-.section-body { padding: var(--fonu-space-2) var(--fonu-space-5) var(--fonu-space-4); }
-.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-3) var(--fonu-space-4); }
+.section-card { margin-bottom: var(--havline-space-4); }
+.section-body { padding: var(--havline-space-2) var(--havline-space-5) var(--havline-space-4); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-3) var(--havline-space-4); }
 .field-grid > div { display: grid; gap: 4px; min-width: 0; }
 .field-grid__wide { grid-column: 1 / -1; }
-.field-grid label { color: var(--fonu-text-secondary); font-size: 12px; }
+.field-grid label { color: var(--havline-text-secondary); font-size: 12px; }
 .field-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--fonu-space-3); }
-.agent-transport-grid { margin-top: var(--fonu-space-3); }
-.agent-transport-warning { margin-top: var(--fonu-space-3); }
-.agent-transport-error { color: var(--fonu-error); }
+.agent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--havline-space-3); }
+.agent-transport-grid { margin-top: var(--havline-space-3); }
+.agent-transport-warning { margin-top: var(--havline-space-3); }
+.agent-transport-error { color: var(--havline-error); }
 .tooltip-trigger { display: inline-flex; }
-.frps-install-row { display: flex; align-items: center; gap: 10px; margin-top: var(--fonu-space-3); flex-wrap: wrap; }
+.frps-install-row { display: flex; align-items: center; gap: 10px; margin-top: var(--havline-space-3); flex-wrap: wrap; }
 .frps-version-select { width: 200px; }
-.nginx-error { margin-top: var(--fonu-space-2); color: var(--fonu-error); overflow-wrap: anywhere; }
+.nginx-error { margin-top: var(--havline-space-2); color: var(--havline-error); overflow-wrap: anywhere; }
 
 /* 配置查看弹窗（只读） */
-.config-modal { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow-md); padding: var(--fonu-space-4) var(--fonu-space-5); }
-.config-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
-.config-modal__body { margin-top: var(--fonu-space-3); }
+.config-modal { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow-md); padding: var(--havline-space-4) var(--havline-space-5); }
+.config-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
+.config-modal__body { margin-top: var(--havline-space-3); }
 .config-modal__code { max-height: 380px; }
-.config-modal__footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--fonu-space-4); }
-.modal-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); }
+.config-modal__footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: var(--havline-space-4); }
+.modal-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--havline-text); }
 
-.op-list { display: grid; gap: var(--fonu-space-3); }
-.op-item { padding: var(--fonu-space-3); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-surface); }
-.op-item--fail { border-color: var(--fonu-error); }
+.op-list { display: grid; gap: var(--havline-space-3); }
+.op-item { padding: var(--havline-space-3); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-surface); }
+.op-item--fail { border-color: var(--havline-error); }
 .op-item__head { display: flex; align-items: center; gap: 8px; }
-.op-item__source { font-size: 13px; font-weight: 600; color: var(--fonu-text); }
-.op-item__time { margin-left: auto; font-size: 12px; color: var(--fonu-text-muted); }
+.op-item__source { font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.op-item__time { margin-left: auto; font-size: 12px; color: var(--havline-text-muted); }
 
 .code-block {
-  margin: var(--fonu-space-2) 0 0;
-  padding: var(--fonu-space-3) var(--fonu-space-4);
-  background: var(--fonu-bg-muted);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  font-family: var(--fonu-mono);
+  margin: var(--havline-space-2) 0 0;
+  padding: var(--havline-space-3) var(--havline-space-4);
+  background: var(--havline-bg-muted);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  font-family: var(--havline-mono);
   font-size: 12.5px;
   line-height: 1.65;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   overflow: auto;
   max-height: 240px;
   white-space: pre-wrap;
   word-break: break-all;
 }
-.form-hint { color: var(--fonu-text-secondary); font-size: 12.5px; }
-.mono { font-family: var(--fonu-mono); font-size: 13px; }
+.form-hint { color: var(--havline-text-secondary); font-size: 12.5px; }
+.mono { font-family: var(--havline-mono); font-size: 13px; }
 .mono-wrap { white-space: normal; word-break: break-all; }
 
 /* 首屏一次性入场；用户偏好减少动效时关闭 */
-@keyframes fonu-fade-up {
+@keyframes havline-fade-up {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.stats-row, .dep-grid, .section-card, .entrance-row { animation: fonu-fade-up 160ms ease-out both; }
+.stats-row, .dep-grid, .section-card, .entrance-row { animation: havline-fade-up 160ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
   .stats-row, .dep-grid, .section-card, .entrance-row { animation: none; }
 }
@@ -1790,7 +1790,7 @@ useVisibilityPolling(() => {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
 }
 
 .res-row {
@@ -1801,13 +1801,13 @@ useVisibilityPolling(() => {
     'detail detail'
     'bar bar';
   align-items: center;
-  gap: var(--fonu-space-2);
+  gap: var(--havline-space-2);
   font-size: 13px;
 }
 
 .res-row__label {
   grid-area: label;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .res-row__detail {
@@ -1816,13 +1816,13 @@ useVisibilityPolling(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .res-row__value {
   grid-area: value;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1831,7 +1831,7 @@ useVisibilityPolling(() => {
   display: block;
   height: 4px;
   border-radius: 2px;
-  background: var(--fonu-border);
+  background: var(--havline-border);
   overflow: hidden;
 }
 
@@ -1839,26 +1839,26 @@ useVisibilityPolling(() => {
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--fonu-brand);
+  background: var(--havline-brand);
   transition: width 0.3s ease;
 }
 
 .res-bar--warn .res-bar__fill {
-  background: var(--fonu-warning);
+  background: var(--havline-warning);
 }
 
 .res-bar--danger .res-bar__fill {
-  background: var(--fonu-error);
+  background: var(--havline-error);
 }
 
 .res-meta {
   grid-column: 1 / -1;
   display: flex;
-  gap: var(--fonu-space-4);
-  padding-top: var(--fonu-space-2);
-  border-top: 1px solid var(--fonu-border);
+  gap: var(--havline-space-4);
+  padding-top: var(--havline-space-2);
+  border-top: 1px solid var(--havline-border);
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 @media (max-width: 900px) {
@@ -1875,13 +1875,13 @@ useVisibilityPolling(() => {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) 76px 76px 92px;
   align-items: center;
-  gap: var(--fonu-space-2);
+  gap: var(--havline-space-2);
   font-size: 13px;
 }
 
 .cert-row--head {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .cert-domain {
@@ -1892,15 +1892,15 @@ useVisibilityPolling(() => {
 
 .cert-muted {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .cert-days--warn {
-  color: var(--fonu-warning);
+  color: var(--havline-warning);
 }
 
 .cert-days--error {
-  color: var(--fonu-error);
+  color: var(--havline-error);
   font-weight: 600;
 }
 
@@ -1913,178 +1913,178 @@ useVisibilityPolling(() => {
 /* ── 以下样式随「公网服务端」列表与弹窗从内网穿透页迁入（2026-09-24）── */
 
 
-.section-actions, .switch-row, .modal-actions, .logs-toolbar { display: flex; align-items: center; gap: var(--fonu-space-2); flex-wrap: wrap; }
+.section-actions, .switch-row, .modal-actions, .logs-toolbar { display: flex; align-items: center; gap: var(--havline-space-2); flex-wrap: wrap; }
 
-.logs-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--fonu-space-3); }
+.logs-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--havline-space-3); }
 
-.frp-proxy-modal { display: flex; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--fonu-surface); border-radius: var(--fonu-radius); overflow: hidden; box-shadow: var(--fonu-shadow-md); }
+.frp-proxy-modal { display: flex; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
 .frp-proxy-modal .proxy-modal__form { flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 90vh; }
-.frp-proxy-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); padding: var(--fonu-space-5) var(--fonu-space-5) 0; }
+.frp-proxy-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); padding: var(--havline-space-5) var(--havline-space-5) 0; }
 .frp-proxy-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; }
-.frp-proxy-modal .proxy-modal__tabbar { display: flex; gap: var(--fonu-space-5); padding: var(--fonu-space-3) var(--fonu-space-5) 0; border-bottom: 1px solid var(--fonu-border); flex-shrink: 0; }
-.frp-proxy-modal .proxy-modal__tab { margin: 0 0 -1px; padding: 8px 2px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--fonu-text-secondary); font: inherit; font-size: 14px; cursor: pointer; }
-.frp-proxy-modal .proxy-modal__tab:hover { color: var(--fonu-text); }
-.frp-proxy-modal .proxy-modal__tab--active { color: var(--fonu-brand-text); font-weight: 600; border-bottom-color: var(--fonu-brand); }
+.frp-proxy-modal .proxy-modal__tabbar { display: flex; gap: var(--havline-space-5); padding: var(--havline-space-3) var(--havline-space-5) 0; border-bottom: 1px solid var(--havline-border); flex-shrink: 0; }
+.frp-proxy-modal .proxy-modal__tab { margin: 0 0 -1px; padding: 8px 2px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--havline-text-secondary); font: inherit; font-size: 14px; cursor: pointer; }
+.frp-proxy-modal .proxy-modal__tab:hover { color: var(--havline-text); }
+.frp-proxy-modal .proxy-modal__tab--active { color: var(--havline-brand-text); font-weight: 600; border-bottom-color: var(--havline-brand); }
 .frp-proxy-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; }
-.frp-proxy-modal .proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
-.frp-proxy-modal .proxy-modal__pane > .modal-actions { padding-bottom: var(--fonu-space-5); }
+.frp-proxy-modal .proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--havline-space-4) var(--havline-space-5) 0; }
+.frp-proxy-modal .proxy-modal__pane > .modal-actions { padding-bottom: var(--havline-space-5); }
 .frp-proxy-modal__basic .form-grid { grid-template-columns: 1fr; }
 .frp-server-modal__basic .form-grid { grid-template-columns: 1fr; }
 
-.form-section { padding: var(--fonu-space-4) 0; border-bottom: 1px solid var(--fonu-border); }
+.form-section { padding: var(--havline-space-4) 0; border-bottom: 1px solid var(--havline-border); }
 .form-section:first-child { padding-top: 0; }
 .form-section:last-of-type { border-bottom: 0; }
-.form-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--fonu-space-4); font-size: 16px; }
-.form-section h3 :deep(.n-icon) { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--fonu-radius-sm); background: var(--fonu-brand); color: #fff; font-size: 15px; }
+.form-section h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 var(--havline-space-4); font-size: 16px; }
+.form-section h3 :deep(.n-icon) { display: grid; place-items: center; width: 26px; height: 26px; border-radius: var(--havline-radius-sm); background: var(--havline-brand); color: #fff; font-size: 15px; }
 
 .narrow-input { max-width: 200px; }
 /* 统一卡片式弹窗外壳（运行日志 / 导出配置 / frps 同源配置）：与 .proxy-modal 体系一致的头部 + 滚动区 + 页脚 */
-.frp-card-modal { display: flex; flex-direction: column; width: min(860px, calc(100vw - 32px)); max-height: 90vh; background: var(--fonu-surface); border-radius: var(--fonu-radius); overflow: hidden; box-shadow: var(--fonu-shadow-md); }
-.frp-card-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); padding: var(--fonu-space-5) var(--fonu-space-5) 0; flex-shrink: 0; }
-.frp-card-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fonu-text); }
-.frp-card-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
-.frp-card-modal .modal-footer { display: flex; justify-content: flex-end; gap: var(--fonu-space-3); padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5); border-top: 1px solid var(--fonu-border); margin-top: var(--fonu-space-2); flex-shrink: 0; }
+.frp-card-modal { display: flex; flex-direction: column; width: min(860px, calc(100vw - 32px)); max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
+.frp-card-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); padding: var(--havline-space-5) var(--havline-space-5) 0; flex-shrink: 0; }
+.frp-card-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--havline-text); }
+.frp-card-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--havline-space-4) var(--havline-space-5) 0; }
+.frp-card-modal .modal-footer { display: flex; justify-content: flex-end; gap: var(--havline-space-3); padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5); border-top: 1px solid var(--havline-border); margin-top: var(--havline-space-2); flex-shrink: 0; }
 
-.frp-detail-card :deep(.n-card-header) { padding: var(--fonu-space-5) var(--fonu-space-5) 0; }
-.frp-detail-card :deep(.n-card-header__main) { font-size: 18px; font-weight: 600; color: var(--fonu-text); }
-.frp-detail-card :deep(.n-card__content) { padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5); }
+.frp-detail-card :deep(.n-card-header) { padding: var(--havline-space-5) var(--havline-space-5) 0; }
+.frp-detail-card :deep(.n-card-header__main) { font-size: 18px; font-weight: 600; color: var(--havline-text); }
+.frp-detail-card :deep(.n-card__content) { padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5); }
 
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--fonu-space-4); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--havline-space-4); }
 .form-grid--wide > :first-child { grid-column: 1 / -1; }
-.tls-panel { padding: var(--fonu-space-4); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg-muted); }
-.tls-file-field { margin-bottom: var(--fonu-space-4); }
-.tls-file-field__head { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); margin-bottom: var(--fonu-space-2); font-size: 14px; font-weight: 500; }
+.tls-panel { padding: var(--havline-space-4); border-radius: var(--havline-radius-sm); background: var(--havline-bg-muted); }
+.tls-file-field { margin-bottom: var(--havline-space-4); }
+.tls-file-field__head { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); margin-bottom: var(--havline-space-2); font-size: 14px; font-weight: 500; }
 .file-input { display: none; }
-.asset-actions { display: flex; gap: var(--fonu-space-2); margin-top: calc(-1 * var(--fonu-space-2)); }
-.advanced-collapse { margin-top: var(--fonu-space-3); }
-.switch-row { padding: 4px 0 var(--fonu-space-5); }
-.switch-row span:nth-of-type(2) { margin-left: var(--fonu-space-4); }
+.asset-actions { display: flex; gap: var(--havline-space-2); margin-top: calc(-1 * var(--havline-space-2)); }
+.advanced-collapse { margin-top: var(--havline-space-3); }
+.switch-row { padding: 4px 0 var(--havline-space-5); }
+.switch-row span:nth-of-type(2) { margin-left: var(--havline-space-4); }
 .modal-actions { justify-content: flex-end; }
-.logs-box { margin: var(--fonu-space-3) 0 0; padding: var(--fonu-space-4); min-height: 260px; max-height: 480px; overflow: auto; border: 1px solid var(--fonu-border); background: var(--fonu-bg-muted); color: var(--fonu-text); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 var(--fonu-mono); }
+.logs-box { margin: var(--havline-space-3) 0 0; padding: var(--havline-space-4); min-height: 260px; max-height: 480px; overflow: auto; border: 1px solid var(--havline-border); background: var(--havline-bg-muted); color: var(--havline-text); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 var(--havline-mono); }
 
-.table-muted { margin-top: 4px; color: var(--fonu-text-muted); font-size: 12px; }
-.type-chip { font-family: var(--fonu-mono); font-size: 12px; color: var(--fonu-brand-text); }
+.table-muted { margin-top: 4px; color: var(--havline-text-muted); font-size: 12px; }
+.type-chip { font-family: var(--havline-mono); font-size: 12px; color: var(--havline-brand-text); }
 
-.server-detail { display: grid; gap: var(--fonu-space-4); }
-.server-detail__top, .server-detail__section-title { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
+.server-detail { display: grid; gap: var(--havline-space-4); }
+.server-detail__top, .server-detail__section-title { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
 .server-detail__top h2 { margin: 0; font-size: 24px; }
-.server-detail__top p { margin: 4px 0 0; color: var(--fonu-text-secondary); font-size: 13px; }
-.server-detail__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-4); }
-.server-detail__panel { padding: var(--fonu-space-4); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg); }
-.server-detail__panel h3 { margin: 0 0 var(--fonu-space-4); font-size: 16px; }
-.detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-4); }
+.server-detail__top p { margin: 4px 0 0; color: var(--havline-text-secondary); font-size: 13px; }
+.server-detail__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-4); }
+.server-detail__panel { padding: var(--havline-space-4); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-bg); }
+.server-detail__panel h3 { margin: 0 0 var(--havline-space-4); font-size: 16px; }
+.detail-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-4); }
 .detail-fields--single { grid-template-columns: 1fr; }
 .detail-fields > div { display: grid; gap: 5px; min-width: 0; }
-.detail-fields label, .detail-stats label { color: var(--fonu-text-secondary); font-size: 12px; }
+.detail-fields label, .detail-stats label { color: var(--havline-text-secondary); font-size: 12px; }
 .detail-fields strong, .detail-fields span { overflow-wrap: anywhere; }
-.detail-subgroup { margin-top: var(--fonu-space-3); padding-top: var(--fonu-space-3); border-top: 1px solid var(--fonu-border); }
-.detail-subgroup__title { margin-bottom: var(--fonu-space-2); font-size: 12px; font-weight: 600; color: var(--fonu-text-secondary); }
-.detail-muted { color: var(--fonu-text-secondary); font-size: 12px; }
+.detail-subgroup { margin-top: var(--havline-space-3); padding-top: var(--havline-space-3); border-top: 1px solid var(--havline-border); }
+.detail-subgroup__title { margin-bottom: var(--havline-space-2); font-size: 12px; font-weight: 600; color: var(--havline-text-secondary); }
+.detail-muted { color: var(--havline-text-secondary); font-size: 12px; }
 .diag-checks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .server-detail__location { display: flex; align-items: center; gap: 5px; }
-.detail-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-4); }
+.detail-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
 .detail-stats > div { display: grid; gap: 5px; }
-.detail-stats strong { font-size: 20px; color: var(--fonu-success); }
-.server-status-summary { display: grid; grid-template-columns: minmax(150px, 1.3fr) repeat(3, minmax(110px, 1fr)); align-items: center; gap: var(--fonu-space-4); }
+.detail-stats strong { font-size: 20px; color: var(--havline-success); }
+.server-status-summary { display: grid; grid-template-columns: minmax(150px, 1.3fr) repeat(3, minmax(110px, 1fr)); align-items: center; gap: var(--havline-space-4); }
 .server-status-summary__item { display: grid; gap: 6px; min-width: 0; }
-.server-status-summary__item label { color: var(--fonu-text-secondary); font-size: 12px; }
-.server-status-summary__item strong { color: var(--fonu-success); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.server-status-summary__item--state { display: flex; align-items: center; min-height: 28px; padding-right: var(--fonu-space-4); border-right: 1px solid var(--fonu-border); }
-.status-bars { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 4px; margin-top: var(--fonu-space-5); min-height: 36px; }
-.status-bar { position: relative; min-width: 0; height: 36px; border-radius: 4px; background: var(--fonu-bg-muted); cursor: help; outline: none; transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease; }
-.status-bar--ok { background: linear-gradient(180deg, color-mix(in srgb, var(--fonu-success) 75%, white), color-mix(in srgb, var(--fonu-success) 48%, white)); }
-.status-bar--failed { background: color-mix(in srgb, var(--fonu-error) 68%, white); }
-.status-bar:hover, .status-bar:focus-visible { z-index: 2; transform: translateY(-2px); filter: brightness(1.1); box-shadow: var(--fonu-shadow-md); }
-.status-bar::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 3; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: var(--fonu-text); color: var(--fonu-surface); font-size: 12px; line-height: 1.2; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
-.status-bar::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 3; border: 5px solid transparent; border-top-color: var(--fonu-text); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
+.server-status-summary__item label { color: var(--havline-text-secondary); font-size: 12px; }
+.server-status-summary__item strong { color: var(--havline-success); font-size: 18px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.server-status-summary__item--state { display: flex; align-items: center; min-height: 28px; padding-right: var(--havline-space-4); border-right: 1px solid var(--havline-border); }
+.status-bars { display: grid; grid-template-columns: repeat(30, minmax(0, 1fr)); gap: 4px; margin-top: var(--havline-space-5); min-height: 36px; }
+.status-bar { position: relative; min-width: 0; height: 36px; border-radius: 4px; background: var(--havline-bg-muted); cursor: help; outline: none; transition: transform 160ms ease, filter 160ms ease, box-shadow 160ms ease; }
+.status-bar--ok { background: linear-gradient(180deg, color-mix(in srgb, var(--havline-success) 75%, white), color-mix(in srgb, var(--havline-success) 48%, white)); }
+.status-bar--failed { background: color-mix(in srgb, var(--havline-error) 68%, white); }
+.status-bar:hover, .status-bar:focus-visible { z-index: 2; transform: translateY(-2px); filter: brightness(1.1); box-shadow: var(--havline-shadow-md); }
+.status-bar::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 9px); z-index: 3; max-width: 240px; padding: 6px 8px; border-radius: 6px; background: var(--havline-text); color: var(--havline-surface); font-size: 12px; line-height: 1.2; white-space: nowrap; pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
+.status-bar::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 4px); z-index: 3; border: 5px solid transparent; border-top-color: var(--havline-text); pointer-events: none; opacity: 0; transform: translate(-50%, 4px); transition: opacity 160ms ease, transform 160ms ease; }
 .status-bar:hover::after, .status-bar:hover::before, .status-bar:focus-visible::after, .status-bar:focus-visible::before { opacity: 1; transform: translate(-50%, 0); }
-.status-bars-empty { display: grid; place-items: center; min-height: 36px; margin-top: var(--fonu-space-5); border: 1px dashed var(--fonu-border); color: var(--fonu-text-muted); font-size: 12px; }
-.status-bars-footer { display: flex; justify-content: space-between; margin-top: var(--fonu-space-3); color: var(--fonu-text-muted); font-size: 12px; }
+.status-bars-empty { display: grid; place-items: center; min-height: 36px; margin-top: var(--havline-space-5); border: 1px dashed var(--havline-border); color: var(--havline-text-muted); font-size: 12px; }
+.status-bars-footer { display: flex; justify-content: space-between; margin-top: var(--havline-space-3); color: var(--havline-text-muted); font-size: 12px; }
 .status-bars-footer span:last-child { display: inline-flex; align-items: center; gap: 5px; }
-.status-bars-footer i { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--fonu-success) 35%, white); }
-.latency-panel__hint { color: var(--fonu-text-muted); font-size: 12px; }
-.detail-status-meta { display: flex; justify-content: space-between; gap: var(--fonu-space-3); margin: -4px 0 var(--fonu-space-3); color: var(--fonu-text-muted); font-size: 12px; }
-.detail-status-error { color: var(--fonu-error); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.server-status-panel .detail-status-meta { margin: var(--fonu-space-4) 0 0; }
+.status-bars-footer i { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--havline-success) 35%, white); }
+.latency-panel__hint { color: var(--havline-text-muted); font-size: 12px; }
+.detail-status-meta { display: flex; justify-content: space-between; gap: var(--havline-space-3); margin: -4px 0 var(--havline-space-3); color: var(--havline-text-muted); font-size: 12px; }
+.detail-status-error { color: var(--havline-error); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.server-status-panel .detail-status-meta { margin: var(--havline-space-4) 0 0; }
 .latency-chart { width: 100%; height: 240px; }
-.detail-empty { display: grid; place-items: center; height: 240px; color: var(--fonu-text-muted); border: 1px dashed var(--fonu-border); }
-.detail-legend-failed { display: inline-block; width: 6px; height: 6px; margin: 0 4px 1px 12px; border-radius: 50%; background: var(--fonu-error); }
-.latency-bars { display: flex; align-items: end; gap: 4px; height: 92px; padding: 8px 0; border-bottom: 1px solid var(--fonu-border); }
-.latency-bars span { flex: 1; min-width: 5px; max-width: 24px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, var(--fonu-success), color-mix(in srgb, var(--fonu-success) 55%, white)); }
-.latency-bars span.latency-bars__item--bad { background: var(--fonu-warning); }
-.detail-chart-footer { display: flex; justify-content: space-between; margin-top: 8px; color: var(--fonu-text-muted); font-size: 12px; }
-.detail-chart-footer i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--fonu-success); }
-.detail-status--on { color: var(--fonu-success); }
-.detail-status--off { color: var(--fonu-text-muted); }
-.detail-logs { margin: 0; max-height: 220px; overflow: auto; padding: var(--fonu-space-3); background: var(--fonu-bg-muted); color: var(--fonu-text-secondary); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 var(--fonu-mono); }
+.detail-empty { display: grid; place-items: center; height: 240px; color: var(--havline-text-muted); border: 1px dashed var(--havline-border); }
+.detail-legend-failed { display: inline-block; width: 6px; height: 6px; margin: 0 4px 1px 12px; border-radius: 50%; background: var(--havline-error); }
+.latency-bars { display: flex; align-items: end; gap: 4px; height: 92px; padding: 8px 0; border-bottom: 1px solid var(--havline-border); }
+.latency-bars span { flex: 1; min-width: 5px; max-width: 24px; border-radius: 3px 3px 0 0; background: linear-gradient(180deg, var(--havline-success), color-mix(in srgb, var(--havline-success) 55%, white)); }
+.latency-bars span.latency-bars__item--bad { background: var(--havline-warning); }
+.detail-chart-footer { display: flex; justify-content: space-between; margin-top: 8px; color: var(--havline-text-muted); font-size: 12px; }
+.detail-chart-footer i { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--havline-success); }
+.detail-status--on { color: var(--havline-success); }
+.detail-status--off { color: var(--havline-text-muted); }
+.detail-logs { margin: 0; max-height: 220px; overflow: auto; padding: var(--havline-space-3); background: var(--havline-bg-muted); color: var(--havline-text-secondary); white-space: pre-wrap; word-break: break-word; font: 12px/1.55 var(--havline-mono); }
 
 .frps-compare--warn {
-  color: var(--fonu-warning);
+  color: var(--havline-warning);
 }
 /* 服务端表单沿用内网穿透页的提示排版；本页既有的 .form-hint 服务于详情卡，保持不动 */
-.frp-proxy-modal .form-hint { margin: 0 0 var(--fonu-space-4); font-size: 13px; line-height: 1.55; }
+.frp-proxy-modal .form-hint { margin: 0 0 var(--havline-space-4); font-size: 13px; line-height: 1.55; }
 @media (max-width: 760px) {
   .frp-proxy-modal { display: block; max-height: 92vh; overflow-y: auto; }
   .frp-proxy-modal .proxy-modal__form { max-height: none; }
   .frp-proxy-modal .proxy-modal__scroll { overflow: visible; }
-  .frp-proxy-modal .proxy-modal__help { width: auto; border-top: 1px solid var(--fonu-border); border-left: 0; }
+  .frp-proxy-modal .proxy-modal__help { width: auto; border-top: 1px solid var(--havline-border); border-left: 0; }
 }
 @media (max-width: 700px) {
   .server-detail__grid, .detail-fields, .form-grid { grid-template-columns: 1fr; }
   .server-status-summary { grid-template-columns: 1fr; }
-  .server-status-summary__item--state { min-height: 0; padding-right: 0; padding-bottom: var(--fonu-space-3); border-right: 0; border-bottom: 1px solid var(--fonu-border); }
+  .server-status-summary__item--state { min-height: 0; padding-right: 0; padding-bottom: var(--havline-space-3); border-right: 0; border-bottom: 1px solid var(--havline-border); }
   .status-bars { gap: 3px; }
   .status-bar { height: 28px; }
   .switch-row span:nth-of-type(2) { margin-left: 0; }
 }
 /* 服务端表单弹窗的说明栏 / 高级折叠 / 服务端选项区：与内网穿透页同源，随弹窗一并迁入 */
 .logs-toolbar__filter { width: 200px; }
-.frp-proxy-modal .proxy-form-section { margin-top: var(--fonu-space-2); padding: var(--fonu-space-4) 0 0; border-top: 1px solid var(--fonu-border); }
-.frp-proxy-modal .proxy-form-section h4 { margin: 0 0 var(--fonu-space-4); font-size: 14px; font-weight: 600; color: var(--fonu-text); }
-.frp-proxy-modal__advanced { padding-bottom: var(--fonu-space-4); }
-.frp-proxy-modal .proxy-advanced-collapse { width: 100%; border: 1px solid var(--fonu-border); border-radius: 10px; overflow: hidden; background: var(--fonu-surface); }
+.frp-proxy-modal .proxy-form-section { margin-top: var(--havline-space-2); padding: var(--havline-space-4) 0 0; border-top: 1px solid var(--havline-border); }
+.frp-proxy-modal .proxy-form-section h4 { margin: 0 0 var(--havline-space-4); font-size: 14px; font-weight: 600; color: var(--havline-text); }
+.frp-proxy-modal__advanced { padding-bottom: var(--havline-space-4); }
+.frp-proxy-modal .proxy-advanced-collapse { width: 100%; border: 1px solid var(--havline-border); border-radius: 10px; overflow: hidden; background: var(--havline-surface); }
 .frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item) { margin: 0 !important; border: 0 !important; border-radius: 0 !important; }
-.frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item + .n-collapse-item) { border-top: 1px solid var(--fonu-border) !important; }
-.frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item__header) { min-height: 44px; padding: 12px 14px !important; background: var(--fonu-bg); font-weight: 600; box-sizing: border-box; }
+.frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item + .n-collapse-item) { border-top: 1px solid var(--havline-border) !important; }
+.frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item__header) { min-height: 44px; padding: 12px 14px !important; background: var(--havline-bg); font-weight: 600; box-sizing: border-box; }
 .frp-proxy-modal .proxy-advanced-collapse :deep(.n-collapse-item__content-inner) { padding: 0 14px 14px; }
-.frp-proxy-modal .proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--fonu-space-5); background: var(--fonu-bg-muted); border-left: 1px solid var(--fonu-border); color: var(--fonu-text-secondary); font-size: 13px; line-height: 1.65; overflow: auto; }
-.frp-proxy-modal .proxy-modal__help h4 { margin: 0 0 var(--fonu-space-3); color: var(--fonu-text); font-size: 14px; font-weight: 600; }
+.frp-proxy-modal .proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--havline-space-5); background: var(--havline-bg-muted); border-left: 1px solid var(--havline-border); color: var(--havline-text-secondary); font-size: 13px; line-height: 1.65; overflow: auto; }
+.frp-proxy-modal .proxy-modal__help h4 { margin: 0 0 var(--havline-space-3); color: var(--havline-text); font-size: 14px; font-weight: 600; }
 .frp-proxy-modal .proxy-modal__help ol { margin: 0; padding-left: 18px; }
 .frp-proxy-modal .proxy-modal__help li + li { margin-top: 10px; }
-.frp-proxy-modal .proxy-modal__help strong { color: var(--fonu-text); font-weight: 600; }
-.frp-proxy-modal .proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--fonu-space-5); padding: 12px; border-radius: 8px; background: var(--fonu-info-soft); color: var(--fonu-info); font-size: 12px; line-height: 1.6; }
+.frp-proxy-modal .proxy-modal__help strong { color: var(--havline-text); font-weight: 600; }
+.frp-proxy-modal .proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--havline-space-5); padding: 12px; border-radius: 8px; background: var(--havline-info-soft); color: var(--havline-info); font-size: 12px; line-height: 1.6; }
 .frp-proxy-modal .proxy-modal__tip-icon { flex-shrink: 0; margin-top: 1px; font-size: 16px; }
-.frp-proxy-modal .proxy-modal__example { margin-top: var(--fonu-space-5); padding-top: var(--fonu-space-4); border-top: 1px solid var(--fonu-border); }
-.frp-proxy-modal .proxy-modal__example-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--fonu-space-3); }
-.frp-proxy-modal .proxy-modal__example h5 { margin: 0; color: var(--fonu-text); font-size: 13px; font-weight: 600; }
+.frp-proxy-modal .proxy-modal__example { margin-top: var(--havline-space-5); padding-top: var(--havline-space-4); border-top: 1px solid var(--havline-border); }
+.frp-proxy-modal .proxy-modal__example-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--havline-space-3); }
+.frp-proxy-modal .proxy-modal__example h5 { margin: 0; color: var(--havline-text); font-size: 13px; font-weight: 600; }
 .frp-proxy-modal .proxy-modal__example p { margin: 4px 0 0; font-size: 12px; line-height: 1.55; }
-.frp-proxy-modal .proxy-modal__example pre { margin: var(--fonu-space-3) 0 0; padding: 10px; overflow-x: auto; border-radius: 6px; background: var(--fonu-bg-muted); color: var(--fonu-text); font: 12px/1.6 var(--fonu-mono); white-space: pre; }
+.frp-proxy-modal .proxy-modal__example pre { margin: var(--havline-space-3) 0 0; padding: 10px; overflow-x: auto; border-radius: 6px; background: var(--havline-bg-muted); color: var(--havline-text); font: 12px/1.6 var(--havline-mono); white-space: pre; }
 /* 左列表 + 右详情：与 DDNS 页（.ddns-layout / .task-sidebar）同构 */
-.agent-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: var(--fonu-space-4); align-items: start; }
+.agent-layout { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: var(--havline-space-4); align-items: start; }
 .agent-detail { min-width: 0; }
 
-.server-sidebar { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); overflow: hidden; }
-.server-sidebar__head { padding: var(--fonu-space-4); border-bottom: 1px solid var(--fonu-border); }
-.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
-.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); flex-shrink: 0; }
-.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--fonu-space-3); max-height: 720px; overflow: auto; }
+.server-sidebar { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); overflow: hidden; }
+.server-sidebar__head { padding: var(--havline-space-4); border-bottom: 1px solid var(--havline-border); }
+.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
+.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--havline-text); flex-shrink: 0; }
+.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--havline-space-3); max-height: 720px; overflow: auto; }
 
-.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); background: var(--fonu-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-.server-item:hover { border-color: var(--fonu-brand-hover); }
-.server-item--active { border-color: var(--fonu-brand); box-shadow: 0 0 0 1px var(--fonu-brand-soft); }
+.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius); background: var(--havline-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.server-item:hover { border-color: var(--havline-brand-hover); }
+.server-item--active { border-color: var(--havline-brand); box-shadow: 0 0 0 1px var(--havline-brand-soft); }
 .server-item__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.server-item__name { font-size: 14px; font-weight: 600; color: var(--fonu-text); overflow-wrap: anywhere; }
-.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--fonu-text-secondary); overflow-wrap: anywhere; }
-.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-3); margin-top: 6px; font-size: 12px; color: var(--fonu-text-muted); }
+.server-item__name { font-size: 14px; font-weight: 600; color: var(--havline-text); overflow-wrap: anywhere; }
+.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--havline-text-secondary); overflow-wrap: anywhere; }
+.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-3); margin-top: 6px; font-size: 12px; color: var(--havline-text-muted); }
 .server-item__meta span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .server-item__meta :deep(.n-icon) { flex: 0 0 auto; font-size: 14px; }
 .server-item__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 
-.server-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--fonu-space-3); margin-bottom: var(--fonu-space-4); padding: var(--fonu-space-3) var(--fonu-space-4); background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); }
-.server-toolbar__info { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--fonu-space-3); min-width: 0; }
-.server-toolbar__name { font-size: 15px; font-weight: 600; color: var(--fonu-text); }
-.server-toolbar__endpoint { font-size: 12.5px; color: var(--fonu-text-secondary); }
-.server-toolbar__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-2); }
+.server-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--havline-space-3); margin-bottom: var(--havline-space-4); padding: var(--havline-space-3) var(--havline-space-4); background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); }
+.server-toolbar__info { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--havline-space-3); min-width: 0; }
+.server-toolbar__name { font-size: 15px; font-weight: 600; color: var(--havline-text); }
+.server-toolbar__endpoint { font-size: 12.5px; color: var(--havline-text-secondary); }
+.server-toolbar__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
 
 @media (max-width: 1100px) {
   .agent-layout { grid-template-columns: 1fr; }

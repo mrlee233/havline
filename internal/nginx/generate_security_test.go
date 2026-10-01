@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestGenerateSecurityDirectives(t *testing.T) {
@@ -64,25 +64,25 @@ func TestGenerateSecurityDirectives(t *testing.T) {
 		"allow 10.0.0.0/8;",
 		"allow 203.0.113.10;",
 		"deny 8.8.8.8;",
-		"limit_req_zone $binary_remote_addr zone=fonu_rule_7_req",
-		"limit_conn_zone $binary_remote_addr zone=fonu_rule_7_conn",
+		"limit_req_zone $binary_remote_addr zone=havline_rule_7_req",
+		"limit_conn_zone $binary_remote_addr zone=havline_rule_7_conn",
 		"deny 1.2.3.4;",
-		"geo $fonu_client_ip $fonu_is_private",
-		"geo $fonu_client_ip $fonu_rule_7_china_bypass",
+		"geo $havline_client_ip $havline_is_private",
+		"geo $havline_client_ip $havline_rule_7_china_bypass",
 		"192.168.0.0/16 1;",
 		"192.168.1.0/24 1;",
 		"203.0.113.10 1;",
-		"set $fonu_china_block 0;",
-		"if ($fonu_is_private = 1)",
-		"if ($fonu_rule_7_china_bypass = 1)",
+		"set $havline_china_block 0;",
+		"if ($havline_is_private = 1)",
+		"if ($havline_rule_7_china_bypass = 1)",
 		"allow 192.168.1.0/24;",
 		"deny all;",
 		"auth_basic",
-		"limit_req zone=fonu_rule_7_req burst=20",
-		"limit_conn fonu_rule_7_conn 20",
-		"error_page 403 /fonu-errors/403.html",
-		"location = /fonu-errors/error.png",
-		"location = /fonu-errors/429.png",
+		"limit_req zone=havline_rule_7_req burst=20",
+		"limit_conn havline_rule_7_conn 20",
+		"error_page 403 /havline-errors/403.html",
+		"location = /havline-errors/error.png",
+		"location = /havline-errors/429.png",
 		"X-Forwarded-Host $host",
 		"X-Forwarded-Port $server_port",
 		"X-Real-Proto $scheme",

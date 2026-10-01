@@ -11,15 +11,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/acme"
-	certstore "github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/cloudflared"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/ddns"
-	"github.com/fonu/fonu/internal/logstore"
-	"github.com/fonu/fonu/internal/publicip"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/sysinfo"
+	"github.com/havline/havline/internal/acme"
+	certstore "github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/cloudflared"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/ddns"
+	"github.com/havline/havline/internal/logstore"
+	"github.com/havline/havline/internal/publicip"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/sysinfo"
 )
 
 type StatusHandler struct {

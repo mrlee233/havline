@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 
-	"github.com/fonu/fonu/internal/chinacidr"
-	"github.com/fonu/fonu/internal/nginx"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/chinacidr"
+	"github.com/havline/havline/internal/nginx"
+	"github.com/havline/havline/internal/settings"
 )
 
 func (s *ProxyService) loadGenerateOptions(ctx context.Context) nginx.GenerateOptions {

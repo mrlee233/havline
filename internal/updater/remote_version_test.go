@@ -11,14 +11,14 @@ import (
 )
 
 func TestRemoteVersionURLs(t *testing.T) {
-	urls, err := remoteVersionURLs("http://example.com/mrlee/-Fonu.git", "main")
+	urls, err := remoteVersionURLs("http://example.com/mrlee/Havline.git", "main")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(urls) == 0 || !strings.Contains(urls[0], "/api/v1/repos/mrlee/-Fonu/contents/VERSION") {
+	if len(urls) == 0 || !strings.Contains(urls[0], "/api/v1/repos/mrlee/Havline/contents/VERSION") {
 		t.Fatalf("缺少 Gitea API 候选地址: %#v", urls)
 	}
-	if !strings.Contains(urls[1], "/mrlee/-Fonu/raw/branch/main/VERSION") {
+	if !strings.Contains(urls[1], "/mrlee/Havline/raw/branch/main/VERSION") {
 		t.Fatalf("缺少 Gitea raw 候选地址: %#v", urls)
 	}
 }
@@ -38,7 +38,7 @@ func TestParseRemoteVersion(t *testing.T) {
 
 func TestFetchRemoteVersionFromGiteaAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/repos/mrlee/-Fonu/contents/VERSION" {
+		if r.URL.Path != "/api/v1/repos/mrlee/Havline/contents/VERSION" {
 			http.NotFound(w, r)
 			return
 		}
@@ -49,7 +49,7 @@ func TestFetchRemoteVersionFromGiteaAPI(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := fetchRemoteVersion(context.Background(), server.URL+"/mrlee/-Fonu.git", "main")
+	got, err := fetchRemoteVersion(context.Background(), server.URL+"/mrlee/Havline.git", "main")
 	if err != nil {
 		t.Fatal(err)
 	}

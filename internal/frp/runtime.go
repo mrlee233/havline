@@ -246,7 +246,7 @@ func fetchBytesWithProgress(ctx context.Context, url string, limit int64, progre
 	if err != nil {
 		return nil, err
 	}
-	request.Header.Set("User-Agent", "Fonu-FRP-Downloader")
+	request.Header.Set("User-Agent", "Havline-FRP-Downloader")
 	if strings.HasPrefix(url, "https://api.github.com/repos/fatedier/frp/releases/assets/") {
 		request.Header.Set("Accept", "application/octet-stream")
 		request.Header.Set("X-GitHub-Api-Version", "2022-11-28")

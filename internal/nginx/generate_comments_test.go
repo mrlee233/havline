@@ -4,15 +4,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestGenerateRuleBlocksIncludesComments(t *testing.T) {
 	cfg := config.Config{DataDir: t.TempDir()}
 	rule := proxy.Rule{
 		ID:           3,
-		Name:         "fonu",
+		Name:         "havline",
 		Upstream:     "http://127.0.0.1:8080",
 		ListenPort:   8011,
 		ListenIPv4:   true,
@@ -32,7 +32,7 @@ func TestGenerateRuleBlocksIncludesComments(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"# 规则：fonu",
+		"# 规则：havline",
 		"# 上游：http://127.0.0.1:8080",
 		"# 限流 zone 在 http 块中自动生成",
 		"# IP 黑名单",

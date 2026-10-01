@@ -1,6 +1,6 @@
 // 剪贴板复制。
 //
-// Fonu 常以 http://内网IP:6893 访问，属于**非安全上下文**，此时 navigator.clipboard 为 undefined，
+// Havline 常以 http://内网IP:6893 访问，属于**非安全上下文**，此时 navigator.clipboard 为 undefined，
 // 直接调用会导致复制必然失败。这里统一收口：优先用异步剪贴板 API，不可用时回退到 execCommand。
 // 返回是否复制成功，由调用方决定提示文案。
 export async function copyText(text: string): Promise<boolean> {

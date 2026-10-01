@@ -58,7 +58,7 @@
     </div>
 
     <div class="proxy-layout">
-      <FonuCard flush class="proxy-panel">
+      <HavlineCard flush class="proxy-panel">
         <div class="proxy-toolbar">
           <n-input
             v-model:value="search"
@@ -126,7 +126,7 @@
           title="没有匹配的规则"
           description="试试调整搜索关键词或筛选条件。"
         />
-      </FonuCard>
+      </HavlineCard>
     </div>
   </template>
 
@@ -502,7 +502,7 @@
                     新建并开启「自动托管」。
                   </p>
                   <p class="field-hint">域名的根 Zone 必须已加入当前 Cloudflare 账号，且 API Token 的 Zone Resources 包含该域名。</p>
-                  <p v-if="!form.exit_local" class="field-hint">仅走 Cloudflare 出口时，HTTPS 由 Cloudflare 边缘提供，不需要在 Fonu 申请本机证书。</p>
+                  <p v-if="!form.exit_local" class="field-hint">仅走 Cloudflare 出口时，HTTPS 由 Cloudflare 边缘提供，不需要在 Havline 申请本机证书。</p>
                 </div>
               </n-form-item>
 
@@ -915,7 +915,7 @@ import { api, asList } from '../api/client'
 import type { CfTunnel, DiscoveredService, ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import EmptyState from '../components/EmptyState.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import ProxyAccessLogBox from '../components/ProxyAccessLogBox.vue'
 import NginxCodeEditor from '../components/NginxCodeEditor.vue'
 import LoadError from '../components/LoadError.vue'
@@ -1943,7 +1943,7 @@ async function load() {
       cfTunnels.value = []
     }
   } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    loadError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
   } finally {
     loading.value = false
   }
@@ -2331,16 +2331,16 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .stats-row {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .stat-card {
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
-  padding: var(--fonu-space-4);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-4);
   min-height: 118px;
 }
 
@@ -2355,7 +2355,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   font-size: 28px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .stat-card__value--sm { font-size: 22px; }
@@ -2369,13 +2369,13 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .stat-card__sub {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .proxy-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   align-items: start;
 }
 
@@ -2383,7 +2383,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   min-width: 0;
 }
 
-.proxy-panel :deep(.fonu-card__body) {
+.proxy-panel :deep(.havline-card__body) {
   padding-left: 0;
   padding-right: 0;
   padding-bottom: 0;
@@ -2392,9 +2392,9 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-4);
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4);
+  border-bottom: 1px solid var(--havline-border);
   flex-wrap: wrap;
 }
 
@@ -2417,7 +2417,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-loading {
   display: flex;
   justify-content: center;
-  padding: var(--fonu-space-6) 0;
+  padding: var(--havline-space-6) 0;
 }
 
 .proxy-drag-handle {
@@ -2426,7 +2426,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   justify-content: center;
   width: 24px;
   height: 24px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   cursor: grab;
 }
 
@@ -2453,7 +2453,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-table :deep(.domain-cell__main) {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .proxy-table :deep(.domain-cell__links) {
@@ -2474,7 +2474,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   color: #2563eb;
   text-decoration: none;
   overflow: hidden;
@@ -2547,14 +2547,14 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 }
 
 .domain-cell__popover-links :deep(.domain-cell__link-row:hover) {
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .domain-cell__popover-links :deep(.domain-cell__link) {
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   color: #2563eb;
   text-decoration: none;
   overflow: hidden;
@@ -2600,25 +2600,25 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: var(--fonu-surface);
-  border-radius: var(--fonu-radius);
+  background: var(--havline-surface);
+  border-radius: var(--havline-radius);
   overflow: hidden;
-  box-shadow: var(--fonu-shadow-md);
+  box-shadow: var(--havline-shadow-md);
 }
 
 .proxy-detail-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
-  padding: var(--fonu-space-5) var(--fonu-space-5) 0;
+  gap: var(--havline-space-4);
+  padding: var(--havline-space-5) var(--havline-space-5) 0;
   flex-shrink: 0;
 }
 
 .proxy-detail-modal__intro {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   min-width: 0;
 }
 
@@ -2636,22 +2636,22 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--fonu-text-muted);
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
+  color: var(--havline-text-muted);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
 }
 
 .proxy-detail-modal__conn.is-active {
-  color: var(--fonu-brand-text);
-  background: var(--fonu-brand-soft);
+  color: var(--havline-brand-text);
+  background: var(--havline-brand-soft);
   border-color: rgba(16, 185, 129, 0.25);
 }
 
 .proxy-detail__tabbar {
   display: flex;
-  gap: var(--fonu-space-5);
-  padding: var(--fonu-space-3) var(--fonu-space-5) 0;
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-5);
+  padding: var(--havline-space-3) var(--havline-space-5) 0;
+  border-bottom: 1px solid var(--havline-border);
   flex-shrink: 0;
 }
 
@@ -2662,20 +2662,20 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 
 .proxy-detail__tab:hover {
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .proxy-detail__tab--active {
-  color: var(--fonu-brand-text);
+  color: var(--havline-brand-text);
   font-weight: 600;
-  border-bottom-color: var(--fonu-brand);
+  border-bottom-color: var(--havline-brand);
 }
 
 .proxy-detail__scroll {
@@ -2689,7 +2689,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-detail__pane {
   width: 100%;
   box-sizing: border-box;
-  padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5);
+  padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5);
 }
 
 .proxy-detail__pane--overview {
@@ -2698,7 +2698,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
 }
 
 .overview-strip {
@@ -2706,8 +2706,8 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
   gap: 12px 16px;
   padding: 12px 14px;
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
   flex-shrink: 0;
 }
@@ -2718,15 +2718,15 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   flex-wrap: wrap;
   gap: 8px 12px;
   padding: 10px 14px;
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
   flex-shrink: 0;
 }
 
 .overview-security__label {
   font-size: 11px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   letter-spacing: 0.02em;
   flex-shrink: 0;
 }
@@ -2740,7 +2740,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 
 .overview-security__empty {
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .overview-strip__item {
@@ -2752,14 +2752,14 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 
 .overview-strip__label {
   font-size: 11px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   letter-spacing: 0.02em;
 }
 
 .overview-strip__value {
   font-size: 13px;
   font-weight: 500;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2768,7 +2768,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .overview-main {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   flex: 1 1 0;
   min-height: 0;
   align-items: stretch;
@@ -2782,9 +2782,9 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 }
 
 .overview-card {
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
   padding: 14px 16px;
 }
 
@@ -2792,7 +2792,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   margin-bottom: 10px;
 }
 
@@ -2806,7 +2806,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   margin-left: 6px;
   font-size: 12px;
   font-weight: 400;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .overview-card--chart {
@@ -2834,13 +2834,13 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   justify-content: center;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
 }
 
 .overview-metric__label {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .overview-metric__value {
@@ -2848,7 +2848,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   font-size: 18px;
   font-weight: 600;
   line-height: 1.2;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .overview-card--clients {
@@ -2871,7 +2871,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 }
 
 .overview-client-list:hover {
-  scrollbar-color: rgba(148, 163, 184, 0.55) var(--fonu-bg-muted);
+  scrollbar-color: rgba(148, 163, 184, 0.55) var(--havline-bg-muted);
 }
 
 .overview-client-list::-webkit-scrollbar {
@@ -2891,7 +2891,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   padding: 7px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -2902,12 +2902,12 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 }
 
 .overview-client-row:hover {
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .overview-client-row__time {
   flex-shrink: 0;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   font-size: 11px;
 }
 
@@ -2919,7 +2919,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .traffic-live-legend--compact {
@@ -2933,11 +2933,11 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-top: var(--fonu-space-3);
+  padding-top: var(--havline-space-3);
 }
 
 .nginx-pane-alert {
-  margin-bottom: var(--fonu-space-2);
+  margin-bottom: var(--havline-space-2);
   flex-shrink: 0;
 }
 
@@ -2993,7 +2993,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   gap: 14px;
   margin-bottom: 8px;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .traffic-live-legend__item {
@@ -3072,7 +3072,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .listen-types {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-5);
+  gap: var(--havline-space-5);
 }
 
 .proxy-modal {
@@ -3080,10 +3080,10 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   width: 900px;
   max-width: 95vw;
   max-height: 90vh;
-  background: var(--fonu-surface);
-  border-radius: var(--fonu-radius);
+  background: var(--havline-surface);
+  border-radius: var(--havline-radius);
   overflow: hidden;
-  box-shadow: var(--fonu-shadow-md);
+  box-shadow: var(--havline-shadow-md);
 }
 
 .proxy-modal__form {
@@ -3098,15 +3098,15 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-5) var(--fonu-space-5) 0;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-5) var(--havline-space-5) 0;
 }
 
 .proxy-modal__tabbar {
   display: flex;
-  gap: var(--fonu-space-5);
-  padding: var(--fonu-space-3) var(--fonu-space-5) 0;
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-5);
+  padding: var(--havline-space-3) var(--havline-space-5) 0;
+  border-bottom: 1px solid var(--havline-border);
   flex-shrink: 0;
 }
 
@@ -3117,20 +3117,20 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   background: none;
   font: inherit;
   font-size: 14px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
 }
 
 .proxy-modal__tab:hover {
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .proxy-modal__tab--active {
-  color: var(--fonu-brand-text);
+  color: var(--havline-brand-text);
   font-weight: 600;
-  border-bottom-color: var(--fonu-brand);
+  border-bottom-color: var(--havline-brand);
 }
 
 .proxy-modal__tab-label {
@@ -3148,7 +3148,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-modal__pane {
   width: 100%;
   box-sizing: border-box;
-  padding: var(--fonu-space-4) var(--fonu-space-5) 0;
+  padding: var(--havline-space-4) var(--havline-space-5) 0;
 }
 
 .proxy-modal__pane--nginx {
@@ -3175,15 +3175,15 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .security-header {
   padding: 14px 16px 16px;
   border-radius: 10px;
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
 }
 
 .security-header__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .security-header__preset {
@@ -3203,7 +3203,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .security-header__status-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   flex-shrink: 0;
 }
 
@@ -3215,24 +3215,24 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 
 .security-header__empty {
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .security-header__note {
   margin: 14px 0 0;
   padding-top: 14px;
-  border-top: 1px solid var(--fonu-border);
+  border-top: 1px solid var(--havline-border);
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.6;
 }
 
 .security-collapse {
   width: 100%;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
   overflow: hidden;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
 }
 
 .security-collapse :deep(.n-collapse-item) {
@@ -3242,7 +3242,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 }
 
 .security-collapse :deep(.n-collapse-item + .n-collapse-item) {
-  border-top: 1px solid var(--fonu-border) !important;
+  border-top: 1px solid var(--havline-border) !important;
 }
 
 /* naive-ui 首个 collapse-item 默认 padding-top: 0，导致首项偏矮 */
@@ -3251,7 +3251,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   min-height: 44px;
   box-sizing: border-box;
   font-weight: 600;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .security-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header) {
@@ -3269,7 +3269,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .security-panel__fields {
   padding: 8px 0 16px;
   margin-bottom: 4px;
-  border-bottom: 1px solid var(--fonu-border);
+  border-bottom: 1px solid var(--havline-border);
 }
 
 .security-panel__fields :deep(.n-form-item) {
@@ -3289,40 +3289,40 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .security-panel .security-fields-grid {
   padding: 8px 0 16px;
   margin-bottom: 4px;
-  border-bottom: 1px solid var(--fonu-border);
+  border-bottom: 1px solid var(--havline-border);
 }
 
 .security-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   padding: 12px 0;
 }
 
 .security-panel .security-option + .security-option,
 .security-panel__fields + .security-option,
 .security-fields-grid + .security-option {
-  border-top: 1px solid var(--fonu-border);
+  border-top: 1px solid var(--havline-border);
 }
 
 .security-option__label {
   font-size: 14px;
   font-weight: 500;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .security-option__hint {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.45;
 }
 
 .security-fields-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   padding: 4px 0 8px;
 }
 
@@ -3347,19 +3347,19 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .proxy-modal__help {
   width: 300px;
   flex-shrink: 0;
-  padding: var(--fonu-space-5);
+  padding: var(--havline-space-5);
   background: #f8fafc;
-  border-left: 1px solid var(--fonu-border);
+  border-left: 1px solid var(--havline-border);
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   overflow: auto;
 }
 
 .proxy-modal__help h4 {
-  margin: 0 0 var(--fonu-space-3);
+  margin: 0 0 var(--havline-space-3);
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .proxy-modal__help ol {
@@ -3379,7 +3379,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 
 .proxy-modal__help code {
   font-size: 12px;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
   padding: 1px 4px;
   border-radius: 4px;
 }
@@ -3388,7 +3388,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  margin-top: var(--fonu-space-5);
+  margin-top: var(--havline-space-5);
   padding: 12px;
   border-radius: 8px;
   background: #eff6ff;
@@ -3416,7 +3416,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 
 .form-label__help {
   font-size: 14px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   cursor: help;
 }
 
@@ -3436,11 +3436,11 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .field-hint {
   margin: 0;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 
-.field-hint--warning { color: var(--fonu-warning); }
+.field-hint--warning { color: var(--havline-warning); }
 
 .exit-options {
   display: flex;
@@ -3459,8 +3459,8 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
 }
 
 .discovery-item__main {
@@ -3480,7 +3480,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: flex-start;
   gap: 24px;
-  margin-bottom: var(--fonu-space-5);
+  margin-bottom: var(--havline-space-5);
 }
 
 .listen-col {
@@ -3501,7 +3501,7 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .listen-col__label {
   font-size: 14px;
   line-height: 1.25;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .required-mark {
@@ -3522,30 +3522,30 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   flex-direction: column;
   gap: 14px;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .form-switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   padding: 12px 14px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .form-switch-row__label {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .form-switch-row__hint {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 
@@ -3558,10 +3558,10 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5);
-  border-top: 1px solid var(--fonu-border);
-  margin-top: var(--fonu-space-2);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5);
+  border-top: 1px solid var(--havline-border);
+  margin-top: var(--havline-space-2);
 }
 
 .clients-list {
@@ -3579,15 +3579,15 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   padding: 8px 10px;
   border-radius: 8px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
-.mono { font-family: var(--fonu-mono); }
-.text-muted { color: var(--fonu-text-muted); }
-.text-secondary { color: var(--fonu-text-secondary); }
+.mono { font-family: var(--havline-mono); }
+.text-muted { color: var(--havline-text-muted); }
+.text-secondary { color: var(--havline-text-secondary); }
 
 @media (max-width: 1199px) {
   .stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -3619,12 +3619,12 @@ useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
   .proxy-modal__help {
     width: 100%;
     border-left: none;
-    border-top: 1px solid var(--fonu-border);
+    border-top: 1px solid var(--havline-border);
   }
   .listen-row {
     flex-direction: column;
     align-items: stretch;
-    gap: var(--fonu-space-4);
+    gap: var(--havline-space-4);
   }
 
   .listen-col--port {

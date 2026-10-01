@@ -66,7 +66,7 @@
         <div class="alert-body">
           <div class="alert-body__text">
             <strong>检测到 {{ driftItems.length }} 项部署漂移（{{ driftSummary }}）</strong>
-            <span>VPS 上的实际配置与 Fonu 记录不一致：可能被手工修改过，或 agent 重装后没有重新部署。</span>
+            <span>VPS 上的实际配置与 Havline 记录不一致：可能被手工修改过，或 agent 重装后没有重新部署。</span>
             <span class="mono alert-body__detail">{{ driftPreview }}</span>
           </div>
           <n-popconfirm @positive-click="redeployAll">
@@ -75,7 +75,7 @@
                 重新部署全部
               </n-button>
             </template>
-            将按 Fonu 里的记录重新下发该服务端的全部启用规则，会覆盖 VPS 上的手工修改。确定继续？
+            将按 Havline 里的记录重新下发该服务端的全部启用规则，会覆盖 VPS 上的手工修改。确定继续？
           </n-popconfirm>
         </div>
       </n-alert>
@@ -136,7 +136,7 @@
       </section>
 
       <!-- ② 环境与 Nginx -->
-      <FonuCard class="section-card nginx-card" title="Nginx（公网反代依赖）">
+      <HavlineCard class="section-card nginx-card" title="Nginx（公网反代依赖）">
         <div class="section-body">
           <div class="field-grid">
             <div><label>可用性</label><span class="field-tags"><StatusBadge :kind="nginxKind" :text="nginxText" /></span></div>
@@ -167,10 +167,10 @@
             <n-button size="small" :loading="manualRefreshing" @click="refreshAll({ silent: false })">重新检测</n-button>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
       <!-- ③ 规则台账 -->
-      <FonuCard class="section-card" title="规则台账">
+      <HavlineCard class="section-card" title="规则台账">
         <div class="section-body">
           <p class="form-hint">穿透规则保存后不会自动改 VPS：点「部署反代」才会发布到 Nginx（自动推送证书并做回源自检）</p>
           <div v-if="candidates.length" class="route-table-wrap">
@@ -204,7 +204,7 @@
             </div>
           </details>
         </div>
-      </FonuCard>
+      </HavlineCard>
       </div>
     </div>
 
@@ -349,8 +349,8 @@
           </div>
           <div class="proxy-modal__scroll conf-scroll">
             <p class="field-hint">
-              由 VPS 上的 fonu-agent 生成，位于 Nginx 的 vhost 配置目录（文件名
-              <span class="mono">fonu-{{ confDomain }}.conf</span>）。请勿在 VPS 上手工修改：
+              由 VPS 上的 havline-agent 生成，位于 Nginx 的 vhost 配置目录（文件名
+              <span class="mono">havline-{{ confDomain }}.conf</span>）。请勿在 VPS 上手工修改：
               下次部署会被重新生成覆盖，改动请到「部署设置」或穿透规则里调整。
             </p>
             <div class="conf-layout">
@@ -415,7 +415,7 @@ import {
 import EmptyState from '../components/EmptyState.vue'
 import ConfigDiffView from '../components/ConfigDiffView.vue'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -606,11 +606,11 @@ function stateOf(candidate: FrpProxy): { state: RouteState; label: string; kind:
   return { state: 'none', label: '未部署', kind: 'disabled' }
 }
 
-// 证书来源（P0-4）：Fonu 证书库里是否有该域名的证书（决定重新部署时能否推送证书、公网 HTTPS 能否终结）
+// 证书来源（P0-4）：Havline 证书库里是否有该域名的证书（决定重新部署时能否推送证书、公网 HTTPS 能否终结）
 function certSummary(domain: string) {
   const record = certificates.value.find((item) => item.domain === domain)
-  if (!record) return 'Fonu 证书库：无（需先在「证书管理」申请）'
-  return `Fonu 证书库：有（剩余 ${record.days_left} 天）`
+  if (!record) return 'Havline 证书库：无（需先在「证书管理」申请）'
+  return `Havline 证书库：有（剩余 ${record.days_left} 天）`
 }
 
 // 健康四段（按域名）：DNS / 证书 / 隧道 / 服务。
@@ -1036,47 +1036,47 @@ onMounted(() => { void load() })
 
 <style scoped>
 /* 分区：提示 → 入口行 → ① 统计区 → ② 环境与 Nginx → ③ 规则台账 */
-.page-alert { margin-bottom: var(--fonu-space-3); }
-.alert-body { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-4); }
+.page-alert { margin-bottom: var(--havline-space-3); }
+.alert-body { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); }
 .alert-body__text { display: grid; gap: 4px; font-size: 13px; }
-.alert-body__detail { font-size: 12px; color: var(--fonu-error); overflow-wrap: anywhere; }
-.entrance-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-5); padding: 10px var(--fonu-space-5); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-info-soft); }
-.entrance-row__text { font-size: 13px; color: var(--fonu-text); }
+.alert-body__detail { font-size: 12px; color: var(--havline-error); overflow-wrap: anywhere; }
+.entrance-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); margin-bottom: var(--havline-space-5); padding: 10px var(--havline-space-5); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-info-soft); }
+.entrance-row__text { font-size: 13px; color: var(--havline-text); }
 
-.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--fonu-space-4); margin-bottom: var(--fonu-space-5); }
-.stat-card { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); padding: var(--fonu-space-4) var(--fonu-space-5); min-height: 118px; }
+.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-5); }
+.stat-card { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); padding: var(--havline-space-4) var(--havline-space-5); min-height: 118px; }
 .stat-card__icon { font-size: 18px; margin-bottom: 4px; }
-.stat-card__icon--blue { color: var(--fonu-info); }
-.stat-card__icon--green { color: var(--fonu-brand); }
-.stat-card__icon--amber { color: var(--fonu-warning); }
-.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--fonu-text); letter-spacing: -0.03em; }
-.stat-card__value-total { margin-left: 2px; font-size: 15px; font-weight: 600; color: var(--fonu-text-muted); }
-.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--fonu-text); }
-.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--fonu-text-muted); }
+.stat-card__icon--blue { color: var(--havline-info); }
+.stat-card__icon--green { color: var(--havline-brand); }
+.stat-card__icon--amber { color: var(--havline-warning); }
+.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--havline-text); letter-spacing: -0.03em; }
+.stat-card__value-total { margin-left: 2px; font-size: 15px; font-weight: 600; color: var(--havline-text-muted); }
+.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); }
 
-/* FonuCard 自身已有 24px 内边距，这里不再叠加（与 FrpView 的用法一致） */
-.section-card { margin-bottom: var(--fonu-space-5); }
+/* HavlineCard 自身已有 24px 内边距，这里不再叠加（与 FrpView 的用法一致） */
+.section-card { margin-bottom: var(--havline-space-5); }
 .section-body { padding: 0; }
-.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fonu-space-3) var(--fonu-space-4); }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--havline-space-3) var(--havline-space-4); }
 /* Nginx 卡的 label/value 双列：只在本卡生效，避免影响弹窗里 n-form-item 的内部布局 */
 .nginx-card .field-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .nginx-card .field-grid > div { display: grid; gap: 4px; min-width: 0; }
-.nginx-card .field-grid label { color: var(--fonu-text-secondary); font-size: 12px; }
+.nginx-card .field-grid label { color: var(--havline-text-secondary); font-size: 12px; }
 .field-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .field-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .full-width { width: 100%; }
-.agent-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: var(--fonu-space-3); }
-.nginx-error { margin-top: var(--fonu-space-2); color: var(--fonu-error); overflow-wrap: anywhere; }
+.agent-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: var(--havline-space-3); }
+.nginx-error { margin-top: var(--havline-space-2); color: var(--havline-error); overflow-wrap: anywhere; }
 
 /* 规则台账：与本地反向代理页一致，用 n-data-table 呈现（列宽固定，各行列天然对齐） */
 /* 单元格元素由 render 函数的 h() 创建，不带 scoped 的 data-v 属性，必须用 :deep() 才能命中 */
-.route-table-wrap { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: hidden; }
+.route-table-wrap { border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); overflow: hidden; }
 .route-table-wrap :deep(.cell-name) { display: grid; gap: 4px; }
 .route-table-wrap :deep(.cell-name__head) { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.route-table-wrap :deep(.cell-name strong) { font-size: 13.5px; color: var(--fonu-text); }
-.route-table-wrap :deep(.cell-muted) { font-size: 12px; color: var(--fonu-text-muted); }
+.route-table-wrap :deep(.cell-name strong) { font-size: 13.5px; color: var(--havline-text); }
+.route-table-wrap :deep(.cell-muted) { font-size: 12px; color: var(--havline-text-muted); }
 .route-table-wrap :deep(.cell-wrap) { overflow-wrap: anywhere; }
-.route-table-wrap :deep(.cell-health) { display: flex; gap: var(--fonu-space-2); flex-wrap: wrap; }
+.route-table-wrap :deep(.cell-health) { display: flex; gap: var(--havline-space-2); flex-wrap: wrap; }
 .route-table-wrap :deep(.cell-upstream) { display: grid; gap: 2px; }
 .route-table-wrap :deep(.cell-time) { display: grid; gap: 2px; }
 .route-table-wrap :deep(.cell-domains) { display: grid; gap: 2px; }
@@ -1087,107 +1087,107 @@ onMounted(() => { void load() })
 /* 域名不撑满整格：按钮紧跟在域名后面（不贴近右侧的协议列） */
 .route-table-wrap :deep(.cell-domain .mono) { flex: 0 1 auto; min-width: 0; }
 .route-table-wrap :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
-.route-table-wrap :deep(.mono) { font-family: var(--fonu-mono); font-size: 13px; }
+.route-table-wrap :deep(.mono) { font-family: var(--havline-mono); font-size: 13px; }
 
-.raw-routes { margin-top: var(--fonu-space-4); font-size: 12px; color: var(--fonu-text-secondary); }
-.raw-routes summary { cursor: pointer; color: var(--fonu-text-secondary); }
-.raw-routes summary:hover { color: var(--fonu-text); }
-.raw-routes__list { display: grid; gap: 6px; margin-top: var(--fonu-space-3); }
+.raw-routes { margin-top: var(--havline-space-4); font-size: 12px; color: var(--havline-text-secondary); }
+.raw-routes summary { cursor: pointer; color: var(--havline-text-secondary); }
+.raw-routes summary:hover { color: var(--havline-text); }
+.raw-routes__list { display: grid; gap: 6px; margin-top: var(--havline-space-3); }
 .raw-route-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.raw-route-row .mono { color: var(--fonu-text); }
+.raw-route-row .mono { color: var(--havline-text); }
 
 /* 弹窗样式对齐本地反向代理页（ProxyView）的规则弹窗：900px 宽、无外层内边距、头部/tabbar/页脚各自带内边距 */
-.proxy-modal { display: flex; flex-direction: column; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--fonu-surface); border-radius: var(--fonu-radius); overflow: hidden; box-shadow: var(--fonu-shadow-md); }
+.proxy-modal { display: flex; flex-direction: column; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
 /* 带右侧说明栏的弹窗：整体改为横向，左表单列 + 右说明栏 */
 .proxy-modal--with-help { flex-direction: row; }
 .proxy-modal__form { flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 90vh; }
-.proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--fonu-space-5); background: var(--fonu-bg-muted); border-left: 1px solid var(--fonu-border); font-size: 13px; color: var(--fonu-text-secondary); overflow: auto; }
-.proxy-modal__help h4 { margin: 0 0 var(--fonu-space-3); font-size: 14px; font-weight: 600; color: var(--fonu-text); }
+.proxy-modal__help { width: 300px; flex-shrink: 0; padding: var(--havline-space-5); background: var(--havline-bg-muted); border-left: 1px solid var(--havline-border); font-size: 13px; color: var(--havline-text-secondary); overflow: auto; }
+.proxy-modal__help h4 { margin: 0 0 var(--havline-space-3); font-size: 14px; font-weight: 600; color: var(--havline-text); }
 .proxy-modal__help ol { margin: 0; padding-left: 18px; line-height: 1.75; }
 .proxy-modal__help li + li { margin-top: 10px; }
-.proxy-modal__help code { font-size: 12px; background: var(--fonu-surface); padding: 1px 4px; border-radius: 4px; }
-.proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--fonu-space-5); padding: 12px; border-radius: 8px; background: var(--fonu-info-soft); color: var(--fonu-info); font-size: 12px; line-height: 1.6; }
+.proxy-modal__help code { font-size: 12px; background: var(--havline-surface); padding: 1px 4px; border-radius: 4px; }
+.proxy-modal__tip { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--havline-space-5); padding: 12px; border-radius: 8px; background: var(--havline-info-soft); color: var(--havline-info); font-size: 12px; line-height: 1.6; }
 .proxy-modal__tip-icon { flex-shrink: 0; margin-top: 1px; font-size: 16px; }
-.proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); padding: var(--fonu-space-5) var(--fonu-space-5) 0; flex-shrink: 0; }
-.proxy-modal__tabbar { display: flex; gap: var(--fonu-space-5); padding: var(--fonu-space-3) var(--fonu-space-5) 0; border-bottom: 1px solid var(--fonu-border); flex-shrink: 0; }
-.proxy-modal__tab { margin: 0; padding: 8px 2px 10px; border: none; background: none; font: inherit; font-size: 14px; color: var(--fonu-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-.proxy-modal__tab:hover { color: var(--fonu-text); }
-.proxy-modal__tab--active { color: var(--fonu-brand-text); font-weight: 600; border-bottom-color: var(--fonu-brand); }
+.proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); padding: var(--havline-space-5) var(--havline-space-5) 0; flex-shrink: 0; }
+.proxy-modal__tabbar { display: flex; gap: var(--havline-space-5); padding: var(--havline-space-3) var(--havline-space-5) 0; border-bottom: 1px solid var(--havline-border); flex-shrink: 0; }
+.proxy-modal__tab { margin: 0; padding: 8px 2px 10px; border: none; background: none; font: inherit; font-size: 14px; color: var(--havline-text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.proxy-modal__tab:hover { color: var(--havline-text); }
+.proxy-modal__tab--active { color: var(--havline-brand-text); font-weight: 600; border-bottom-color: var(--havline-brand); }
 .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; }
-.proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
+.proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--havline-space-4) var(--havline-space-5) 0; }
 .proxy-modal__pane :deep(.n-form) { width: 100%; }
 .proxy-modal__pane :deep(.n-form-item .n-form-item-blank) { display: block; width: 100%; }
-.modal-footer { display: flex; justify-content: flex-end; gap: var(--fonu-space-3); padding: var(--fonu-space-4) var(--fonu-space-5) var(--fonu-space-5); border-top: 1px solid var(--fonu-border); margin-top: var(--fonu-space-2); flex-shrink: 0; }
-.form-switch-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: var(--fonu-space-4); }
-.form-switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-4); padding: 12px 14px; border: 1px solid var(--fonu-border); border-radius: 10px; background: var(--fonu-bg); }
-.form-switch-row__label { font-size: 14px; font-weight: 600; color: var(--fonu-text); }
-.form-switch-row__hint { margin-top: 4px; font-size: 12px; color: var(--fonu-text-muted); line-height: 1.5; }
-.field-hint { margin: 0; font-size: 12px; color: var(--fonu-text-muted); line-height: 1.5; }
-.panel-title { margin: var(--fonu-space-4) 0 var(--fonu-space-3); font-size: 14px; font-weight: 600; color: var(--fonu-text); }
-.modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--fonu-text); }
+.modal-footer { display: flex; justify-content: flex-end; gap: var(--havline-space-3); padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5); border-top: 1px solid var(--havline-border); margin-top: var(--havline-space-2); flex-shrink: 0; }
+.form-switch-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: var(--havline-space-4); }
+.form-switch-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); padding: 12px 14px; border: 1px solid var(--havline-border); border-radius: 10px; background: var(--havline-bg); }
+.form-switch-row__label { font-size: 14px; font-weight: 600; color: var(--havline-text); }
+.form-switch-row__hint { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); line-height: 1.5; }
+.field-hint { margin: 0; font-size: 12px; color: var(--havline-text-muted); line-height: 1.5; }
+.panel-title { margin: var(--havline-space-4) 0 var(--havline-space-3); font-size: 14px; font-weight: 600; color: var(--havline-text); }
+.modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--havline-text); }
 .code-block {
-  margin: 0; padding: var(--fonu-space-3) var(--fonu-space-4); background: var(--fonu-bg-muted);
-  border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm);
-  font-family: var(--fonu-mono); font-size: 12.5px; line-height: 1.65; color: var(--fonu-text);
+  margin: 0; padding: var(--havline-space-3) var(--havline-space-4); background: var(--havline-bg-muted);
+  border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm);
+  font-family: var(--havline-mono); font-size: 12.5px; line-height: 1.65; color: var(--havline-text);
   overflow: auto; white-space: pre-wrap; word-break: break-all;
 }
 /* 反代配置查看弹窗：内容区与头部同样的 24px 内边距，代码块自身滚动 */
-.conf-scroll { padding: var(--fonu-space-4) var(--fonu-space-5) 0; }
-.conf-scroll .field-hint { margin-bottom: var(--fonu-space-3); line-height: 1.65; }
+.conf-scroll { padding: var(--havline-space-4) var(--havline-space-5) 0; }
+.conf-scroll .field-hint { margin-bottom: var(--havline-space-3); line-height: 1.65; }
 .conf-view { max-height: 62vh; }
 /* 版本面板 + 差异区：左侧固定宽度列表，右侧自适应（与弹窗 900px 宽度对齐） */
-.conf-layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--fonu-space-4); }
-.conf-versions { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: hidden; }
+.conf-layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--havline-space-4); }
+.conf-versions { border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); overflow: hidden; }
 .conf-versions__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
-  background: var(--fonu-bg-muted); font-size: 12px; color: var(--fonu-text-secondary);
+  padding: 6px var(--havline-space-3); border-bottom: 1px solid var(--havline-border);
+  background: var(--havline-bg-muted); font-size: 12px; color: var(--havline-text-secondary);
 }
-.conf-versions__count { color: var(--fonu-text-muted); }
-.conf-versions__empty { padding: var(--fonu-space-3); font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
-.conf-versions__empty--error { color: var(--fonu-error); }
+.conf-versions__count { color: var(--havline-text-muted); }
+.conf-versions__empty { padding: var(--havline-space-3); font-size: 12px; color: var(--havline-text-muted); line-height: 1.6; }
+.conf-versions__empty--error { color: var(--havline-error); }
 .conf-versions__list { max-height: 52vh; overflow: auto; margin: 0; padding: 0; list-style: none; }
 .conf-versions__item {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
-  font-size: 12px; color: var(--fonu-text-secondary); cursor: pointer;
+  padding: 6px var(--havline-space-3); border-bottom: 1px solid var(--havline-border);
+  font-size: 12px; color: var(--havline-text-secondary); cursor: pointer;
 }
-.conf-versions__item:hover { background: var(--fonu-bg-muted); }
-.conf-versions__item--active { background: var(--fonu-info-soft); color: var(--fonu-text); }
+.conf-versions__item:hover { background: var(--havline-bg-muted); }
+.conf-versions__item--active { background: var(--havline-info-soft); color: var(--havline-text); }
 .conf-versions__time { font-size: 12px; }
-.conf-versions__size { flex: none; color: var(--fonu-text-muted); }
-.conf-body { min-width: 0; display: grid; gap: var(--fonu-space-3); align-content: start; }
-.conf-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
-.conf-actions__hint { font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
-.form-hint { color: var(--fonu-text-secondary); font-size: 12.5px; }
-.mono { font-family: var(--fonu-mono); font-size: 13px; }
+.conf-versions__size { flex: none; color: var(--havline-text-muted); }
+.conf-body { min-width: 0; display: grid; gap: var(--havline-space-3); align-content: start; }
+.conf-actions { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
+.conf-actions__hint { font-size: 12px; color: var(--havline-text-muted); line-height: 1.6; }
+.form-hint { color: var(--havline-text-secondary); font-size: 12.5px; }
+.mono { font-family: var(--havline-mono); font-size: 13px; }
 .mono-wrap { white-space: normal; word-break: break-all; }
 
 /* 左：服务端列表 / 右：该服务端的反代台账（与「内网穿透」「公网服务端」页同构） */
-.proxy-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: var(--fonu-space-4); align-items: start; }
+.proxy-layout { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: var(--havline-space-4); align-items: start; }
 .proxy-layout .section-card { min-width: 0; }
 .proxy-detail { min-width: 0; }
-.server-sidebar { background: var(--fonu-surface); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); box-shadow: var(--fonu-shadow); overflow: hidden; }
-.server-sidebar__head { padding: var(--fonu-space-4); border-bottom: 1px solid var(--fonu-border); }
-.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
-.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--fonu-text); flex-shrink: 0; }
-.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--fonu-space-3); max-height: 720px; overflow: auto; }
-.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius); background: var(--fonu-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
-.server-item:hover { border-color: var(--fonu-brand-hover); }
-.server-item--active { border-color: var(--fonu-brand); box-shadow: 0 0 0 1px var(--fonu-brand-soft); }
+.server-sidebar { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); overflow: hidden; }
+.server-sidebar__head { padding: var(--havline-space-4); border-bottom: 1px solid var(--havline-border); }
+.server-sidebar__head-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
+.server-sidebar__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--havline-text); flex-shrink: 0; }
+.server-sidebar__list { display: flex; flex-direction: column; gap: 10px; padding: var(--havline-space-3); max-height: 720px; overflow: auto; }
+.server-item { width: 100%; font: inherit; text-align: left; padding: 12px 14px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius); background: var(--havline-surface); cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.server-item:hover { border-color: var(--havline-brand-hover); }
+.server-item--active { border-color: var(--havline-brand); box-shadow: 0 0 0 1px var(--havline-brand-soft); }
 .server-item__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.server-item__name { font-size: 14px; font-weight: 600; color: var(--fonu-text); overflow-wrap: anywhere; }
-.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--fonu-text-secondary); overflow-wrap: anywhere; }
-.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--fonu-space-3); margin-top: 6px; font-size: 12px; color: var(--fonu-text-muted); }
+.server-item__name { font-size: 14px; font-weight: 600; color: var(--havline-text); overflow-wrap: anywhere; }
+.server-item__endpoint { margin-top: 6px; font-size: 12px; color: var(--havline-text-secondary); overflow-wrap: anywhere; }
+.server-item__meta { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-3); margin-top: 6px; font-size: 12px; color: var(--havline-text-muted); }
 .server-item__tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 @media (max-width: 1100px) { .proxy-layout { grid-template-columns: 1fr; } .server-sidebar__list { max-height: none; } }
 
 /* 首屏一次性入场；用户偏好减少动效时关闭 */
-@keyframes fonu-fade-up {
+@keyframes havline-fade-up {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.stats-row, .entrance-row, .section-card { animation: fonu-fade-up 160ms ease-out both; }
+.stats-row, .entrance-row, .section-card { animation: havline-fade-up 160ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
   .stats-row, .entrance-row, .section-card { animation: none; }
 }

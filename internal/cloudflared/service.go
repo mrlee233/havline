@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/secret"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/secret"
 )
 
 const defaultOriginService = "http://127.0.0.1:80"
@@ -525,7 +525,7 @@ func (s *Service) restartIfRunning(ctx context.Context, id int64) error {
 	return nil
 }
 
-// syncTunnelDNS 让 Cloudflare DNS 与目标 hostname 保持一致，并只清理 Fonu 自己接管的记录。
+// syncTunnelDNS 让 Cloudflare DNS 与目标 hostname 保持一致，并只清理 Havline 自己接管的记录。
 func (s *Service) syncTunnelDNS(ctx context.Context, api *CloudflareAPI, localTunnelID int64, remoteTunnelID string, hostnames []string) error {
 	desired := make(map[string]struct{}, len(hostnames))
 	for _, raw := range hostnames {

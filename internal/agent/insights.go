@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/sysinfo"
+	"github.com/havline/havline/internal/sysinfo"
 )
 
 const (
@@ -130,7 +130,7 @@ func (s *Server) nginxLogPath(kind string) string {
 			}
 		}
 	}
-	dir := strings.TrimSpace(os.Getenv("FONU_AGENT_NGINX_LOG_DIR"))
+	dir := strings.TrimSpace(os.Getenv("HAVLINE_AGENT_NGINX_LOG_DIR"))
 	if dir == "" {
 		dir = "/var/log/nginx"
 	}
@@ -210,7 +210,7 @@ type vpsCertificate struct {
 	DaysLeft int    `json:"days_left"`
 }
 
-// certs 列出 VPS 证书目录下的域名与到期时间：用于与 Fonu 证书库交叉核对，也能看到宝塔自行申请的证书
+// certs 列出 VPS 证书目录下的域名与到期时间：用于与 Havline 证书库交叉核对，也能看到宝塔自行申请的证书
 func (s *Server) certs(w http.ResponseWriter, _ *http.Request) {
 	dir := strings.TrimSpace(s.cfg.CertsDir)
 	payload := map[string]any{

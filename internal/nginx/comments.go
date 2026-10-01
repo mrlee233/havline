@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func writeCommentLine(b *strings.Builder, indent int, text string) {
@@ -72,7 +72,7 @@ func writeSecurityHeadersComment(b *strings.Builder) {
 }
 
 func writeErrorPagesComment(b *strings.Builder) {
-	writeCommentLine(b, 4, "Fonu 自定义错误页（403/404/429/5xx）")
+	writeCommentLine(b, 4, "Havline 自定义错误页（403/404/429/5xx）")
 }
 
 func writeLocationHeaderComment(b *strings.Builder, upstream string) {

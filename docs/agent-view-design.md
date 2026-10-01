@@ -3,7 +3,7 @@
 > **时效说明（2026-09-24）**：文中「顶部下拉选服务端」的结构已被 v1.2.6 的**左列表 + 右详情**取代（页面标题也改为「公网服务端」），现状见 `docs/frp-server-list-merge-plan.md`。
 
 > 本文按 `breezell-design` 两遍流程产出：**Pass 1a 检测栈 → Pass 1b 确定设计方向与令牌 → Pass 2 实施规格**，
-> 并结合本项目（Fonu）既有页面与设计系统。落地时以本文为准，`docs/agent-view-refactor-plan.md`（结构整改）被本文吸收。
+> 并结合本项目（Havline）既有页面与设计系统。落地时以本文为准，`docs/agent-view-refactor-plan.md`（结构整改）被本文吸收。
 >
 > 更新日期：2026-09-23
 
@@ -16,12 +16,12 @@
 | 框架 | Vue 3 + `<script setup lang="ts">` + Vite 6（`web/package.json`） |
 | 组件库 | **naive-ui**（`n-button` `n-select` `n-tabs` `n-modal` `n-popconfirm` `n-alert` `n-spin` `n-icon` `n-tag` `n-form`） |
 | 图标 | `@vicons/ionicons5` |
-| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` / `[data-theme='dark']` 双主题，`--fonu-*` 前缀 |
-| 共享组件 | `PageHeader` `FonuCard` `StatCard` `StatusBadge` `EmptyState` `LoadError`（另有 `MiniBarChart` 等图表件） |
+| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` / `[data-theme='dark']` 双主题，`--havline-*` 前缀 |
+| 共享组件 | `PageHeader` `HavlineCard` `StatCard` `StatusBadge` `EmptyState` `LoadError`（另有 `MiniBarChart` 等图表件） |
 | 工具 | `utils/format.ts`（`formatBytes/formatRate/formatDate/formatRelativeTime/…`）、`utils/status.ts`（`StatusKind` 语义） |
 | 同族页面 | `DashboardView`（统计卡 + 插槽）、`DdnsView`（提示 + 状态卡）、`CertificatesView`（统计卡规格基准）、`ProxyView`（分组/弹窗）、`SettingsView`（分区） |
 
-**结论（skill 的 "Already has a design system → MATCH it" 规则）**：本页**沿用** naive-ui + `--fonu-*` 令牌 + 既有共享组件，
+**结论（skill 的 "Already has a design system → MATCH it" 规则）**：本页**沿用** naive-ui + `--havline-*` 令牌 + 既有共享组件，
 **不引入** Tailwind / shadcn-vue 等第二套体系，**不新增**第二套令牌或全局样式。
 
 ---
@@ -39,17 +39,17 @@
 
 | 语义 | 令牌 | 用在哪 | 判定规则 |
 | --- | --- | --- | --- |
-| 正常 / 运行 | `--fonu-brand`（`--fonu-brand-soft`、`--fonu-brand-text`） | 在线、运行中、监听中、成功输出 | 无需人工干预 |
-| 待处理 | `--fonu-warning` | frps 未运行、端口未监听、frps 未安装、开机自启未启用 | 可一键恢复（引导操作） |
-| 需人工干预 | `--fonu-error` | Agent 未连接、操作失败输出、卸载确认 | 需用户排查或不可逆 |
-| 中性信息 | `--fonu-text-secondary` / `--fonu-text-muted` | 字段名、说明、时间戳、空态 | — |
-| 引导 | `--fonu-info`（`--fonu-info-soft`） | 页面级引导提示（反代入口等） | 非故障类提示 |
+| 正常 / 运行 | `--havline-brand`（`--havline-brand-soft`、`--havline-brand-text`） | 在线、运行中、监听中、成功输出 | 无需人工干预 |
+| 待处理 | `--havline-warning` | frps 未运行、端口未监听、frps 未安装、开机自启未启用 | 可一键恢复（引导操作） |
+| 需人工干预 | `--havline-error` | Agent 未连接、操作失败输出、卸载确认 | 需用户排查或不可逆 |
+| 中性信息 | `--havline-text-secondary` / `--havline-text-muted` | 字段名、说明、时间戳、空态 | — |
+| 引导 | `--havline-info`（`--havline-info-soft`） | 页面级引导提示（反代入口等） | 非故障类提示 |
 
 规则：**一屏内 error 不超过一处**；warning 不用于"没数据"，只用于"有目标状态但未达成"。亮/暗两套值由 `variables.css` 的 `html.dark` 覆盖，**页面内零硬编码色值**。
 
 ### Type（沿用项目字体，显式声明）
 
-- 正文字体 `--fonu-font`（`-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei'`），等宽 `--fonu-mono`。
+- 正文字体 `--havline-font`（`-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei'`），等宽 `--havline-mono`。
 - **关于 skill 的"禁用 system-ui 系默认栈"**：本项目已存在设计系统，按 "MATCH it, never add a second" 规则，**本页继续使用项目字体**；替换字体属**全局决策**（改 `variables.css`，影响全站并需全站回归），不在本页范围。
 - 页内只用 4 档字号 + 3 档字重（与 `CertificatesView` 统计卡规格一致）：
 
@@ -58,13 +58,13 @@
 | 统计卡数值（词条类） | 18px / 700 | `.stat-card__value--sm` |
 | 统计卡数值（数字类） | 30px / 700，`letter-spacing:-0.03em` | `.stat-card__value` |
 | 字段名 / 卡片标签 | 12–13px / 600 | `.stat-card__label`、`.field-grid label` |
-| 说明 / 时间戳 / 空态 | 12–12.5px / 400 | `--fonu-text-muted`、`.form-hint` |
-| 路径 / 命令 / 版本 / 日志 | `--fonu-mono` 12.5–13px | `.mono` / `.mono-wrap` / `.code-block` |
+| 说明 / 时间戳 / 空态 | 12–12.5px / 400 | `--havline-text-muted`、`.form-hint` |
+| 路径 / 命令 / 版本 / 日志 | `--havline-mono` 12.5–13px | `.mono` / `.mono-wrap` / `.code-block` |
 
 ### Spacing & Radius
 
-- 间距只用 `--fonu-space-1…6`（4/8/12/16/24/32），**禁止魔数**；卡片内边距统一 `var(--fonu-space-4) var(--fonu-space-5)`。
-- 圆角只用 `--fonu-radius`(12px) / `--fonu-radius-sm`(8px)；阴影只用 `--fonu-shadow`。
+- 间距只用 `--havline-space-1…6`（4/8/12/16/24/32），**禁止魔数**；卡片内边距统一 `var(--havline-space-4) var(--havline-space-5)`。
+- 圆角只用 `--havline-radius`(12px) / `--havline-radius-sm`(8px)；阴影只用 `--havline-shadow`。
 - 页面里已有的 `style="width: 220px"` 这类内联尺寸，一律改为类（`.agent-select` / `.frps-version-select`）。
 
 ---
@@ -80,13 +80,13 @@
 │     在线/未连接        运行中/未运行     监听中/未监听    监听中/未监听
 │     <agent 地址>       <frps 版本>       HTTP 入口       HTTPS 入口
 ├ 两列网格
-│   FonuCard 服务状态详情            FonuCard frps 服务控制
+│   HavlineCard 服务状态详情            HavlineCard frps 服务控制
 │     field-grid 2 列：              按钮带：启动|停止 · 重启 ·
 │     Agent 版本 / frps 版本            frps 管理面板 · 下发配置
 │     启动命令 / 配置文件              [版本选择 ▾] 安装/升级
 │     安装位置 / 开机自启
 │     7000 端口
-│   FonuCard Agent 生命周期（SSH）     FonuCard 输出与日志
+│   HavlineCard Agent 生命周期（SSH）     HavlineCard 输出与日志
 │     探测环境 · 安装/升级 Agent         n-tabs：操作输出 | frps 日志
 │     SSH 诊断 · 卸载(保留)             操作输出 = 时间线（来源+时间+ok）
 │     卸载(含数据) ← 二次确认            空态 EmptyState · [清空]
@@ -125,7 +125,7 @@
 
 **动效（high-impact, restrained）**
 
-- 首屏**一次性**入场：状态区与卡片 `fade-up`（`translateY(4px)→0`，160ms，`--fonu-shadow` 不变），仅 `onMounted` 后触发一次；
+- 首屏**一次性**入场：状态区与卡片 `fade-up`（`translateY(4px)→0`，160ms，`--havline-shadow` 不变），仅 `onMounted` 后触发一次；
 - `@media (prefers-reduced-motion: reduce)` 下全部禁用；
 - 除入场与按钮库内置反馈外，**不做**散点微动效（不加卡片 hover 位移、不加脉冲动画）。
 
@@ -134,7 +134,7 @@
 - 语义：状态区用 `<section aria-label="服务状态">`；装饰性图标 `aria-hidden="true"`；按钮均有可读文本（不出现只有图标的裸按钮）；
 - 动态内容：操作输出容器 `aria-live="polite"`（异步追加需播报）；`n-popconfirm` 已带键盘与焦点管理；
 - 键盘：Tab 顺序 = 选择器 → 刷新 → 状态区（跳过只读）→ 各卡片按钮带 → tabs；`n-tabs` 支持方向键；
-- 对比度：实测下列组合达 WCAG AA（正文 4.5:1、大字号 3:1）——`--fonu-brand`/`--fonu-warning`/`--fonu-error`/`--fonu-text-muted` 在 `--fonu-surface` 上，**亮色与暗色各测一遍**；
+- 对比度：实测下列组合达 WCAG AA（正文 4.5:1、大字号 3:1）——`--havline-brand`/`--havline-warning`/`--havline-error`/`--havline-text-muted` 在 `--havline-surface` 上，**亮色与暗色各测一遍**；
 - 触控：≤760px 时按钮 `min-height: 44px`（或升为 `size="medium"`），满足最小触控目标；
 - 响应式：`1200px+` 4 列状态 / `900–1199px` 2 列 / `≤900px` 单列 + 两列网格并一列 / `≤760px` 按钮铺满 / **`320px` 无横向溢出**。
 
@@ -184,7 +184,7 @@ function pushOutput(source: string, text: string, ok = true) {
 
 ## 七、本页不做（Never）
 
-- 不引入第二套 UI 框架 / 令牌 / 全局样式（naive-ui + `--fonu-*` 已存在）；
+- 不引入第二套 UI 框架 / 令牌 / 全局样式（naive-ui + `--havline-*` 已存在）；
 - 不改全局字体与令牌（属全站决策）；
 - 不用硬编码色值与魔数间距（一律令牌）；
 - 不做渐变、居中大标题、统一灰卡片这类 slop 模式；
@@ -196,7 +196,7 @@ function pushOutput(source: string, text: string, ok = true) {
 
 ## 八、验收清单（对照 skill self-check）
 
-- [ ] 复用了项目真实栈与令牌（naive-ui + `--fonu-*` + 共享组件），未新增第二套
+- [ ] 复用了项目真实栈与令牌（naive-ui + `--havline-*` + 共享组件），未新增第二套
 - [ ] 单一设计方向（机架面板）落地：状态条 + 输出时间线为 signature，无 banned 字体引入，颜色/间距/圆角全部走令牌
 - [ ] 交互状态齐全：hover / pressed / **focused（键盘实测）** / disabled / loading / empty / error
 - [ ] 无障碍：对比度 AA（亮+暗）、可见焦点环、键盘可完成全部操作、`aria-live` 播报输出、图标 `aria-hidden`
@@ -210,7 +210,7 @@ function pushOutput(source: string, text: string, ok = true) {
 | 文档 | 关系 |
 | --- | --- |
 | `docs/agent-view-refactor-plan.md` | 结构整改清单（12 项问题 + 分步改造），**本文吸收其全部内容**并补上设计方向、状态矩阵、无障碍与动效规格；实施时以本文为准 |
-| `web/.breezell/skills/fonu-page-ui`（工作区 skill） | 页面 UI 通用标准；本文是它在「公网 Agent」页的具体化 |
+| `web/.breezell/skills/havline-page-ui`（工作区 skill） | 页面 UI 通用标准；本文是它在「公网 Agent」页的具体化 |
 
 工作量：**单文件改动（`web/src/views/AgentView.vue`）**，约 4–5 小时（比原结构整改多出的部分：设计方向落地、状态矩阵、无障碍与动效、320px 适配）。
-验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/fonu/web/dist` 后 `go build ./...` 使本地生效。
+验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/havline/web/dist` 后 `go build ./...` 使本地生效。

@@ -15,7 +15,7 @@ func TestDashboardAccessFilterSkipsNoisePaths(t *testing.T) {
 	if isDashboardAccess(AccessEntry{Path: "/favicon.ico"}) {
 		t.Fatal("expected favicon to be excluded")
 	}
-	if isDashboardAccess(AccessEntry{Path: "/fonu-errors/error.png"}) {
+	if isDashboardAccess(AccessEntry{Path: "/havline-errors/error.png"}) {
 		t.Fatal("expected error asset to be excluded")
 	}
 }

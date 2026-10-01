@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/frp"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/frp"
 )
 
 // FRPMultiHandler 承载多服务端 FRP 模块的 HTTP 接口（/api/frpmulti/*），

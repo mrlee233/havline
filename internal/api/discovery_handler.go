@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/fonu/fonu/internal/discovery"
+	"github.com/havline/havline/internal/discovery"
 )
 
 type DiscoveryHandler struct {

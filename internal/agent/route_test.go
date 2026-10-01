@@ -31,10 +31,10 @@ func TestValidateRoute(t *testing.T) {
 }
 
 // TestNginxRouteRendersUpstream：vhost 模板的关键行（标记、server_name、proxy_pass）。
-// 不构造 Basic Auth 场景——那条路径会往 /var/lib/fonu-agent 写 htpasswd，不适合在单测里触发。
+// 不构造 Basic Auth 场景——那条路径会往 /var/lib/havline-agent 写 htpasswd，不适合在单测里触发。
 func TestNginxRouteRendersUpstream(t *testing.T) {
 	out := nginxRoute(routeRequest{Domain: "a.example.com", Upstream: "127.0.0.1:8080"}, "")
-	if !strings.HasPrefix(out, "# Managed by fonu-agent.") {
+	if !strings.HasPrefix(out, "# Managed by havline-agent.") {
 		t.Errorf("缺少托管标记，其它工具无法识别该文件归属：\n%s", out)
 	}
 	if !strings.Contains(out, "server_name a.example.com;") {
@@ -63,16 +63,16 @@ func TestNginxRouteSharedTemplateSemantics(t *testing.T) {
 		RateLimitBurst:  20,
 		ConnLimitMax:    5,
 		ChinaOnly:       true,
-	}, "/etc/fonu-agent/certs/a.example.com")
+	}, "/etc/havline-agent/certs/a.example.com")
 	for _, want := range []string{
 		"ssl_protocols TLSv1.2 TLSv1.3;",
 		`add_header Referrer-Policy "strict-origin-when-cross-origin" always;`,
 		"deny 8.8.8.8;",
-		"if ($fonu_china_client = 0) { return 403; }",
+		"if ($havline_china_client = 0) { return 403; }",
 		"allow 192.168.1.0/24;",
 		"deny all;",
-		"limit_conn fonu_a_example_com_conn 5;",
-		"limit_req zone=fonu_a_example_com_req burst=20 nodelay;",
+		"limit_conn havline_a_example_com_conn 5;",
+		"limit_req zone=havline_a_example_com_req burst=20 nodelay;",
 		"proxy_set_header Upgrade $http_upgrade;",
 		`proxy_set_header Connection "upgrade";`,
 	} {

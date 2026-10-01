@@ -10,7 +10,7 @@
   <div class="cf-global" :class="{ 'cf-global--off': !appSettings.enabled }">
     <div class="cf-global__text">
       <strong>全局托管</strong>
-      <span>{{ appSettings.enabled ? '已启用：开启时和下次启动 Fonu 时都会启动全部隧道' : '已停用：所有隧道已停止，应用重启后也不会自动拉起' }}</span>
+      <span>{{ appSettings.enabled ? '已启用：开启时和下次启动 Havline 时都会启动全部隧道' : '已停用：所有隧道已停止，应用重启后也不会自动拉起' }}</span>
     </div>
     <n-switch :value="appSettings.enabled" :loading="globalLoading" @update:value="toggleGlobal" />
   </div>
@@ -25,7 +25,7 @@
     Cloudflare Tunnel 适合 NAS 面板、相册和小型 Web 服务。免费套餐不适合持续大文件或视频分发，请不要把它当作大流量媒体出口。
   </n-alert>
 
-  <FonuCard title="隧道列表" subtitle="托管隧道从「反向代理」规则的 Cloudflare 出口自动派生；手工隧道仍在 Cloudflare 面板管理">
+  <HavlineCard title="隧道列表" subtitle="托管隧道从「反向代理」规则的 Cloudflare 出口自动派生；手工隧道仍在 Cloudflare 面板管理">
     <div v-if="!tunnels.length" class="cf-empty">还没有隧道，点「新建隧道」开始。</div>
     <div v-else class="cf-table">
       <div class="cf-table__head">
@@ -73,12 +73,12 @@
         </div>
       </div>
     </div>
-  </FonuCard>
+  </HavlineCard>
 
   <n-modal v-model:show="editorVisible" preset="card" :style="{ width: 'min(720px, 96vw)' }" title="新建隧道">
     <div class="cf-modal__body">
       <n-alert type="info" :bordered="false" class="cf-mode-alert">
-        隧道由 Cloudflare API 创建；Fonu 负责本地配置、进程、日志与健康。
+        隧道由 Cloudflare API 创建；Havline 负责本地配置、进程、日志与健康。
       </n-alert>
       <n-alert v-if="!appSettings.account_id || !appSettings.api_token_configured" type="warning" :bordered="false" class="cf-mode-alert">
         请先在「应用配置」中填写 Account ID 与 API Token，再创建隧道。
@@ -129,7 +129,7 @@
       </n-alert>
       <n-divider title-placement="left">运行</n-divider>
       <n-form label-placement="top">
-        <n-form-item label="随 Fonu 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
+        <n-form-item label="随 Havline 自动启动"><n-switch v-model:value="form.auto_start" /></n-form-item>
       </n-form>
       <p class="cf-hint">网络调优统一在「应用配置」中管理，保存后会应用到新建隧道。</p>
     </div>
@@ -182,7 +182,7 @@
             </div>
           </div>
           <n-alert v-if="detailAccess" type="info" :bordered="false" class="cf-mode-alert">
-            {{ detailAccess.enabled ? `已启用 Cloudflare Access${detailAccess.name ? '：' + detailAccess.name : ''}` : '未检测到 Cloudflare Access 保护。Fonu 只做只读检测，不代配策略。' }}
+            {{ detailAccess.enabled ? `已启用 Cloudflare Access${detailAccess.name ? '：' + detailAccess.name : ''}` : '未检测到 Cloudflare Access 保护。Havline 只做只读检测，不代配策略。' }}
           </n-alert>
         </n-tab-pane>
       </n-tabs>
@@ -236,7 +236,7 @@
       <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
         {{ tokenTestResult }}
       </n-alert>
-      <p class="cf-hint">Fonu 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道与 DNS。API Token 需要 Account: Cloudflare Tunnel: Edit、Zone: Zone: Read、Zone: DNS: Edit 权限，且 Zone Resources 要包含所有要发布的根域名。</p>
+      <p class="cf-hint">Havline 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道与 DNS。API Token 需要 Account: Cloudflare Tunnel: Edit、Zone: Zone: Read、Zone: DNS: Edit 权限，且 Zone Resources 要包含所有要发布的根域名。</p>
 
       <n-divider title-placement="left">默认网络设置</n-divider>
       <n-form label-placement="top">
@@ -280,7 +280,7 @@ import { useRouter } from 'vue-router'
 import { NAlert, NButton, NDivider, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, NTabPane, NTabs, useMessage } from 'naive-ui'
 import { api, asList } from '../api/client'
 import type { CfAccessStatus, CfAppSettings, CfAppSettingsInput, CfDiagnosticsResult, CfDriftResult, CfMirror, CfPreflightResult, CfRuntimeStatus, CfTunnel, CfTunnelPayload, CfZone } from '../api/types'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
@@ -870,18 +870,18 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
-  padding: 12px var(--fonu-space-5);
-  margin-bottom: var(--fonu-space-4);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-surface);
+  gap: var(--havline-space-4);
+  padding: 12px var(--havline-space-5);
+  margin-bottom: var(--havline-space-4);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-surface);
 }
-.cf-global--off { border-color: var(--fonu-warning); background: var(--fonu-bg); }
+.cf-global--off { border-color: var(--havline-warning); background: var(--havline-bg); }
 .cf-global__text { display: grid; gap: 4px; font-size: 13px; }
-.cf-global__text span { color: var(--fonu-text-secondary); }
-.cf-alert { margin-bottom: var(--fonu-space-4); }
-.cf-empty { padding: 24px 0; color: var(--fonu-text-muted); }
+.cf-global__text span { color: var(--havline-text-secondary); }
+.cf-alert { margin-bottom: var(--havline-space-4); }
+.cf-empty { padding: 24px 0; color: var(--havline-text-muted); }
 .cf-table { width: 100%; overflow-x: auto; }
 .cf-table__head,
 .cf-table__row {
@@ -893,11 +893,11 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
   padding: 10px 0;
 }
 .cf-table__head {
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   font-size: 12px;
-  border-bottom: 1px solid var(--fonu-border);
+  border-bottom: 1px solid var(--havline-border);
 }
-.cf-table__row { border-bottom: 1px solid var(--fonu-border); }
+.cf-table__row { border-bottom: 1px solid var(--havline-border); }
 .cf-table__row:last-child { border-bottom: none; }
 .cf-table__tunnel { min-width: 0; }
 .cf-table__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
@@ -906,21 +906,21 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   padding: 12px 0;
-  border-bottom: 1px solid var(--fonu-border);
+  border-bottom: 1px solid var(--havline-border);
 }
 .cf-row:last-child { border-bottom: none; }
 .cf-row__main { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cf-row__actions { display: flex; gap: 6px; flex-wrap: wrap; }
-.cf-meta { font-size: 12px; color: var(--fonu-text-secondary); }
+.cf-meta { font-size: 12px; color: var(--havline-text-secondary); }
 .cf-modal__body { max-height: 68vh; overflow: auto; padding-right: 4px; }
 .cf-modal__footer { display: flex; justify-content: flex-end; gap: 8px; }
 .cf-mode-alert { margin-bottom: 4px; }
 .cf-preflight { display: grid; gap: 10px; }
-.cf-preflight__row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); }
-.cf-preflight__row span { flex: 1; min-width: 0; color: var(--fonu-text-secondary); font-size: 12.5px; }
-.cf-managed-field { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--fonu-text-muted); }
+.cf-preflight__row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); }
+.cf-preflight__row span { flex: 1; min-width: 0; color: var(--havline-text-secondary); font-size: 12.5px; }
+.cf-managed-field { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--havline-text-muted); }
 .cf-rule-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .cf-rule-row__subdomain,
 .cf-rule-row__domain { min-width: 0; }
@@ -928,35 +928,35 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 var(--fonu-space-4);
+  margin: 0 0 var(--havline-space-4);
   padding: 10px 12px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
 }
-.cf-hostname-preview span { color: var(--fonu-text-muted); font-size: 12px; }
-.cf-hostname-preview strong { color: var(--fonu-text); }
+.cf-hostname-preview span { color: var(--havline-text-muted); font-size: 12px; }
+.cf-hostname-preview strong { color: var(--havline-text); }
 .cf-origin-row { display: flex; align-items: center; width: 100%; gap: 8px; }
 .cf-origin-row__type { width: 126px; flex: none; }
-.cf-origin-row__scheme { color: var(--fonu-text-muted); flex: none; }
+.cf-origin-row__scheme { color: var(--havline-text-muted); flex: none; }
 .cf-diagnostics { display: grid; gap: 8px; margin-top: 10px; }
 .cf-diagnostic-row { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; line-height: 1.5; }
 .cf-detail__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.cf-stat { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg); }
-.cf-stat label { font-size: 12px; color: var(--fonu-text-muted); }
+.cf-stat { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-bg); }
+.cf-stat label { font-size: 12px; color: var(--havline-text-muted); }
 .cf-stat strong { font-size: 15px; }
 .cf-code-toolbar { display: flex; justify-content: flex-end; margin-bottom: 6px; }
 .cf-binary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.cf-binary > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); background: var(--fonu-bg); }
-.cf-binary label { font-size: 12px; color: var(--fonu-text-muted); }
-.cf-hint { font-size: 12px; color: var(--fonu-text-muted); }
+.cf-binary > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-bg); }
+.cf-binary label { font-size: 12px; color: var(--havline-text-muted); }
+.cf-hint { font-size: 12px; color: var(--havline-text-muted); }
 .cf-pre {
   max-height: 240px;
   overflow: auto;
   padding: 12px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;

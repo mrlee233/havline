@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/fonu/fonu/internal/nginx"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/nginx"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/settings"
 )
 
 type NginxBackupInfo struct {

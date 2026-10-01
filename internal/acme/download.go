@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	certstore "github.com/fonu/fonu/internal/certificate"
+	certstore "github.com/havline/havline/internal/certificate"
 )
 
 type DownloadPart string

@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fonu/fonu/internal/app"
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/app"
+	"github.com/havline/havline/internal/config"
 )
 
 //go:embed all:web/dist

@@ -16,7 +16,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 顺序不能颠倒：cmd/fonu/main.go 用 //go:embed all:web/dist 嵌入前端，
+      # 顺序不能颠倒：cmd/havline/main.go 用 //go:embed all:web/dist 嵌入前端，
       # 干净检出时该目录不存在，go vet / go build 会直接失败。
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -39,8 +39,8 @@ jobs:
 
       - name: Sync web dist into embed directory
         run: |
-          rm -rf cmd/fonu/web/dist
-          cp -r web/dist cmd/fonu/web/dist
+          rm -rf cmd/havline/web/dist
+          cp -r web/dist cmd/havline/web/dist
 
       - name: Setup Go
         uses: actions/setup-go@v5

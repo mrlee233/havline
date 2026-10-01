@@ -10,19 +10,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/backup"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/db"
-	"github.com/fonu/fonu/internal/discovery"
-	"github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/backup"
+	"github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/db"
+	"github.com/havline/havline/internal/discovery"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/settings"
 )
 
 func TestAuthSetupAndLoginFlow(t *testing.T) {
-	conn, err := db.Open(filepath.Join(t.TempDir(), "fonu.db"))
+	conn, err := db.Open(filepath.Join(t.TempDir(), "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestAuthSetupAndLoginFlow(t *testing.T) {
 	}
 
 	cookie := loginRec.Result().Cookies()[0]
-	if cookie.Name != "fonu_session" || cookie.HttpOnly == false {
+	if cookie.Name != "havline_session" || cookie.HttpOnly == false {
 		t.Fatal("expected httponly session cookie")
 	}
 

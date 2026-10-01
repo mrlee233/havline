@@ -10,7 +10,7 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/dnspod"
 	"github.com/go-acme/lego/v4/providers/dns/tencentcloud"
 
-	"github.com/fonu/fonu/internal/ddns"
+	"github.com/havline/havline/internal/ddns"
 )
 
 func newDNS01Provider(provider string, cred ddns.Credentials) (challenge.Provider, error) {

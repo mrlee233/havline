@@ -60,7 +60,7 @@ func (s *Server) runUpdate(ctx context.Context) error {
 }
 
 func (s *Server) build(ctx context.Context, version string) error {
-	s.logf("开始构建 fonu:%s，这一步可能持续几分钟", version)
+	s.logf("开始构建 havline:%s，这一步可能持续几分钟", version)
 	buildCtx, cancel := context.WithTimeout(ctx, s.cfg.BuildTimeout)
 	defer cancel()
 	if _, err := s.compose(buildCtx, version, "build", s.cfg.Service); err != nil {
@@ -105,14 +105,14 @@ func (s *Server) rollback(previousImage string) {
 		s.logf("无法确定上一个镜像 tag，跳过自动回滚")
 		return
 	}
-	s.logf("发现升级失败，尝试回滚到 fonu:%s", version)
+	s.logf("发现升级失败，尝试回滚到 havline:%s", version)
 	rollbackCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if _, err := s.compose(rollbackCtx, version, "up", "-d", "--no-deps", "--force-recreate", s.cfg.Service); err != nil {
 		s.logf("自动回滚失败：%v", err)
 		return
 	}
-	s.logf("已切回 fonu:%s", version)
+	s.logf("已切回 havline:%s", version)
 }
 
 func (s *Server) prepareLocalSource(ctx context.Context) error {
@@ -324,7 +324,7 @@ func (s *Server) compose(ctx context.Context, version string, args ...string) (s
 		return s.composeViaHelper(ctx, plan, version, args...)
 	}
 	fullArgs := append([]string{"compose", "--project-name", plan.projectName, "-f", plan.containerCompose}, args...)
-	env := []string{"FONU_VERSION=" + version}
+	env := []string{"HAVLINE_VERSION=" + version}
 	return runCommand(ctx, s.cfg.ProjectDir, env, "docker", fullArgs...)
 }
 
@@ -338,7 +338,7 @@ func (s *Server) composeViaHelper(ctx context.Context, plan composePlan, version
 		"-v", s.cfg.DockerSocket + ":/var/run/docker.sock",
 		"-v", plan.hostProjectDir + ":/workspace",
 		"-w", "/workspace",
-		"-e", "FONU_VERSION=" + version,
+		"-e", "HAVLINE_VERSION=" + version,
 		image,
 		"compose", "--project-name", plan.projectName, "-f", plan.helperComposePath,
 	}

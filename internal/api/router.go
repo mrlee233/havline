@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
+	"github.com/havline/havline/internal/auth"
 )
 
 // routeSpec 是一条 API 路由的注册信息；测试据此遍历全部路由验证鉴权覆盖。

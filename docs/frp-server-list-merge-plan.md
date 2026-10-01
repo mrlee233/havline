@@ -83,7 +83,7 @@ PageHeader「公网服务端」（原「公网 Agent」）
 │    操作列：启动·停止 · 查看 · 日志 · 测速 · 校验 · 编辑 · 删除
 │            （去掉「Agent 管理」——它就在本页；行点击即选中）
 ├─ 选中服务端的详情（现有 AgentView 分区原样搬过来）
-│    环境与依赖（Fonu Agent / Nginx / frps 运行时 / VPS 资源 / VPS 证书）
+│    环境与依赖（Havline Agent / Nginx / frps 运行时 / VPS 资源 / VPS 证书）
 │    frps 控制 + Agent 生命周期（SSH）
 │    输出与日志
 └─ 弹窗：服务端表单（新增/编辑）、服务端日志、服务端详情、frps 同源配置、导出、FRP 应用配置
@@ -147,7 +147,7 @@ PageHeader「公网服务端」（原「公网 Agent」）
   - 服务端表单里的「打开管理面板」改为「查看服务端详情」（关弹窗 + 页内选中）；详情弹窗「客户端」一行所需的 `runtime` 由新增的 `loadRuntimeVersion()` 拉取。
   - 详情弹窗「代理」表依赖的 `proxyPublicEndpoint` 在 `AgentView` 本地补了一份（原属规则侧）；表单里的「下发 frps 配置」复用 `AgentView` 既有的 `run('push-config', …)` 版本，输出进「输出与日志」。
   - **未迁移**：`/frp` 的「查看脱敏配置」弹窗（`showExport`）留在原页——触发按钮在「穿透规则」卡片头部，导出物是脱敏 frpc.toml，属客户端 / 规则视角。这是按 §4.3 自己的判据（弹窗依赖服务端还是规则）做的取舍，与 §4.3 表格里「导出脱敏配置 → 迁走」一行不同。
-- 验证：`vue-tsc --noEmit` 0 错误、`vite build` 通过、`FrpView.vue` 内旧标识符 grep 为 0、全仓无 0 字节源文件、`bin\fonu.exe` 已重建。
+- 验证：`vue-tsc --noEmit` 0 错误、`vite build` 通过、`FrpView.vue` 内旧标识符 grep 为 0、全仓无 0 字节源文件、`bin\havline.exe` 已重建。
 - **踩坑记录（scoped 样式不随模板搬迁）**：`.frp-proxy-modal` 系列规则在 `FrpView.vue` 里分散在多处——1250–1260 的弹窗外壳、1263–1282 的说明栏 / 高级折叠 / 服务端选项区。只搬前一段时，说明栏失去 `width: 300px; flex-shrink: 0`，在 `display: flex` 的弹窗里按内容宽度膨胀，把 `flex: 1` 的表单列挤成一条，表现为标题重叠、页签一字一行。**步 4 清理时注意**：`.proxy-modal*` / `.frp-proxy-modal*` 在 `/frp` 仍被规则表单弹窗使用，不能删。
 - **布局调整（2026-09-24，用户要求对齐 DDNS 页）**：`/frp-agent` 改为 DDNS 那样的**左列表 + 右详情**——`.agent-layout { grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) }`，≤1100px 收成一列；侧栏结构照抄 DDNS 的 `.ddns-layout` / `.task-sidebar`（类名换成本页语义的 `.server-sidebar*` / `.server-item*`）。
   - 原 8 列 `n-data-table` 换成紧凑列表项：名称 + 启动状态标签 + `主机:端口` + 延迟 / 位置 + TLS / Token / Agent / SSH 标签；行点击即选中（`--active` 高亮）。

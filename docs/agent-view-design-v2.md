@@ -17,11 +17,11 @@
 | 框架 | Vue 3 + `<script setup lang="ts">` + Vite 6 |
 | 组件库 | **naive-ui**（`n-button` `n-select` `n-tabs` `n-modal` `n-popconfirm` `n-alert` `n-spin` `n-icon` `n-tag` `n-tooltip` `n-form`） |
 | 图标 | `@vicons/ionicons5` |
-| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` 双主题，`--fonu-*` 前缀 |
-| 共享组件 | `PageHeader` `FonuCard` `StatCard` `StatusBadge` `EmptyState` `LoadError` |
+| 令牌系统 | `web/src/styles/variables.css`：`:root` + `html.dark` 双主题，`--havline-*` 前缀 |
+| 共享组件 | `PageHeader` `HavlineCard` `StatCard` `StatusBadge` `EmptyState` `LoadError` |
 | 工具 | `utils/format.ts`（`formatBytes/formatRate/formatDate/formatRelativeTime/…`）、`utils/status.ts`（`StatusKind`） |
 
-**结论**：沿用既有体系（naive-ui + `--fonu-*` + 共享组件），**不引入**第二套框架/令牌。
+**结论**：沿用既有体系（naive-ui + `--havline-*` + 共享组件），**不引入**第二套框架/令牌。
 
 ---
 
@@ -84,20 +84,20 @@
 
 | 语义 | 令牌 | 用于 | 判定 |
 | --- | --- | --- | --- |
-| 正常 | `--fonu-brand`（`-soft`/`-text`） | 在线、运行中、监听中、成功输出 | 无需干预 |
-| 待处理 | `--fonu-warning` | frps 未运行、端口未监听、frps 未安装、开机自启未启用 | 可一键恢复 |
-| 需人工干预 | `--fonu-error` | Agent 未连接、Nginx 缺失、操作失败、卸载确认 | 需排查/不可逆 |
-| 中性 | `--fonu-text-secondary` / `--fonu-text-muted` | 字段名、说明、时间、空态 | — |
-| 引导 | `--fonu-info`（`-soft`） | 页面级引导（反代入口等） | 非故障 |
+| 正常 | `--havline-brand`（`-soft`/`-text`） | 在线、运行中、监听中、成功输出 | 无需干预 |
+| 待处理 | `--havline-warning` | frps 未运行、端口未监听、frps 未安装、开机自启未启用 | 可一键恢复 |
+| 需人工干预 | `--havline-error` | Agent 未连接、Nginx 缺失、操作失败、卸载确认 | 需排查/不可逆 |
+| 中性 | `--havline-text-secondary` / `--havline-text-muted` | 字段名、说明、时间、空态 | — |
+| 引导 | `--havline-info`（`-soft`） | 页面级引导（反代入口等） | 非故障 |
 
 规则：一屏 error ≤ 1 处；warning 只用于"有目标状态但未达成"，不用于"没数据"。亮/暗由 `variables.css` 覆盖，**页面零硬编码色值**。
 
 **Type（沿用项目字体，显式声明）**
 
-- 正文 `--fonu-font`，等宽 `--fonu-mono`。skill 禁用 system-ui 系默认栈，但本项目已有设计系统，按 **"MATCH it, never add a second"** 继续使用；换字体属全局决策（改 `variables.css` + 全站回归），不在本页范围。
-- 页内 4 档字号 / 3 档字重：数值词条 18px/700（`.stat-card__value--sm`）、数值数字 30px/700/`-0.03em`、字段名与卡标签 12–13px/600、说明与时间 12–12.5px/400；路径/命令/版本/日志走 `--fonu-mono` 12.5–13px。
+- 正文 `--havline-font`，等宽 `--havline-mono`。skill 禁用 system-ui 系默认栈，但本项目已有设计系统，按 **"MATCH it, never add a second"** 继续使用；换字体属全局决策（改 `variables.css` + 全站回归），不在本页范围。
+- 页内 4 档字号 / 3 档字重：数值词条 18px/700（`.stat-card__value--sm`）、数值数字 30px/700/`-0.03em`、字段名与卡标签 12–13px/600、说明与时间 12–12.5px/400；路径/命令/版本/日志走 `--havline-mono` 12.5–13px。
 
-**Spacing & Radius**：只用 `--fonu-space-1…6` 与 `--fonu-radius(-sm)`、`--fonu-shadow`；禁止魔数；内联尺寸一律改类（`.agent-select` / `.frps-version-select`）。
+**Spacing & Radius**：只用 `--havline-space-1…6` 与 `--havline-radius(-sm)`、`--havline-shadow`；禁止魔数；内联尺寸一律改类（`.agent-select` / `.frps-version-select`）。
 
 ---
 
@@ -111,8 +111,8 @@
 │   ● Agent 连接      ● frps 服务       ● 反代路由        ● 端口监听
 │     在线/未连接          运行中/未运行      3 条              80✓ 443✓
 │     <agent 地址>        <frps 版本>      健康 2/3 已生效     7000✓ 8080✗
-├ ② 环境与依赖（Fonu Agent | Nginx | frps 运行时，三列并排）
-│   Fonu Agent                Nginx（本页新增）          frps 运行时
+├ ② 环境与依赖（Havline Agent | Nginx | frps 运行时，三列并排）
+│   Havline Agent                Nginx（本页新增）          frps 运行时
 │     版本 / 地址               可用性徽标 / 版本            二进制 / 版本
 │     凭据：已配置 ✓            可执行路径 / 配置目录          配置路径
 │     [探测环境]                错误原文（红）               启动命令 / 开机自启
@@ -160,7 +160,7 @@
 
 **动效**：首屏一次性 `fade-up`（`translateY(4px)→0`，160ms），仅 `onMounted` 触发一次；`prefers-reduced-motion: reduce` 全禁用；除此之外不做散点微动效（不加卡片 hover 位移/脉冲）。
 
-**无障碍**：状态区 `<section aria-label="运行状态">`；装饰图标 `aria-hidden`；按钮均有可读文本；输出区 `aria-live="polite"`；Tab 顺序 = 选择器 → 刷新 → 状态区（跳过只读）→ 各分区按钮带 → tabs；对比度实测 AA（`--fonu-brand/warning/error/text-muted` 在 `--fonu-surface` 上，亮+暗各一遍）；≤760px 按钮 `min-height: 44px`；响应式 `1200+ / 900–1199 / ≤900 / ≤760`（运行状态 4→2→1 列；环境与依赖三列 →≤1199 降 2 列 →≤900 单列，且三列时卡片内短字段（版本/徽标）双列并排、长路径与命令整行，控制卡片高度），**320px 无横向溢出**。
+**无障碍**：状态区 `<section aria-label="运行状态">`；装饰图标 `aria-hidden`；按钮均有可读文本；输出区 `aria-live="polite"`；Tab 顺序 = 选择器 → 刷新 → 状态区（跳过只读）→ 各分区按钮带 → tabs；对比度实测 AA（`--havline-brand/warning/error/text-muted` 在 `--havline-surface` 上，亮+暗各一遍）；≤760px 按钮 `min-height: 44px`；响应式 `1200+ / 900–1199 / ≤900 / ≤760`（运行状态 4→2→1 列；环境与依赖三列 →≤1199 降 2 列 →≤900 单列，且三列时卡片内短字段（版本/徽标）双列并排、长路径与命令整行，控制卡片高度），**320px 无横向溢出**。
 
 ---
 
@@ -217,7 +217,7 @@ function pushOutput(source: string, text: string, ok = true) {
 
 ## 九、验收清单
 
-- [ ] 复用项目真实栈与令牌（naive-ui + `--fonu-*` + 共享组件），未新增第二套
+- [ ] 复用项目真实栈与令牌（naive-ui + `--havline-*` + 共享组件），未新增第二套
 - [ ] 单一设计方向（机架面板）落地，颜色/间距/圆角全走令牌，无 banned 字体引入
 - [ ] 交互状态齐全：hover / pressed / **focused（键盘实测）** / disabled / loading / empty / error
 - [ ] 无障碍：对比度 AA（亮+暗）、可见焦点环、键盘可完成全部操作、`aria-live` 播报、图标 `aria-hidden`
@@ -233,7 +233,7 @@ function pushOutput(source: string, text: string, ok = true) {
 | --- | --- |
 | `docs/agent-view-design.md`（v1） | 被本文取代（v1 只是结构搬家，未解决"功能不可见"）；确认后可删除 |
 | `docs/agent-view-refactor-plan.md` | 被本文取代 |
-| 工作区 skill `fonu-page-ui` | 页面 UI 通用标准；本文是它在「公网 Agent」页的具体化 |
+| 工作区 skill `havline-page-ui` | 页面 UI 通用标准；本文是它在「公网 Agent」页的具体化 |
 
 工作量：**单文件改动（`web/src/views/AgentView.vue`）**，约 5–6 小时（含 5 处能力补齐、状态机重构、无障碍与响应式）。
-验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/fonu/web/dist` 后 `go build ./...`。
+验证：`npx vue-tsc --noEmit` + `npx vite build`，再同步 `web/dist → cmd/havline/web/dist` 后 `go build ./...`。

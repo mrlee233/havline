@@ -16,7 +16,7 @@ const (
 	PhaseFailed    Phase = "failed"
 )
 
-// Status 是主程序与 fonu-updater sidecar 共享的更新状态。
+// Status 是主程序与 havline-updater sidecar 共享的更新状态。
 type Status struct {
 	Enabled         bool     `json:"enabled"`
 	Mode            string   `json:"mode"`

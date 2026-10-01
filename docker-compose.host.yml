@@ -1,8 +1,8 @@
 # 飞牛 NAS 等已占用 80/443 的环境：使用 host 网络 + 高位默认反代端口
 # 本地项目：直接用源码构建镜像，不从 Docker Hub 拉取
-name: fonu
+name: havline
 services:
-  fonu:
+  havline:
     build:
       context: .
       args:
@@ -10,25 +10,25 @@ services:
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
-    image: fonu:${FONU_VERSION:-local}
-    container_name: fonu
+    image: havline:${HAVLINE_VERSION:-local}
+    container_name: havline
     restart: unless-stopped
     network_mode: host
     volumes:
-      # 数据目录：默认用命名卷 fonu-data（由 Docker 管理，位置随 Docker 数据根）。
-      # 想落到指定目录就在同层 .env 里设 FONU_DATA_PATH=/vol1/docker/fonu-data ——
+      # 数据目录：默认用命名卷 havline-data（由 Docker 管理，位置随 Docker 数据根）。
+      # 想落到指定目录就在同层 .env 里设 HAVLINE_DATA_PATH=/vol1/docker/havline-data ——
       # 以 / 或 . 开头的写法会被 compose 当成 bind mount，其余字符串仍是命名卷。
-      - ${FONU_DATA_PATH:-fonu-data}:/data
+      - ${HAVLINE_DATA_PATH:-havline-data}:/data
     environment:
-      FONU_DATA_DIR: /data
-      FONU_LISTEN: :6893
+      HAVLINE_DATA_DIR: /data
+      HAVLINE_LISTEN: :6893
       # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
       # 想自己指定就设这个变量；注意它同时是凭据加密密钥，已有数据后不要随意更换
-      FONU_SESSION_SECRET: ${FONU_SESSION_SECRET:-}
+      HAVLINE_SESSION_SECRET: ${HAVLINE_SESSION_SECRET:-}
       # 时区：通知消息时间按此显示（默认东八区）
       TZ: ${TZ:-Asia/Shanghai}
-      FONU_NGINX_HTTP_PORT: ${FONU_NGINX_HTTP_PORT:-18080}
-      FONU_NGINX_HTTPS_PORT: ${FONU_NGINX_HTTPS_PORT:-9443}
+      HAVLINE_NGINX_HTTP_PORT: ${HAVLINE_NGINX_HTTP_PORT:-18080}
+      HAVLINE_NGINX_HTTPS_PORT: ${HAVLINE_NGINX_HTTPS_PORT:-9443}
 
 volumes:
-  fonu-data:
+  havline-data:

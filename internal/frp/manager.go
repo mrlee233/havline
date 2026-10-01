@@ -272,7 +272,7 @@ func (m *Manager) binaryPathLocked() (string, error) {
 	}
 	path, err := exec.LookPath(m.bin)
 	if err != nil {
-		return "", fmt.Errorf("未找到 frpc 二进制，请设置 FONU_FRPC_BIN")
+		return "", fmt.Errorf("未找到 frpc 二进制，请设置 HAVLINE_FRPC_BIN")
 	}
 	return path, nil
 }

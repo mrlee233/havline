@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/nginxtmpl"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/nginxtmpl"
+	"github.com/havline/havline/internal/proxy"
 )
 
 type GenerateOptions struct {
@@ -53,11 +53,11 @@ func writeLimitZones(b *strings.Builder, rules []proxy.Rule) {
 			writeLimitZoneComments(b, rule)
 		}
 		if rule.Security.RateLimitEnabled() {
-			zone := fmt.Sprintf("fonu_rule_%d_req", rule.ID)
+			zone := fmt.Sprintf("havline_rule_%d_req", rule.ID)
 			writeIndentedZone(b, nginxtmpl.RateLimitZone(zone, rule.Security.RateLimit.Rate))
 		}
 		if rule.Security.ConnLimitEnabled() {
-			writeIndentedZone(b, nginxtmpl.ConnLimitZone(fmt.Sprintf("fonu_rule_%d_conn", rule.ID)))
+			writeIndentedZone(b, nginxtmpl.ConnLimitZone(fmt.Sprintf("havline_rule_%d_conn", rule.ID)))
 		}
 	}
 	if hasLimitZones(rules) {
@@ -82,7 +82,7 @@ func hasLimitZones(rules []proxy.Rule) bool {
 }
 
 func writePrivateIPGeo(b *strings.Builder) {
-	b.WriteString(`    geo $fonu_client_ip $fonu_is_private {
+	b.WriteString(`    geo $havline_client_ip $havline_is_private {
         default 0;
         10.0.0.0/8 1;
         127.0.0.0/8 1;
@@ -115,7 +115,7 @@ func writeChinaGeoBlocks(b *strings.Builder, cfg config.Config, opts GenerateOpt
 	if opts.ChinaCIDRPathOverride != "" {
 		cidrPath = absNginxPath(opts.ChinaCIDRPathOverride)
 	}
-	b.WriteString(fmt.Sprintf(`    geo $fonu_client_ip $fonu_is_china {
+	b.WriteString(fmt.Sprintf(`    geo $havline_client_ip $havline_is_china {
         default 0;
         include %s;
     }
@@ -134,7 +134,7 @@ func writeChinaOnlyBypassGeo(b *strings.Builder, rules []proxy.Rule, opts Genera
 		sec := rule.Security.Normalize()
 		cidrs := chinaBypassCIDRs(sec, opts.GlobalIPWhitelist)
 		writeChinaBypassComment(b, rule)
-		b.WriteString(fmt.Sprintf("    geo $fonu_client_ip $fonu_rule_%d_china_bypass {\n", rule.ID))
+		b.WriteString(fmt.Sprintf("    geo $havline_client_ip $havline_rule_%d_china_bypass {\n", rule.ID))
 		b.WriteString("        default 0;\n")
 		for _, cidr := range cidrs {
 			b.WriteString(fmt.Sprintf("        %s 1;\n", cidr))
@@ -149,25 +149,25 @@ func chinaOnlyCheckDirectives(rule proxy.Rule, opts GenerateOptions) string {
 		return ""
 	}
 	if !opts.ChinaCIDRAvailable {
-		return `        if ($fonu_is_private = 0) {
+		return `        if ($havline_is_private = 0) {
             return 403;
         }
 `
 	}
 	var b strings.Builder
-	b.WriteString(`        set $fonu_china_block 0;
-        if ($fonu_is_china = 0) {
-            set $fonu_china_block 1;
+	b.WriteString(`        set $havline_china_block 0;
+        if ($havline_is_china = 0) {
+            set $havline_china_block 1;
         }
-        if ($fonu_is_private = 1) {
-            set $fonu_china_block 0;
+        if ($havline_is_private = 1) {
+            set $havline_china_block 0;
         }
 `)
-	b.WriteString(fmt.Sprintf(`        if ($fonu_rule_%d_china_bypass = 1) {
-            set $fonu_china_block 0;
+	b.WriteString(fmt.Sprintf(`        if ($havline_rule_%d_china_bypass = 1) {
+            set $havline_china_block 0;
         }
 `, rule.ID))
-	b.WriteString(`        if ($fonu_china_block = 1) {
+	b.WriteString(`        if ($havline_china_block = 1) {
             return 403;
         }
 `)
@@ -188,20 +188,20 @@ func writeErrorPages(b *strings.Builder, cfg config.Config) {
 	writeErrorPagesComment(b)
 	// HTML is served via internal error_page redirect; images are fetched by the browser
 	// as separate requests and must not use the internal-only location.
-	b.WriteString(`    error_page 403 /fonu-errors/403.html;
-    error_page 404 /fonu-errors/404.html;
-    error_page 429 /fonu-errors/429.html;
-    error_page 500 /fonu-errors/500.html;
-    error_page 502 503 /fonu-errors/503.html;
+	b.WriteString(`    error_page 403 /havline-errors/403.html;
+    error_page 404 /havline-errors/404.html;
+    error_page 429 /havline-errors/429.html;
+    error_page 500 /havline-errors/500.html;
+    error_page 502 503 /havline-errors/503.html;
 
-    location = /fonu-errors/error.png {
+    location = /havline-errors/error.png {
         alias ` + errorsDir + `/error.png;
     }
-    location = /fonu-errors/429.png {
+    location = /havline-errors/429.png {
         alias ` + errorsDir + `/429.png;
     }
 
-    location ^~ /fonu-errors/ {
+    location ^~ /havline-errors/ {
         internal;
         alias ` + errorsDir + `/;
     }
@@ -222,7 +222,7 @@ func writeLocationSecurity(b *strings.Builder, cfg config.Config, rule proxy.Rul
 	}
 	b.WriteString(nginxtmpl.AccessDirectives(acl, "        "))
 
-	limits := nginxtmpl.LimitConfig{Zone: fmt.Sprintf("fonu_rule_%d", rule.ID)}
+	limits := nginxtmpl.LimitConfig{Zone: fmt.Sprintf("havline_rule_%d", rule.ID)}
 	if sec.ConnLimitEnabled() {
 		limits.Conn = sec.ConnLimit.Max
 	}

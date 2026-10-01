@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 type tokenPayload struct {

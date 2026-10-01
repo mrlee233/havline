@@ -1,8 +1,8 @@
-# Cloudflare 隧道同类项目调研与 Fonu 体验优化建议
+# Cloudflare 隧道同类项目调研与 Havline 体验优化建议
 
 > 日期：2026-09-30
 > 调研范围：GitHub 上 Cloudflare Tunnel / cloudflared 管理面板、反向代理管理器、自托管访问平台、状态监测与流量检查器。
-> 目标：不是照搬功能，而是提取适合 Fonu 的自动化方式、页面结构和长期运维体验。
+> 目标：不是照搬功能，而是提取适合 Havline 的自动化方式、页面结构和长期运维体验。
 
 ---
 
@@ -23,7 +23,7 @@
    - 代表：Uptime Kuma、Tunnel Inspector
    - 重点：可用率、状态页、事故记录、请求级观测、重放和抓包体验。
 
-对 Fonu 最重要的启发不是“再加多少按钮”，而是：
+对 Havline 最重要的启发不是“再加多少按钮”，而是：
 
 - 用期望状态和自动调和代替手工点同步。
 - 让规则、隧道、DNS、证书、监控在同一套模型中管理。
@@ -69,16 +69,16 @@
 - 支持环境变量配置协议、边缘 IP、metrics、重试等。
 - 数据持久化到 `/config`。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - 初次配置应该更短：Account ID、API Token、Zone、Tunnel 四步内完成。
 - 所有高级网络参数应该折叠到“高级选项”，默认值直接可用。
-- 当前 Fonu 已覆盖它的主要能力，并且多了 API 托管、DNS、规则同步和监控。
+- 当前 Havline 已覆盖它的主要能力，并且多了 API 托管、DNS、规则同步和监控。
 
 不建议照搬：
 
 - 只有 Token 和启停，模型太薄。
-- 不适合 Fonu 的“服务发布规则”产品定位。
+- 不适合 Havline 的“服务发布规则”产品定位。
 
 ### 3.2 DockFlare
 
@@ -97,9 +97,9 @@
 - 加密配置、运行时状态和数据的备份恢复。
 - 多语言 UI。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
-- 当前 Fonu 已经有“反向代理规则派生 Cloudflare ingress”，方向正确。
+- 当前 Havline 已经有“反向代理规则派生 Cloudflare ingress”，方向正确。
 - 下一步应补“期望状态”和“调和结果”：
   - 本地期望配置。
   - Cloudflare 实际配置。
@@ -108,7 +108,7 @@
   - 一键修复。
 - Docker 标签自动发布非常适合 NAS。
 - 多主机 Agent 适合进阶用户，但不应优先于单机体验。
-- Access 自动化风险较高，Fonu 暂时保持只读更稳。
+- Access 自动化风险较高，Havline 暂时保持只读更稳。
 
 ### 3.3 Tunnel Ingress Controller
 
@@ -122,9 +122,9 @@
 - Controller 持续把声明同步到 Cloudflare。
 - 不要求用户手工编辑 cloudflared ingress。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
-- Fonu 的“反向代理规则就是服务入口声明”是同一思路的非 K8s 版本。
+- Havline 的“反向代理规则就是服务入口声明”是同一思路的非 K8s 版本。
 - 无需引入 K8s，但应借鉴：
   - 声明与运行状态分离。
   - 调和结果可见。
@@ -146,13 +146,13 @@
 - 实时日志。
 - 自动下载 cloudflared。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - Quick Tunnel 适合“临时演示”，不建议作为正式发布方式。
-- 双向同步是 Fonu 当前明显缺口：
+- 双向同步是 Havline 当前明显缺口：
   - 当前支持检测漂移并“本地覆盖云端”。
   - 缺少“云端覆盖本地”。
-- 多账号模式对 Fonu 属于进阶能力，可放到远期。
+- 多账号模式对 Havline 属于进阶能力，可放到远期。
 - 实时日志和指标已具备，继续加强即可。
 
 ### 3.5 cftunnel
@@ -172,7 +172,7 @@
 - 一键分享二维码、地址、Telegram。
 - 自动更新。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - “快速隧道”可以作为临时验证入口，但必须标明不保证 SLA。
 - 场景模板非常值得借鉴：
@@ -182,7 +182,7 @@
   - 相册
   - Jellyfin 管理页
 - “复制访问地址 / 二维码分享”适合手机用户。
-- Cloud + FRP 双引擎的概念与 Fonu 的出口抽象一致。
+- Cloud + FRP 双引擎的概念与 Havline 的出口抽象一致。
 
 ### 3.6 Nginx Proxy Manager
 
@@ -197,12 +197,12 @@
 - 证书申请和续签直接在规则旁完成。
 - 管理界面简单，新手可按表单完成部署。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - 反向代理规则的“编辑页”应成为服务发布中心。
 - Cloudflare 出口应该是一个选项，而不是另一套孤立页面。
 - SSL、Access、健康检查、日志应围绕同一条规则组织。
-- Fonu 当前已有这一方向，但页面还可以更像“资源详情页”。
+- Havline 当前已有这一方向，但页面还可以更像“资源详情页”。
 
 ### 3.7 Pangolin
 
@@ -218,14 +218,14 @@
 - 对每个资源做审计和会话记录。
 - 多 connector 和站点冗余。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - 普通 NAS 用户更需要“访问我的服务”，不是“管理网络隧道”。
 - 可以借鉴资源入口页：
   - 按应用、域名、出口分组。
   - 一键打开服务。
   - 显示维护状态和最近访问。
-- 不建议 Fonu 当前做企业 RBAC、SSO、PAM；成本过高。
+- 不建议 Havline 当前做企业 RBAC、SSO、PAM；成本过高。
 
 ### 3.8 Uptime Kuma
 
@@ -241,7 +241,7 @@
 - 通知渠道丰富。
 - 2FA。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - 当前公开状态页已有域名和可用率。
 - 下一步最值得补：
@@ -268,7 +268,7 @@
 - 请求重放和 Copy as cURL。
 - SSE 实时推送。
 
-对 Fonu 的启示：
+对 Havline 的启示：
 
 - 适合做成“Cloudflare 出口调试模式”，不要默认常驻。
 - 可提供：
@@ -291,7 +291,7 @@
 
 优秀项目不会让用户直接面对复杂配置。
 
-建议 Fonu 增加：
+建议 Havline 增加：
 
 1. 检查 cloudflared 是否安装。
 2. 检查 Account ID。
@@ -346,7 +346,7 @@ nas.example.com
 
 ### 4.4 路由表体验
 
-当前 Fonu 已有路由表。建议继续补：
+当前 Havline 已有路由表。建议继续补：
 
 - 拖拽排序。
 - 启用/停用。
@@ -410,7 +410,7 @@ nas.example.com
 
 桌面管理器和 DockFlare 都把多账号作为进阶能力。
 
-建议 Fonu：
+建议 Havline：
 
 - 当前继续以 Account ID + API Token 为默认。
 - 远期可支持多账号。
@@ -431,12 +431,12 @@ nas.example.com
 
 ---
 
-## 五、Fonu 不该照搬的功能
+## 五、Havline 不该照搬的功能
 
 | 功能 | 结论 | 原因 |
 | --- | --- | --- |
 | Kubernetes Controller | 不做 | 不是 NAS 用户场景 |
-| 企业 SSO / PAM / RBAC 平台 | 暂不做 | 成本高，偏离 Fonu 定位 |
+| 企业 SSO / PAM / RBAC 平台 | 暂不做 | 成本高，偏离 Havline 定位 |
 | Cloudflare 邮件套件 | 不做 | 与访问管理无关 |
 | 多语言 13 种起步 | 暂不做 | 先保持中文产品体验 |
 | 多主机 Agent 优先 | 后置 | 先做好单机 NAS |
@@ -446,7 +446,7 @@ nas.example.com
 
 ---
 
-## 六、Fonu 建议路线
+## 六、Havline 建议路线
 
 > 实施状态：截至 2026-10-01，本节的 P0 已完成第一轮落地，详见 `cloudflared-current-features.md`。
 
@@ -468,7 +468,7 @@ nas.example.com
 6. **拓扑图**
    - 域名 → 出口 → 隧道 → 服务。
 7. **Docker 标签发布**
-   - 容器标签自动生成 Fonu 规则和 Cloudflare 出口。
+   - 容器标签自动生成 Havline 规则和 Cloudflare 出口。
 8. **场景模板**
    - Home Assistant、Immich、Jellyfin、qBittorrent、AdGuard。
 9. **访问二维码与分享**
@@ -494,7 +494,7 @@ nas.example.com
 
 ---
 
-## 七、针对当前 Fonu 页面的具体改版建议
+## 七、针对当前 Havline 页面的具体改版建议
 
 ### 7.1 Cloudflare 总览页
 
@@ -562,7 +562,7 @@ DNS：已创建
 
 ## 八、最终建议
 
-Fonu 不应继续横向堆叠 cloudflared 参数。更值得投入的是：
+Havline 不应继续横向堆叠 cloudflared 参数。更值得投入的是：
 
 1. 把 Cloudflare 接入做成向导。
 2. 把“规则 → 出口 → 隧道 → DNS → 监控”做成同一条链路。
@@ -571,6 +571,6 @@ Fonu 不应继续横向堆叠 cloudflared 参数。更值得投入的是：
 5. 把 Docker / NAS 服务发布做到自动发现。
 6. 把高级能力放到高级页，不干扰默认路径。
 
-这会让 Fonu 与普通 cloudflared 面板产生明确差异：
+这会让 Havline 与普通 cloudflared 面板产生明确差异：
 
-> 普通面板管理 cloudflared；Fonu 管理“我的服务如何安全、稳定地访问”。
+> 普通面板管理 cloudflared；Havline 管理“我的服务如何安全、稳定地访问”。

@@ -174,7 +174,7 @@ function providerIcon(v: string) {
 .provider-form__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .provider-form__field {
@@ -185,7 +185,7 @@ function providerIcon(v: string) {
   display: block;
   margin-bottom: 6px;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .provider-select {
@@ -210,7 +210,7 @@ function providerIcon(v: string) {
   overflow: hidden;
   flex-shrink: 0;
   background: #fff;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
 }
 
 .provider-logo--md {
@@ -237,7 +237,7 @@ function providerIcon(v: string) {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .provider-form__actions {

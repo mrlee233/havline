@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Client 通过共享 Unix Socket 调用 fonu-updater sidecar。
+// Client 通过共享 Unix Socket 调用 havline-updater sidecar。
 type Client struct {
 	socketPath string
 	http       *http.Client

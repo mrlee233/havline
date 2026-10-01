@@ -20,7 +20,7 @@ var ErrBusy = errors.New("升级任务正在进行中")
 
 var serviceNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
-// Config 是 fonu-updater sidecar 的运行配置。
+// Config 是 havline-updater sidecar 的运行配置。
 type Config struct {
 	SocketPath     string
 	ProjectDir     string
@@ -61,7 +61,7 @@ type composePlan struct {
 func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 	cfg.SocketPath = strings.TrimSpace(cfg.SocketPath)
 	if cfg.SocketPath == "" {
-		cfg.SocketPath = "/run/fonu-updater/updater.sock"
+		cfg.SocketPath = "/run/havline-updater/updater.sock"
 	}
 	if strings.TrimSpace(cfg.ProjectDir) == "" {
 		cfg.ProjectDir = "/workspace"
@@ -70,7 +70,7 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 		cfg.ComposeFile = "docker-compose.yml"
 	}
 	if strings.TrimSpace(cfg.Service) == "" {
-		cfg.Service = "fonu"
+		cfg.Service = "havline"
 	}
 	if strings.TrimSpace(cfg.Mode) == "" {
 		cfg.Mode = "local"
@@ -79,7 +79,7 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 		cfg.Branch = "main"
 	}
 	if strings.TrimSpace(cfg.AppURL) == "" {
-		cfg.AppURL = "http://fonu:6893"
+		cfg.AppURL = "http://havline:6893"
 	}
 	if strings.TrimSpace(cfg.DockerSocket) == "" {
 		cfg.DockerSocket = "/var/run/docker.sock"
@@ -94,17 +94,17 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 		cfg.HealthTimeout = 3 * time.Minute
 	}
 	if cfg.Mode != "local" && cfg.Mode != "git" {
-		return nil, fmt.Errorf("FONU_UPDATE_MODE 只支持 local 或 git")
+		return nil, fmt.Errorf("HAVLINE_UPDATE_MODE 只支持 local 或 git")
 	}
 	if !serviceNamePattern.MatchString(cfg.Service) {
-		return nil, fmt.Errorf("FONU_UPDATE_SERVICE 含非法字符")
+		return nil, fmt.Errorf("HAVLINE_UPDATE_SERVICE 含非法字符")
 	}
 	composePath, err := resolveComposePath(cfg.ProjectDir, cfg.ComposeFile)
 	if err != nil {
 		return nil, err
 	}
 	if cfg.Mode == "git" && strings.TrimSpace(cfg.RepoURL) == "" {
-		return nil, fmt.Errorf("git 模式必须设置 FONU_UPDATE_REPO")
+		return nil, fmt.Errorf("git 模式必须设置 HAVLINE_UPDATE_REPO")
 	}
 	if logger == nil {
 		logger = slog.Default()
@@ -211,7 +211,7 @@ func (s *Server) resolveComposePlan(ctx context.Context) (composePlan, error) {
 			}, nil
 		}
 	}
-	return composePlan{}, fmt.Errorf("找不到 Compose 文件 %s，且无法自动定位宿主机目录；请设置 FONU_UPDATE_HOST_DIR", s.composePath)
+	return composePlan{}, fmt.Errorf("找不到 Compose 文件 %s，且无法自动定位宿主机目录；请设置 HAVLINE_UPDATE_HOST_DIR", s.composePath)
 }
 
 func (s *Server) composeProjectName(ctx context.Context) (string, error) {
@@ -226,13 +226,13 @@ func (s *Server) composeProjectName(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("无法读取现有容器的 Compose 项目标签：%w", err)
 	}
-	return "", fmt.Errorf("现有 fonu 容器不是由 Compose 管理，无法安全一键升级；请按 Compose 方式重新部署")
+	return "", fmt.Errorf("现有 havline 容器不是由 Compose 管理，无法安全一键升级；请按 Compose 方式重新部署")
 }
 
 func (s *Server) discoverHostCompose(ctx context.Context) (string, string, error) {
 	if s.cfg.HostProjectDir != "" && !isContainerPath(s.cfg.HostProjectDir, s.cfg.ProjectDir) {
 		if !filepath.IsAbs(s.cfg.HostProjectDir) {
-			return "", "", fmt.Errorf("FONU_UPDATE_HOST_DIR 必须是绝对路径")
+			return "", "", fmt.Errorf("HAVLINE_UPDATE_HOST_DIR 必须是绝对路径")
 		}
 		return s.cfg.HostProjectDir, filepath.Join(s.cfg.HostProjectDir, filepath.Base(s.cfg.ComposeFile)), nil
 	}
@@ -367,7 +367,7 @@ func (s *Server) Apply(_ context.Context) (Status, error) {
 	}
 	s.state.Phase = PhaseScheduled
 	s.state.Busy = true
-	s.state.Message = "升级任务已排队，即将重启 Fonu"
+	s.state.Message = "升级任务已排队，即将重启 Havline"
 	s.state.Log = []string{"升级任务已排队"}
 	status := cloneStatus(s.state)
 	s.mu.Unlock()

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/config"
 )
 
 func TestEnsureErrorPagesWritesAssets(t *testing.T) {
@@ -35,8 +35,8 @@ func TestEnsureErrorPagesWritesAssets(t *testing.T) {
 	}
 	body := string(html)
 	for _, want := range []string{
-		"/fonu-errors/error.png",
-		"background:url(/fonu-errors/error.png)",
+		"/havline-errors/error.png",
+		"background:url(/havline-errors/error.png)",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("403.html missing %q:\n%s", want, body)

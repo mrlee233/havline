@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestGenerateMixedRulesWithoutCerts(t *testing.T) {

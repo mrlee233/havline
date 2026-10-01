@@ -31,7 +31,7 @@ func TestDueForBackup(t *testing.T) {
 
 func TestExportVerifyRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "fonu.db"), []byte("db"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "havline.db"), []byte("db"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	svc := New(dir)
@@ -62,7 +62,7 @@ func TestExportVerifyRoundTrip(t *testing.T) {
 
 func TestVerifyRejectsGarbage(t *testing.T) {
 	svc := New(t.TempDir())
-	path := filepath.Join(svc.backupsDir(), "fonu-backup-20260925-000000-1.tar.gz")
+	path := filepath.Join(svc.backupsDir(), "havline-backup-20260925-000000-1.tar.gz")
 	if err := os.MkdirAll(svc.backupsDir(), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -80,9 +80,9 @@ func TestListPruneAndPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
-		"fonu-backup-20260923-100000-1.tar.gz",
-		"fonu-backup-20260924-100000-2.tar.gz",
-		"fonu-backup-20260925-100000-3.tar.gz",
+		"havline-backup-20260923-100000-1.tar.gz",
+		"havline-backup-20260924-100000-2.tar.gz",
+		"havline-backup-20260925-100000-3.tar.gz",
 	} {
 		if err := os.WriteFile(filepath.Join(svc.backupsDir(), name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
@@ -100,7 +100,7 @@ func TestListPruneAndPath(t *testing.T) {
 	if len(archives) != 3 {
 		t.Fatalf("应只列出 3 份备份，实际 %d", len(archives))
 	}
-	if archives[0].Name != "fonu-backup-20260925-100000-3.tar.gz" {
+	if archives[0].Name != "havline-backup-20260925-100000-3.tar.gz" {
 		t.Fatalf("应按时间倒序，实际首条 %s", archives[0].Name)
 	}
 
@@ -116,12 +116,12 @@ func TestListPruneAndPath(t *testing.T) {
 	}
 
 	// 名称校验：不能让备份名把读写带出备份目录
-	for _, name := range []string{"../fonu.db", "notes.txt", "", "fonu-backup-x.tar.gz"} {
+	for _, name := range []string{"../havline.db", "notes.txt", "", "havline-backup-x.tar.gz"} {
 		if _, err := svc.Path(name); err == nil {
 			t.Fatalf("非法备份名应拒绝：%q", name)
 		}
 	}
-	if err := svc.Remove("fonu-backup-20260920-100000-9.tar.gz"); err == nil {
+	if err := svc.Remove("havline-backup-20260920-100000-9.tar.gz"); err == nil {
 		t.Fatal("删除不存在的备份应报错")
 	}
 	if _, err := svc.Prune(0); err != nil {

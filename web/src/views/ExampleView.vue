@@ -38,24 +38,24 @@
     </StatCard>
   </div>
 
-  <FonuCard title="本次示例页变化" subtitle="用于确认升级后的页面内容确实发生变化">
+  <HavlineCard title="本次示例页变化" subtitle="用于确认升级后的页面内容确实发生变化">
     <ul class="example-changes">
       <li>页面版本提示更新为 v1.9.0。</li>
       <li>「本次升级验证」区块和页面状态同步更新为 v1.9.0。</li>
       <li>验证标识更新为 <span class="mono">v1.9.0-example-page</span>。</li>
     </ul>
-  </FonuCard>
+  </HavlineCard>
 
-  <FonuCard title="验证步骤" subtitle="用这个页面确认线上实例已经更新到目标版本">
+  <HavlineCard title="验证步骤" subtitle="用这个页面确认线上实例已经更新到目标版本">
     <ol class="example-steps">
       <li>在旧版本页面点击侧栏的「一键升级」。</li>
       <li>等待容器重建完成，页面自动刷新或恢复访问。</li>
       <li>打开侧栏「示例页面」，确认本页可访问。</li>
       <li>确认页面上的版本号为 <span class="mono">v{{ version }}</span>。</li>
     </ol>
-  </FonuCard>
+  </HavlineCard>
 
-  <FonuCard title="验证结果" subtitle="用于确认当前前端资源与后端版本一致">
+  <HavlineCard title="验证结果" subtitle="用于确认当前前端资源与后端版本一致">
     <div class="example-result">
       <div><label>前端路由</label><span class="mono">/example</span></div>
       <div><label>侧栏菜单</label><span>已加载「示例页面」</span></div>
@@ -64,7 +64,7 @@
       <div><label>验证状态</label><StatusBadge kind="success" text="通过" /></div>
       <div><label>最近检查</label><span>{{ checkedAt || '刚刚' }}</span></div>
     </div>
-  </FonuCard>
+  </HavlineCard>
 </template>
 
 <script setup lang="ts">
@@ -77,7 +77,7 @@ import {
   RefreshOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api/client'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -110,25 +110,25 @@ onMounted(() => {
 
 <style scoped>
 .example-alert {
-  margin-bottom: var(--fonu-space-5);
+  margin-bottom: var(--havline-space-5);
 }
 
 .example-proof {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-5);
-  margin-bottom: var(--fonu-space-5);
-  padding: var(--fonu-space-4) var(--fonu-space-5);
-  border: 1px solid var(--fonu-brand-soft);
-  border-radius: var(--fonu-radius);
-  background: var(--fonu-brand-soft);
+  gap: var(--havline-space-5);
+  margin-bottom: var(--havline-space-5);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  border: 1px solid var(--havline-brand-soft);
+  border-radius: var(--havline-radius);
+  background: var(--havline-brand-soft);
 }
 
 .example-proof__label {
   display: block;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .example-proof__value {
@@ -136,21 +136,21 @@ onMounted(() => {
   margin-top: 2px;
   font-size: 28px;
   line-height: 1.2;
-  color: var(--fonu-brand-text);
+  color: var(--havline-brand-text);
 }
 
 .example-proof__hint {
   max-width: 360px;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-5);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-5);
 }
 
 .example-steps {
@@ -158,7 +158,7 @@ onMounted(() => {
   gap: 10px;
   margin: 0;
   padding-left: 22px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.7;
 }
 
@@ -167,28 +167,28 @@ onMounted(() => {
   gap: 10px;
   margin: 0;
   padding-left: 22px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.7;
 }
 
 .example-result {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .example-result > div {
   display: grid;
   gap: 4px;
   padding: 12px 14px;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
 }
 
 .example-result label {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 @media (max-width: 640px) {

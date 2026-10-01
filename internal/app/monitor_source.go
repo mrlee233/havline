@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/fonu/fonu/internal/cloudflared"
-	"github.com/fonu/fonu/internal/frp"
-	"github.com/fonu/fonu/internal/monitor"
-	"github.com/fonu/fonu/internal/traffic"
+	"github.com/havline/havline/internal/cloudflared"
+	"github.com/havline/havline/internal/frp"
+	"github.com/havline/havline/internal/monitor"
+	"github.com/havline/havline/internal/traffic"
 )
 
 // monitorSource 把 frp 服务适配成 monitor.Source：monitor 只关心「状态快照」，

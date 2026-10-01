@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/db"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/db"
 )
 
 func newTokenTestAuth(t *testing.T, scope string) (*auth.Service, string) {
 	t.Helper()
-	conn, err := db.Open(filepath.Join(t.TempDir(), "fonu.db"))
+	conn, err := db.Open(filepath.Join(t.TempDir(), "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

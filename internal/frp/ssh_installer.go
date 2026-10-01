@@ -15,7 +15,7 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-// SSHInstaller 通过固定白名单命令在 VPS 上安装/升级 fonu-agent。
+// SSHInstaller 通过固定白名单命令在 VPS 上安装/升级 havline-agent。
 // agent 的日常管理仍走 AgentClient；SSH 只承担生命周期和失联自救。
 type SSHInstaller struct {
 	Host       string
@@ -132,13 +132,13 @@ func (i SSHInstaller) Install(ctx context.Context, binary []byte, script []byte)
 		return "", err
 	}
 	defer client.Close()
-	if err := uploadBytes(client, "/tmp/fonu-agent", binary, 0o755); err != nil {
+	if err := uploadBytes(client, "/tmp/havline-agent", binary, 0o755); err != nil {
 		return "", err
 	}
-	if err := uploadBytes(client, "/tmp/fonu-agent-install.sh", script, 0o700); err != nil {
+	if err := uploadBytes(client, "/tmp/havline-agent-install.sh", script, 0o700); err != nil {
 		return "", err
 	}
-	return runSSHSession(client, "sudo /tmp/fonu-agent-install.sh /tmp/fonu-agent && test -x /usr/local/bin/fonu-agent && /usr/local/bin/fonu-agent -version && rm -f /tmp/fonu-agent /tmp/fonu-agent-install.sh")
+	return runSSHSession(client, "sudo /tmp/havline-agent-install.sh /tmp/havline-agent && test -x /usr/local/bin/havline-agent && /usr/local/bin/havline-agent -version && rm -f /tmp/havline-agent /tmp/havline-agent-install.sh")
 }
 
 func uploadBytes(client *ssh.Client, path string, data []byte, mode uint32) error {

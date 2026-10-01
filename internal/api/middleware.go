@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fonu/fonu/internal/auth"
+	"github.com/havline/havline/internal/auth"
 )
 
 type contextKey string
@@ -15,7 +15,7 @@ const sessionContextKey contextKey = "session_id"
 func SessionMiddleware(authSvc *auth.Service) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cookie, err := r.Cookie("fonu_session")
+			cookie, err := r.Cookie("havline_session")
 			if err == nil && cookie.Value != "" {
 				ctx := context.WithValue(r.Context(), sessionContextKey, cookie.Value)
 				r = r.WithContext(ctx)

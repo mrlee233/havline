@@ -26,14 +26,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/nginxtmpl"
-	"github.com/fonu/fonu/internal/sysinfo"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/nginxtmpl"
+	"github.com/havline/havline/internal/sysinfo"
 )
 
 // AgentVersion 随每次 agent 行为变更手动递增；status/ping 与安装脚本都会回报，用于确认 VPS 上跑的是哪个版本。
 // 0.5.0：目录判定改用 nginx -T 自省（dump 完整生效配置，按 "# configuration file" 标记
-// 找出真正被加载的文件所在目录，零猜测）；include 链递归与 FONU_AGENT_NGINX_CONF_DIR 保留为回退。
+// 找出真正被加载的文件所在目录，零猜测）；include 链递归与 HAVLINE_AGENT_NGINX_CONF_DIR 保留为回退。
 // 0.9.0：Nginx 可用性显式探测（status 暴露 nginx_ok/nginx_missing）、部署前预检、一键安装 Nginx 端点。
 // 0.9.1：status 补充 nginx_running / nginx_version，供页面展示 Nginx 状态卡片。
 // 0.9.2：Basic Auth 哈希改为纯 Go apr1（去掉对 VPS openssl 的依赖）；安装脚本 token 改用 /dev/urandom。
@@ -61,9 +61,9 @@ import (
 // 证书不匹配时回滚并回报实际指纹与端口占用进程，区分「nginx 未生效」与「公网链路被接管」。
 // 0.14.0：HTTPS 端口自动选择（7443/8443/9443）、当前证书信息查询、主机防火墙检测与 ufw/firewalld 显式放行。
 // 0.14.1：vhost 模板迁出到 internal/nginxtmpl，统一 TLS、安全头、allow/deny、WebSocket 与限流输出。
-const AgentVersion = "0.14.1"
+const AgentVersion = "0.15.0"
 
-// Config 是 fonu-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
+// Config 是 havline-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
 	ListenAddr     string
 	AllowRemote    bool
@@ -157,7 +157,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.NginxBinary = "nginx"
 	}
 	if strings.TrimSpace(cfg.CertsDir) == "" {
-		cfg.CertsDir = "/var/lib/fonu-agent/certs"
+		cfg.CertsDir = "/var/lib/havline-agent/certs"
 	}
 	if strings.TrimSpace(cfg.FrpsConfigPath) == "" {
 		cfg.FrpsConfigPath = "/etc/frp/frps.toml"
@@ -169,7 +169,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.FrpsBinary = "/usr/local/bin/" + filepath.Base(cfg.FrpsBinary)
 	}
 	if strings.TrimSpace(cfg.DataDir) == "" {
-		cfg.DataDir = "/var/lib/fonu-agent"
+		cfg.DataDir = "/var/lib/havline-agent"
 	}
 	if strings.TrimSpace(cfg.Token) == "" {
 		return nil, errors.New("agent token is required")
@@ -201,7 +201,7 @@ func validateListenAddr(addr string, allowRemote bool) (bool, error) {
 		loopback = ip.IsLoopback()
 	}
 	if !loopback && !allowRemote {
-		return false, fmt.Errorf("检测到 Agent 将监听非回环地址 %s；默认安全模式只监听 127.0.0.1:7700。如确认需要远程监听，请设置 FONU_AGENT_ALLOW_REMOTE=1", addr)
+		return false, fmt.Errorf("检测到 Agent 将监听非回环地址 %s；默认安全模式只监听 127.0.0.1:7700。如确认需要远程监听，请设置 HAVLINE_AGENT_ALLOW_REMOTE=1", addr)
 	}
 	return loopback, nil
 }
@@ -303,7 +303,7 @@ func secureTokenEqual(got, want string) bool {
 }
 
 func (s *Server) ping(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "fonu-agent"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "havline-agent"})
 }
 
 func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
@@ -312,7 +312,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 	frpsActive := exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil
 	httpsState, httpsConfigured := readHTTPSProxyState(s.cfg.DataDir)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"service":                "fonu-agent",
+		"service":                "havline-agent",
 		"agent_version":          AgentVersion,
 		"listen_addr":            s.cfg.ListenAddr,
 		"listen_scope":           listenScope(s.listenLoopback),
@@ -460,7 +460,7 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if writeUnit {
-		unit := fmt.Sprintf("[Unit]\nDescription=frps service (managed by fonu-agent)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s -c %s\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target\n", installPath, s.cfg.FrpsConfigPath)
+		unit := fmt.Sprintf("[Unit]\nDescription=frps service (managed by havline-agent)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s -c %s\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target\n", installPath, s.cfg.FrpsConfigPath)
 		if err := atomicWrite(unitPath, []byte(unit), 0o644); err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "写入 frps.service 失败: " + err.Error()})
 			return
@@ -624,7 +624,7 @@ func execCommandOutput(name string, args ...string) string {
 	return string(output)
 }
 
-// dashboardAddr 已废弃：面板地址改由 Fonu 前端从服务端表单的「frps 管理接口」字段拼出，agent 不再解析 frps.toml。
+// dashboardAddr 已废弃：面板地址改由 Havline 前端从服务端表单的「frps 管理接口」字段拼出，agent 不再解析 frps.toml。
 func dashboardAddr(configPath string) string {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
@@ -754,7 +754,7 @@ func nginxBinaryPath(configured string) string {
 func detectNginxConfDir(binary string) (string, error) {
 	nginx := nginxBinaryPath(binary)
 	if nginx == "" {
-		return "", fmt.Errorf("未找到可用的 nginx 可执行文件；请先在 VPS 安装 Nginx（apt install nginx / yum install nginx），或用 FONU_AGENT_NGINX_BIN 显式指定路径")
+		return "", fmt.Errorf("未找到可用的 nginx 可执行文件；请先在 VPS 安装 Nginx（apt install nginx / yum install nginx），或用 HAVLINE_AGENT_NGINX_BIN 显式指定路径")
 	}
 	// 旧版 Agent 可能把 <配置>.versions 目录留在 include 范围内，先按常见目录清理，避免 nginx -T 直接失败。
 	for _, dir := range []string{"/etc/nginx/sites-enabled", "/etc/nginx/conf.d", "/etc/nginx"} {
@@ -802,8 +802,8 @@ func detectNginxConfDir(binary string) (string, error) {
 			lastReason = fmt.Sprintf("%s: %v", dir, err)
 			continue
 		}
-		probe := filepath.Join(dir, "fonu-probe.conf")
-		probeBody := "# Managed by fonu-agent. Do not edit.\nserver {\n    listen 127.0.0.1:1;\n    server_name fonu-probe.invalid;\n}\n"
+		probe := filepath.Join(dir, "havline-probe.conf")
+		probeBody := "# Managed by havline-agent. Do not edit.\nserver {\n    listen 127.0.0.1:1;\n    server_name havline-probe.invalid;\n}\n"
 		if err := atomicWrite(probe, []byte(probeBody), 0o644); err != nil {
 			lastReason = fmt.Sprintf("%s: %v", dir, err)
 			continue
@@ -822,11 +822,11 @@ func detectNginxConfDir(binary string) (string, error) {
 			continue
 		}
 		// 该目录不接受完整 server 块（片段目录）：删除 probe 文件。
-		// 若 -t 失败信息指向历史残留的 fonu-*.conf，也一并清理（仅限 Agent 生成的文件）。
+		// 若 -t 失败信息指向历史残留的 havline-*.conf，也一并清理（仅限 Agent 生成的文件）。
 		_ = os.Remove(probe)
 		if tOut, tErr := exec.Command(nginx, "-t").CombinedOutput(); tErr != nil {
 			lastReason = fmt.Sprintf("%s: nginx -t 失败：%s", dir, tailText(string(tOut), 300))
-			cleanupLegacyFonuConf(string(tOut))
+			cleanupLegacyHavlineConf(string(tOut))
 			if err := runCommand(nginx, "-t"); err == nil {
 				continue // 清理残留后配置恢复可用，换下一个目录
 			}
@@ -837,7 +837,7 @@ func detectNginxConfDir(binary string) (string, error) {
 	if lastReason == "" {
 		lastReason = "没有可尝试的目录"
 	}
-	return "", fmt.Errorf("在 %d 个被加载目录中均无法放置完整 server 配置（已尝试: %s）；最后一次失败原因：%s；也可用 FONU_AGENT_NGINX_CONF_DIR 显式指定（Debian/Ubuntu 通常是 /etc/nginx/conf.d 或 /etc/nginx/sites-enabled）", len(dirs), strings.Join(dirs, ", "), lastReason)
+	return "", fmt.Errorf("在 %d 个被加载目录中均无法放置完整 server 配置（已尝试: %s）；最后一次失败原因：%s；也可用 HAVLINE_AGENT_NGINX_CONF_DIR 显式指定（Debian/Ubuntu 通常是 /etc/nginx/conf.d 或 /etc/nginx/sites-enabled）", len(dirs), strings.Join(dirs, ", "), lastReason)
 }
 
 // dirHasVhostConf 判断目录下是否已有含 server_name 的 .conf（HTTP vhost 语义）。
@@ -857,10 +857,10 @@ func dirHasVhostConf(dir string) bool {
 	return false
 }
 
-// cleanupLegacyFonuConf 根据 nginx -t 的报错文本清理 Agent 历史生成的坏文件（仅限 fonu- 前缀）。
-func cleanupLegacyFonuConf(nginxTestOutput string) {
+// cleanupLegacyHavlineConf 根据 nginx -t 的报错文本清理 Agent 历史生成的坏文件（仅限 havline- 前缀）。
+func cleanupLegacyHavlineConf(nginxTestOutput string) {
 	for _, line := range strings.Split(nginxTestOutput, "\n") {
-		idx := strings.Index(line, "fonu-")
+		idx := strings.Index(line, "havline-")
 		if idx < 0 {
 			continue
 		}
@@ -878,7 +878,7 @@ func cleanupLegacyFonuConf(nginxTestOutput string) {
 		if !strings.HasSuffix(path, ".conf") {
 			continue
 		}
-		if data, err := os.ReadFile(path); err == nil && strings.HasPrefix(string(data), "# Managed by fonu-agent.") {
+		if data, err := os.ReadFile(path); err == nil && strings.HasPrefix(string(data), "# Managed by havline-agent.") {
 			_ = os.Remove(path)
 		}
 	}
@@ -905,10 +905,10 @@ func (s *Server) routeDetails() []map[string]any {
 	}
 	details := []map[string]any{}
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "fonu-") || !strings.HasSuffix(entry.Name(), ".conf") {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "havline-") || !strings.HasSuffix(entry.Name(), ".conf") {
 			continue
 		}
-		domain := strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "fonu-"), ".conf")
+		domain := strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "havline-"), ".conf")
 		path := filepath.Join(s.cfg.NginxConfDir, entry.Name())
 		item := map[string]any{
 			"domain":      domain,
@@ -935,7 +935,7 @@ type routeRequest struct {
 	TLS           bool     `json:"tls"`
 	CertDir       string   `json:"cert_dir,omitempty"`
 	WebSocket     bool     `json:"websocket,omitempty"`
-	VhostPort     int      `json:"vhost_port,omitempty"`      // 回源自检用：Fonu 传入本次部署的 frps vhost 端口
+	VhostPort     int      `json:"vhost_port,omitempty"`      // 回源自检用：Havline 传入本次部署的 frps vhost 端口
 	RedirectTLS   bool     `json:"redirect_https,omitempty"`  // HTTP 80 强制跳转 HTTPS
 	AllowIPs      []string `json:"allow_ips,omitempty"`       // IP 白名单；空则不限制
 	BasicAuthUser string   `json:"basic_auth_user,omitempty"` // Basic Auth 用户名；空则不启用（密码自动生成）
@@ -1143,7 +1143,7 @@ type nginxInstallResult struct {
 // 需要 agent 以 root 运行（systemd 单元默认如此）。
 func (s *Server) installNginx(w http.ResponseWriter, r *http.Request) {
 	if os.Geteuid() != 0 {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "安装 Nginx 需要 root 权限：请以 root 运行 fonu-agent"})
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "安装 Nginx 需要 root 权限：请以 root 运行 havline-agent"})
 		return
 	}
 	if probe := s.probeNginx(); probe.OK {
@@ -1196,7 +1196,7 @@ type chinaCIDRRequest struct {
 	Content string `json:"content"`
 }
 
-// putChinaCIDR 接收 Fonu 下发的中国 IP 段（geo include 格式），写入 geo 变量文件并重载。
+// putChinaCIDR 接收 Havline 下发的中国 IP 段（geo include 格式），写入 geo 变量文件并重载。
 func (s *Server) putChinaCIDR(w http.ResponseWriter, r *http.Request) {
 	var req chinaCIDRRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<20)).Decode(&req); err != nil {
@@ -1226,7 +1226,7 @@ func (s *Server) putChinaCIDR(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	geo := "# Managed by fonu-agent. Do not edit.\ngeo $fonu_china_client {\n    default 0;\n    include " + chinaListPath() + ";\n}\n"
+	geo := "# Managed by havline-agent. Do not edit.\ngeo $havline_china_client {\n    default 0;\n    include " + chinaListPath() + ";\n}\n"
 	if err := atomicWrite(s.chinaGeoFilePath(), []byte(geo), 0o640); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -1256,7 +1256,7 @@ func (s *Server) writeRoute(req routeRequest) error {
 	if certDir == "" {
 		certDir = filepath.Join(s.cfg.CertsDir, req.Domain)
 	}
-	// 仅中国大陆 IP 依赖已下发的 IP 段（geo 变量在 fonuagent-china.conf 中定义）
+	// 仅中国大陆 IP 依赖已下发的 IP 段（geo 变量在 havlineagent-china.conf 中定义）
 	if req.ChinaOnly {
 		if _, err := os.Stat(chinaListPath()); err != nil {
 			return fmt.Errorf("启用「仅中国大陆 IP」前需先同步中国 IP 段（请在公网反代页触发同步后重试）")
@@ -1265,7 +1265,7 @@ func (s *Server) writeRoute(req routeRequest) error {
 	content := nginxRoute(req, certDir)
 	path := s.routePath(req.Domain)
 	// 清理历史版本写到其他目录的同域名 Agent 文件：从 nginx -T 的生效清单反向比对，
-	// 非当前目录但内容带 Agent 标记的 fonu-<domain>.conf 一律删除（不碰宝塔自己的配置）。
+	// 非当前目录但内容带 Agent 标记的 havline-<domain>.conf 一律删除（不碰宝塔自己的配置）。
 	if nginx := s.nginxPath(); nginx != "" {
 		if tOut, tErr := exec.Command(nginx, "-T").CombinedOutput(); tErr == nil {
 			for _, line := range strings.Split(string(tOut), "\n") {
@@ -1273,8 +1273,8 @@ func (s *Server) writeRoute(req routeRequest) error {
 				if value, found := strings.CutPrefix(line, "# configuration file "); found {
 					p := strings.TrimSuffix(strings.TrimSpace(value), ":")
 					base := filepath.Base(p)
-					if p != path && base == "fonu-"+req.Domain+".conf" {
-						if data, readErr := os.ReadFile(p); readErr == nil && strings.HasPrefix(string(data), "# Managed by fonu-agent.") {
+					if p != path && base == "havline-"+req.Domain+".conf" {
+						if data, readErr := os.ReadFile(p); readErr == nil && strings.HasPrefix(string(data), "# Managed by havline-agent.") {
 							_ = os.Remove(p)
 						}
 					}
@@ -1299,17 +1299,17 @@ func (s *Server) routeNames() []string {
 	}
 	var result []string
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "fonu-") || !strings.HasSuffix(entry.Name(), ".conf") {
+		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "havline-") || !strings.HasSuffix(entry.Name(), ".conf") {
 			continue
 		}
-		result = append(result, strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "fonu-"), ".conf"))
+		result = append(result, strings.TrimSuffix(strings.TrimPrefix(entry.Name(), "havline-"), ".conf"))
 	}
 	sort.Strings(result)
 	return result
 }
 
 func (s *Server) routePath(domain string) string {
-	return filepath.Join(s.cfg.NginxConfDir, "fonu-"+domain+".conf")
+	return filepath.Join(s.cfg.NginxConfDir, "havline-"+domain+".conf")
 }
 
 func (s *Server) validateNginx() error {
@@ -1380,7 +1380,7 @@ func migrateVersionDirsFromNginxOutput(output string) bool {
 func (s *Server) reloadNginx() error {
 	nginx := s.nginxPath()
 	if nginx == "" {
-		return errors.New("未找到 nginx 可执行文件：请先在「公网反代」页安装 Nginx，或用 FONU_AGENT_NGINX_BIN 指定路径")
+		return errors.New("未找到 nginx 可执行文件：请先在「公网反代」页安装 Nginx，或用 HAVLINE_AGENT_NGINX_BIN 指定路径")
 	}
 	return runCommand(nginx, "-s", "reload")
 }
@@ -1530,7 +1530,7 @@ func validDomain(value string) bool {
 
 func nginxRoute(req routeRequest, certDir string) string {
 	var b strings.Builder
-	b.WriteString("# Managed by fonu-agent. Do not edit.\n")
+	b.WriteString("# Managed by havline-agent. Do not edit.\n")
 	// HTTPSDisabled 显式关闭 HTTPS：即使证书已推送也不监听 443（字段缺省 = 沿用现有行为）
 	tlsEnabled := req.TLS && !req.HTTPSDisabled
 	if req.RedirectTLS && tlsEnabled {
@@ -1557,7 +1557,7 @@ func nginxRoute(req routeRequest, certDir string) string {
 		Enabled: req.SecurityHeaders,
 		HTTPS:   tlsEnabled,
 	}))
-	// 限流/连接数的 zone 定义在 fonuagent-limits.conf（http 上下文），此处只声明状态码
+	// 限流/连接数的 zone 定义在 havlineagent-limits.conf（http 上下文），此处只声明状态码
 	if req.RateLimitRate > 0 {
 		b.WriteString("    limit_req_status 429;\n")
 	}
@@ -1572,7 +1572,7 @@ func nginxRoute(req routeRequest, certDir string) string {
 	// 顺序由共享模板统一：deny → 仅大陆规则 → allow → deny all。
 	chinaDeny := ""
 	if req.ChinaOnly {
-		chinaDeny = "        if ($fonu_china_client = 0) { return 403; }\n"
+		chinaDeny = "        if ($havline_china_client = 0) { return 403; }\n"
 	}
 	aclText := nginxtmpl.AccessDirectives(nginxtmpl.AccessControl{
 		Allow:     req.AllowIPs,
@@ -1585,15 +1585,15 @@ func nginxRoute(req routeRequest, certDir string) string {
 	if user := strings.TrimSpace(req.BasicAuthUser); user != "" {
 		if password := strings.TrimSpace(req.BasicAuthPassword); password != "" {
 			if err := writeBasicAuthSecret(req.Domain, user, password); err == nil {
-				authLine = fmt.Sprintf("        auth_basic \"Fonu Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
+				authLine = fmt.Sprintf("        auth_basic \"Havline Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
 			}
 		} else if _, err := ensureBasicAuthSecret(req.Domain, user); err == nil {
-			authLine = fmt.Sprintf("        auth_basic \"Fonu Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
+			authLine = fmt.Sprintf("        auth_basic \"Havline Protected\";\n        auth_basic_user_file %s;\n", basicAuthFilePath(req.Domain))
 		}
 	}
 	// 限流 / 连接数（zone 在 http 上下文定义）
 	limitText := nginxtmpl.LimitDirectives(nginxtmpl.LimitConfig{
-		Zone:  nginxtmpl.ZoneName("fonu", req.Domain),
+		Zone:  nginxtmpl.ZoneName("havline", req.Domain),
 		Rate:  req.RateLimitRate,
 		Burst: req.RateLimitBurst,
 		Conn:  req.ConnLimitMax,
@@ -1603,21 +1603,21 @@ func nginxRoute(req routeRequest, certDir string) string {
 }
 
 // agentStateDir 存放 Agent 的持久状态（htpasswd、geo IP 段、限流参数）。
-const agentStateDir = "/var/lib/fonu-agent"
+const agentStateDir = "/var/lib/havline-agent"
 
 // zoneKey 把域名转成合法的 nginx zone 名（仅保留小写字母与数字，其余换下划线）。
 func zoneKey(domain string) string {
-	return nginxtmpl.ZoneName("fonu", domain)
+	return nginxtmpl.ZoneName("havline", domain)
 }
 
 // limitsFilePath 返回 zone 定义文件（放在 vhost 目录，顶层指令即 http 上下文）。
 func (s *Server) limitsFilePath() string {
-	return filepath.Join(s.cfg.NginxConfDir, "fonuagent-limits.conf")
+	return filepath.Join(s.cfg.NginxConfDir, "havlineagent-limits.conf")
 }
 
 // chinaGeoFilePath 返回 geo 变量定义文件（同样位于 http 上下文）。
 func (s *Server) chinaGeoFilePath() string {
-	return filepath.Join(s.cfg.NginxConfDir, "fonuagent-china.conf")
+	return filepath.Join(s.cfg.NginxConfDir, "havlineagent-china.conf")
 }
 
 // chinaListPath 返回中国 IP 段文件（geo include 格式：<cidr> 1;）。
@@ -1678,7 +1678,7 @@ func (s *Server) writeLimitState(state map[string]routeLimit) error {
 		return nil
 	}
 	var b strings.Builder
-	b.WriteString("# Managed by fonu-agent. Do not edit.\n")
+	b.WriteString("# Managed by havline-agent. Do not edit.\n")
 	domains := make([]string, 0, len(state))
 	for domain := range state {
 		domains = append(domains, domain)
@@ -1744,7 +1744,7 @@ func writeBasicAuthSecret(domain, user, password string) error {
 
 // basicAuthFilePath 返回指定域名的 htpasswd 文件路径（与反代配置同目录管理）。
 func basicAuthFilePath(domain string) string {
-	return filepath.Join("/var/lib/fonu-agent", "basicauth", domain+".htpasswd")
+	return filepath.Join("/var/lib/havline-agent", "basicauth", domain+".htpasswd")
 }
 
 // ensureBasicAuthSecret 读取已有 Basic Auth 密码；不存在则生成随机密码并写入 htpasswd 文件。

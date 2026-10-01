@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func TestCollectorAttributesConnectionsByHostAndPort(t *testing.T) {

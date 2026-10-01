@@ -80,7 +80,7 @@ func writeRealIPDirectives(b *strings.Builder, cfg TrustedProxyConfig) {
 	writeRealIPComment(b, cfg)
 	cidrs := cfg.effectiveCIDRs()
 	if len(cidrs) == 0 {
-		b.WriteString("    map $remote_addr $fonu_client_ip {\n")
+		b.WriteString("    map $remote_addr $havline_client_ip {\n")
 		b.WriteString("        default $remote_addr;\n")
 		b.WriteString("    }\n\n")
 		return
@@ -93,7 +93,7 @@ func writeRealIPDirectives(b *strings.Builder, cfg TrustedProxyConfig) {
 	if cfg.Recursive || header == "X-Forwarded-For" {
 		b.WriteString("    real_ip_recursive on;\n")
 	}
-	b.WriteString("\n    map $remote_addr $fonu_client_ip {\n")
+	b.WriteString("\n    map $remote_addr $havline_client_ip {\n")
 	b.WriteString("        default $remote_addr;\n")
 	b.WriteString("    }\n\n")
 }

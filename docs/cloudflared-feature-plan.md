@@ -1,14 +1,14 @@
 # Cloudflare 隧道模块全功能规划
 
 > 调研日期：2026-09-30
-> 调研对象：Cloudflare 官方文档（developers.cloudflare.com，2026-08/09 更新）+ `F:\WWW\cf\Tunnel-Cloudflared-linux`（Tunnel-Cloudflared-Manager 1.0.1）+ Fonu 1.8.0 现有实现
-> 目标：把 Fonu 的「Cloudflare 隧道」从「可用的创建与托管」推进到「覆盖官方主要能力、可长期运维」的完整模块。
+> 调研对象：Cloudflare 官方文档（developers.cloudflare.com，2026-08/09 更新）+ `F:\WWW\cf\Tunnel-Cloudflared-linux`（Tunnel-Cloudflared-Manager 1.0.1）+ Havline 1.8.0 现有实现
+> 目标：把 Havline 的「Cloudflare 隧道」从「可用的创建与托管」推进到「覆盖官方主要能力、可长期运维」的完整模块。
 
 ---
 
 ## 一、官方文档调研结论
 
-Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条，规划时需要同时兼顾两条：
+Cloudflare 把 Tunnel 分成两条产品线，Havline 目前主要落在第一条，规划时需要同时兼顾两条：
 
 | 产品线 | 文档入口 | 典型用途 |
 | --- | --- | --- |
@@ -76,14 +76,14 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 ### 1.3 官方版本要点（2026-09）
 
 - 运行参数文档最近更新 2026-09；`post-quantum`、`token-file`、`region`、`tag`、`dns-resolver-addrs`、`edge-bind-address` 等参数已进入官方参考。
-- `edge-ip-version` 官方默认值曾由 `4` 调整为 `auto`；Fonu 已显式下发 `4`，与国内链路建议一致。
-- 官方把「公开发布应用」与「Zero Trust 私有网络」拆成两条文档线，Fonu 需要明确自己的默认定位是公开发布应用。
+- `edge-ip-version` 官方默认值曾由 `4` 调整为 `auto`；Havline 已显式下发 `4`，与国内链路建议一致。
+- 官方把「公开发布应用」与「Zero Trust 私有网络」拆成两条文档线，Havline 需要明确自己的默认定位是公开发布应用。
 
 ---
 
 ## 二、参考项目功能清单（Tunnel-Cloudflared-Manager 1.0.1）
 
-参考项目是一个独立面板，功能面比 Fonu 当前实现更宽，但缺少与 Fonu 的规则、健康、通知、状态页体系融合。
+参考项目是一个独立面板，功能面比 Havline 当前实现更宽，但缺少与 Havline 的规则、健康、通知、状态页体系融合。
 
 ### 2.1 隧道管理
 
@@ -143,7 +143,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 
 ---
 
-## 三、Fonu 当前实现（v1.8.0）
+## 三、Havline 当前实现（v1.8.0）
 
 | 能力 | 状态 |
 | --- | --- |
@@ -167,7 +167,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 | 账号模式（cert.pem） | ❌ 未实现 |
 | 实时日志流（WebSocket/SSE） | ❌ 未实现 |
 | 诊断日志、网络预检、隧道 info | ❌ 未实现 |
-| 接入 Fonu monitor / 通知 / 状态页 | ❌ 未实现 |
+| 接入 Havline monitor / 通知 / 状态页 | ❌ 未实现 |
 | cloudflared 自动更新 | ❌ 未实现 |
 | 自定义镜像管理、下载进度 | ❌ 未实现 |
 | Origin 高级参数 UI | ❌ 未实现 |
@@ -181,10 +181,10 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 
 ### 4.1 必须补齐（否则模块不完整）
 
-1. **云端隧道列表与导入**：目前 Fonu 只能管理自己创建的隧道，已有隧道无法纳管。
+1. **云端隧道列表与导入**：目前 Havline 只能管理自己创建的隧道，已有隧道无法纳管。
 2. **端点级 CRUD**：现在是整体覆盖 ingress，无法单独增删改一条 hostname/path。
-3. **云端配置拉取与漂移检测**：云端被手动修改后，Fonu 无法发现。
-4. **健康接入 Fonu 体系**：隧道状态没有进入 monitor、通知、状态页、可用率。
+3. **云端配置拉取与漂移检测**：云端被手动修改后，Havline 无法发现。
+4. **健康接入 Havline 体系**：隧道状态没有进入 monitor、通知、状态页、可用率。
 5. **实时日志**：轮询文件在故障排查时体验差。
 6. **诊断能力**：缺 `tunnel info`、`tunnel diag`、网络预检、端口要求检查。
 
@@ -215,7 +215,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 
 **P0-1 云端隧道同步与导入**
 
-- 目标：列出 Cloudflare 账号下的全部隧道，把未纳管的隧道导入 Fonu。
+- 目标：列出 Cloudflare 账号下的全部隧道，把未纳管的隧道导入 Havline。
 - 实现：`GET /accounts/{id}/cfd_tunnel` 列表；导入时读取 token、写 `creds.json`/`config.yml`、落库。
 - 验收：账号下已有隧道能在页面看到并导入；重复导入不产生重复记录。
 
@@ -227,11 +227,11 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 
 **P0-3 云端配置拉取与漂移检测**
 
-- 目标：云端被手动修改后，Fonu 能发现差异并选择拉取或覆盖。
+- 目标：云端被手动修改后，Havline 能发现差异并选择拉取或覆盖。
 - 实现：`GET /accounts/{id}/cfd_tunnel/{tunnel}/configurations`；与本地 config 做 diff；提供「拉取到本地」「推送到云端」。
 - 验收：diff 可见；两个方向都能执行并留痕。
 
-**P0-4 健康接入 Fonu 体系**
+**P0-4 健康接入 Havline 体系**
 
 - 目标：隧道断连、恢复进入现有 monitor、通知、状态页与可用率。
 - 实现：新增 cloudflared 的 `monitor.Source`；`/ready` + `ha_connections` 判活；断连/恢复事件复用 notify；状态页增加隧道条目。
@@ -240,7 +240,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 **P0-5 实时日志（SSE）**
 
 - 目标：日志页实时滚动，替代轮询。
-- 实现：Fonu 现有日志 SSE 模式复用；cloudflared 日志文件 tail + 增量推送；保留轮询回退。
+- 实现：Havline 现有日志 SSE 模式复用；cloudflared 日志文件 tail + 增量推送；保留轮询回退。
 - 验收：页面实时看到新日志；切换页面/重连不丢关键行。
 
 **P0-6 诊断能力**
@@ -254,7 +254,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 **P1-1 快速隧道**
 
 - 目标：临时把本地端口发布到 `trycloudflare.com`，用于演示与开发。
-- 实现：`--url` 启动、日志解析公共 URL、进程随 Fonu 生命周期、默认关闭。
+- 实现：`--url` 启动、日志解析公共 URL、进程随 Havline 生命周期、默认关闭。
 - 边界：明确标注不保证 SLA、URL 每次变化。
 
 **P1-2 多副本与零停机更新**
@@ -284,7 +284,7 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 **P1-6 审计日志**
 
 - 目标：记录谁在何时修改了隧道、端点、DNS、令牌与全局开关。
-- 实现：复用 Fonu 日志/审计基础设施；操作前记录旧值、操作后记录新值。
+- 实现：复用 Havline 日志/审计基础设施；操作前记录旧值、操作后记录新值。
 - 验收：关键变更可查询、可导出。
 
 ### P2：体验与增强
@@ -425,18 +425,18 @@ Cloudflare 把 Tunnel 分成两条产品线，Fonu 目前主要落在第一条�
 - **网络边界**：只做本机到 CF 边缘的调优；访客侧不可控。
 - **合规边界**：大文件/视频分发不在推荐用法内。
 - **安全边界**：不代配 Access 高风险策略；不写 hosts；不改系统 ulimit/防火墙。
-- **运行边界**：Fonu 只托管自己启动的 cloudflared 进程；不接管外部 systemd 服务。
+- **运行边界**：Havline 只托管自己启动的 cloudflared 进程；不接管外部 systemd 服务。
 - **数据边界**：凭据加密存储；预览脱敏；审计日志不记录明文 token。
 
 ---
 
 ## 十、结论
 
-Fonu 的 Cloudflare 隧道模块已经具备「创建、运行、托管、DNS」的闭环。下一阶段的目标是把它从「能用」推进到「可长期运维」：
+Havline 的 Cloudflare 隧道模块已经具备「创建、运行、托管、DNS」的闭环。下一阶段的目标是把它从「能用」推进到「可长期运维」：
 
 1. 先补齐云端同步、端点 CRUD、漂移检测、健康接入、实时日志、诊断（阶段 1）。
 2. 再补快速隧道、多副本、自动更新、令牌轮换、Origin 高级参数、审计（阶段 2）。
 3. 最后做镜像、图表、版本回滚、日志治理、系统检查与网络调优扩展（阶段 3）。
 4. 私有网络、Access、负载均衡、边缘优选等平台化能力按需推进（阶段 4）。
 
-这样 Fonu 才能在官方能力、参考项目功能与自身产品体系之间取得平衡，而不是停留在「进程开关 + 配置预览」。
+这样 Havline 才能在官方能力、参考项目功能与自身产品体系之间取得平衡，而不是停留在「进程开关 + 配置预览」。

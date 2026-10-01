@@ -237,7 +237,7 @@
           </div>
         </div>
 
-        <FonuCard class="detail-section">
+        <HavlineCard class="detail-section">
           <h4 class="detail-section__title">基本设置</h4>
           <div class="settings-grid">
             <div class="settings-field">
@@ -281,9 +281,9 @@
               </div>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard flush class="detail-section">
+        <HavlineCard flush class="detail-section">
           <div class="records-head">
             <h4 class="detail-section__title">解析记录（{{ displayRecords.length }}）</h4>
             <n-button
@@ -420,7 +420,7 @@
               </tbody>
             </table>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
         <div v-if="detailError" class="alert alert--error">
           <n-icon :component="AlertCircleOutline" class="alert__icon" />
@@ -436,7 +436,7 @@
           <div class="alert__body">
             <div class="alert__title">提示</div>
             <div class="alert__text">
-              每条记录请填写完整域名（如 s.example.com、www.sub.example.com）。同一服务商任务可管理多个不同域名，Fonu 会按同步周期自动检测公网 IP 并更新对应解析记录。
+              每条记录请填写完整域名（如 s.example.com、www.sub.example.com）。同一服务商任务可管理多个不同域名，Havline 会按同步周期自动检测公网 IP 并更新对应解析记录。
             </div>
           </div>
         </div>
@@ -512,7 +512,7 @@ import volcengineIcon from '../assets/brand/dns/volcengine.png'
 import { api, asList } from '../api/client'
 import type { DDNSConfig, DDNSDomainRecord } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
@@ -923,7 +923,7 @@ async function init() {
   try {
     await loadCached()
   } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    loadError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
   } finally {
     loading.value = false
   }
@@ -1222,22 +1222,22 @@ onMounted(init)
 
 <style scoped>
 .frp-ddns-alert {
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .stats-row {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .stat-card {
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
-  padding: var(--fonu-space-4) var(--fonu-space-5);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-4) var(--havline-space-5);
   min-height: 118px;
 }
 
@@ -1247,8 +1247,8 @@ onMounted(init)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
-  margin-bottom: var(--fonu-space-3);
+  gap: var(--havline-space-3);
+  margin-bottom: var(--havline-space-3);
 }
 
 .stat-card__title {
@@ -1257,7 +1257,7 @@ onMounted(init)
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .stat-card__icon { font-size: 18px; }
@@ -1271,7 +1271,7 @@ onMounted(init)
   font-size: 30px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   letter-spacing: -0.03em;
 }
 
@@ -1283,14 +1283,14 @@ onMounted(init)
   margin-top: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .stat-card__sub,
 .stat-card__foot {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .ip-lines { display: flex; flex-direction: column; gap: 8px; }
@@ -1306,15 +1306,15 @@ onMounted(init)
   width: 36px;
   flex-shrink: 0;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .ip-line__value {
   flex: 1;
   min-width: 0;
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1323,41 +1323,41 @@ onMounted(init)
 .loading-wrap {
   display: flex;
   justify-content: center;
-  padding: var(--fonu-space-6);
+  padding: var(--havline-space-6);
 }
 
 .ddns-layout {
   display: grid;
   grid-template-columns: minmax(280px, 34%) minmax(0, 1fr);
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   align-items: start;
 }
 
 .task-sidebar {
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
   overflow: hidden;
 }
 
 .task-sidebar__head {
-  padding: var(--fonu-space-4);
-  border-bottom: 1px solid var(--fonu-border);
+  padding: var(--havline-space-4);
+  border-bottom: 1px solid var(--havline-border);
 }
 
 .task-sidebar__head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .task-sidebar__title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   flex-shrink: 0;
 }
 
@@ -1365,7 +1365,7 @@ onMounted(init)
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: var(--fonu-space-3);
+  padding: var(--havline-space-3);
   max-height: 720px;
   overflow: auto;
 }
@@ -1373,9 +1373,9 @@ onMounted(init)
 .task-item {
   width: 100%;
   text-align: left;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 12px;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
   padding: 14px;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
@@ -1384,7 +1384,7 @@ onMounted(init)
 .task-item:hover { border-color: rgba(16, 185, 129, 0.25); }
 
 .task-item--active {
-  border-color: var(--fonu-brand);
+  border-color: var(--havline-brand);
   box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.15);
 }
 
@@ -1398,7 +1398,7 @@ onMounted(init)
 }
 
 .task-item--editing {
-  border-color: var(--fonu-brand);
+  border-color: var(--havline-brand);
   padding: 12px;
   overflow: hidden;
 }
@@ -1425,7 +1425,7 @@ onMounted(init)
   overflow: hidden;
   flex-shrink: 0;
   background: #fff;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
 }
 
 .provider-logo--md { width: 32px; height: 32px; }
@@ -1440,17 +1440,17 @@ onMounted(init)
 .task-item__name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .task-item__row {
   margin-top: 8px;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
-.task-item__domain { font-weight: 600; color: var(--fonu-text); }
-.task-item__muted { color: var(--fonu-text-muted); }
+.task-item__domain { font-weight: 600; color: var(--havline-text); }
+.task-item__muted { color: var(--havline-text-muted); }
 
 .task-item__draft-tag {
   font-size: 11px;
@@ -1486,11 +1486,11 @@ onMounted(init)
   max-width: 100%;
   padding: 2px 8px;
   border-radius: 999px;
-  background: var(--fonu-bg);
-  border: 1px solid var(--fonu-border);
-  font-family: var(--fonu-mono);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+  font-family: var(--havline-mono);
   font-size: 11px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1499,7 +1499,7 @@ onMounted(init)
 .task-detail {
   display: flex;
   flex-direction: column;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   min-width: 0;
 }
 
@@ -1507,13 +1507,13 @@ onMounted(init)
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   flex-wrap: wrap;
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
-  padding: var(--fonu-space-4) var(--fonu-space-5);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-4) var(--havline-space-5);
 }
 
 .task-detail__title-wrap {
@@ -1526,7 +1526,7 @@ onMounted(init)
   margin: 0;
   font-size: 18px;
   font-weight: 700;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .task-detail__meta {
@@ -1536,7 +1536,7 @@ onMounted(init)
   gap: 10px;
   margin-top: 6px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .task-detail__actions {
@@ -1551,21 +1551,21 @@ onMounted(init)
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-top: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-top: var(--havline-space-4);
 }
 
 .settings-field__label {
   display: block;
   margin-bottom: 8px;
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .settings-row {
@@ -1573,14 +1573,14 @@ onMounted(init)
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   flex-wrap: wrap;
 }
 
 .settings-switches {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fonu-space-5);
+  gap: var(--havline-space-5);
   align-items: center;
 }
 
@@ -1593,7 +1593,7 @@ onMounted(init)
 
 .settings-interval__label {
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   white-space: nowrap;
 }
 
@@ -1606,25 +1606,25 @@ onMounted(init)
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .interval-unit {
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .records-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-4) var(--fonu-space-5) 0;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4) var(--havline-space-5) 0;
 }
 
 .record-table-wrap {
   overflow-x: auto;
-  padding: 0 var(--fonu-space-5) var(--fonu-space-4);
+  padding: 0 var(--havline-space-5) var(--havline-space-4);
 }
 
 .record-table {
@@ -1638,23 +1638,23 @@ onMounted(init)
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: var(--fonu-text-secondary);
-  border-bottom: 1px solid var(--fonu-border);
+  color: var(--havline-text-secondary);
+  border-bottom: 1px solid var(--havline-border);
   white-space: nowrap;
 }
 
 .record-table td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--fonu-border);
+  border-bottom: 1px solid var(--havline-border);
   vertical-align: middle;
 }
 
 .record-table__mono {
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   font-size: 12px;
 }
 
-.record-table__muted { color: var(--fonu-text-muted); }
+.record-table__muted { color: var(--havline-text-muted); }
 
 .record-table__result {
   max-width: 220px;
@@ -1665,7 +1665,7 @@ onMounted(init)
 
 .record-table__empty {
   text-align: center;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   padding: 28px 12px !important;
 }
 
@@ -1739,8 +1739,8 @@ onMounted(init)
 }
 
 .custom-ip-form { display: flex; flex-direction: column; gap: 10px; }
-.custom-ip-field__label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--fonu-text-secondary); }
-.custom-ip-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.6; color: var(--fonu-text-secondary); }
+.custom-ip-field__label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--havline-text-secondary); }
+.custom-ip-hint { margin: 2px 0 0; font-size: 12px; line-height: 1.6; color: var(--havline-text-secondary); }
 .custom-ip-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .custom-ip-actions--secondary { justify-content: flex-start; margin-top: 6px; }
 </style>

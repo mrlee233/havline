@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func osReadDir(path string) ([]os.DirEntry, error) {

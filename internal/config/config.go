@@ -25,22 +25,22 @@ type Config struct {
 }
 
 func Load() Config {
-	dataDir := envOr("FONU_DATA_DIR", defaultDataDir())
+	dataDir := envOr("HAVLINE_DATA_DIR", defaultDataDir())
 	if abs, err := filepath.Abs(dataDir); err == nil {
 		dataDir = abs
 	}
 	return Config{
-		ListenAddr:            envOr("FONU_LISTEN", ":6893"),
+		ListenAddr:            envOr("HAVLINE_LISTEN", ":6893"),
 		DataDir:               dataDir,
-		SessionSecret:         envOr("FONU_SESSION_SECRET", ""),
-		NginxBin:              envOr("FONU_NGINX_BIN", "nginx"),
-		NginxPIDFile:          envOr("FONU_NGINX_PID", dataDir+"/nginx/nginx.pid"),
-		NginxMimeTypes:        envOr("FONU_NGINX_MIME_TYPES", defaultMimeTypes()),
-		NginxDefaultHTTPPort:  envIntOr("FONU_NGINX_HTTP_PORT", 80),
-		NginxDefaultHTTPSPort: envIntOr("FONU_NGINX_HTTPS_PORT", 443),
-		FrpcBin:               envOr("FONU_FRPC_BIN", "frpc"),
-		FrpPIDFile:            envOr("FONU_FRP_PID", dataDir+"/frp/frpc.pid"),
-		UpdaterSocket:         envOr("FONU_UPDATER_SOCKET", "/run/fonu-updater/updater.sock"),
+		SessionSecret:         envOr("HAVLINE_SESSION_SECRET", ""),
+		NginxBin:              envOr("HAVLINE_NGINX_BIN", "nginx"),
+		NginxPIDFile:          envOr("HAVLINE_NGINX_PID", dataDir+"/nginx/nginx.pid"),
+		NginxMimeTypes:        envOr("HAVLINE_NGINX_MIME_TYPES", defaultMimeTypes()),
+		NginxDefaultHTTPPort:  envIntOr("HAVLINE_NGINX_HTTP_PORT", 80),
+		NginxDefaultHTTPSPort: envIntOr("HAVLINE_NGINX_HTTPS_PORT", 443),
+		FrpcBin:               envOr("HAVLINE_FRPC_BIN", "frpc"),
+		FrpPIDFile:            envOr("HAVLINE_FRP_PID", dataDir+"/frp/frpc.pid"),
+		UpdaterSocket:         envOr("HAVLINE_UPDATER_SOCKET", "/run/havline-updater/updater.sock"),
 	}
 }
 
@@ -52,7 +52,7 @@ func (c Config) DefaultListenPort(httpsEnabled bool) int {
 }
 
 func (c Config) DBPath() string {
-	return c.DataDir + "/fonu.db"
+	return c.DataDir + "/havline.db"
 }
 
 func (c Config) NginxDir() string {
@@ -128,7 +128,7 @@ func (c Config) FrpLogPath() string {
 	return filepath.Join(c.LogsDir(), "frpc.log")
 }
 
-// LegacySessionSecret 是历史版本在未配置 FONU_SESSION_SECRET 时使用的固定值。
+// LegacySessionSecret 是历史版本在未配置 HAVLINE_SESSION_SECRET 时使用的固定值。
 // 它同时是 secret box 的加密密钥，所以只提醒、不自动替换：
 // 换掉它会让库里已加密的凭据（frp token、通知密码等）再也解不开。
 const LegacySessionSecret = "change-me-in-production"

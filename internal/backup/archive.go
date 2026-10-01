@@ -12,7 +12,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/settings"
 )
 
 // 保留份数的边界：0/负数按默认值处理，上限防止把磁盘塞满
@@ -23,7 +23,7 @@ const (
 
 // archiveNamePattern 备份命名格式（Export 用 CreateTemp 生成，后缀是随机数字）。
 // List / Path 都按它过滤，避免把 backups 目录里任意文件当成备份读写或删除。
-var archiveNamePattern = regexp.MustCompile(`^fonu-backup-\d{8}-\d{6}-\d+\.tar\.gz$`)
+var archiveNamePattern = regexp.MustCompile(`^havline-backup-\d{8}-\d{6}-\d+\.tar\.gz$`)
 
 // Archive 留在磁盘上的一份备份
 type Archive struct {
@@ -104,7 +104,7 @@ func (s *Service) Remove(name string) error {
 }
 
 // Verify 回读归档并返回条目数：确认这份备份不是写了一半的残件，
-// 同时要求包内必须有 fonu.db（否则多半不是 Fonu 的备份）。
+// 同时要求包内必须有 havline.db（否则多半不是 Havline 的备份）。
 func (s *Service) Verify(ctx context.Context, path string) (int, error) {
 	file, err := os.Open(path)
 	if err != nil {
@@ -133,12 +133,12 @@ func (s *Service) Verify(ctx context.Context, path string) (int, error) {
 			return count, err
 		}
 		count++
-		if header.Name == "fonu.db" {
+		if header.Name == "havline.db" {
 			hasDatabase = true
 		}
 	}
 	if !hasDatabase {
-		return count, fmt.Errorf("备份里没有 fonu.db，可能不是 Fonu 的备份")
+		return count, fmt.Errorf("备份里没有 havline.db，可能不是 Havline 的备份")
 	}
 	return count, nil
 }

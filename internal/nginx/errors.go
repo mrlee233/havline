@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/config"
 )
 
 func EnsureErrorPages(cfg config.Config) error {
@@ -112,7 +112,7 @@ func copyFileIfChanged(src, dst string) error {
 func errorPageHTML(code int, title, message, sprite, bgPos string) string {
 	var imgBlock string
 	if sprite == "429" {
-		imgBlock = `<img class="illus" src="/fonu-errors/429.png" alt="">`
+		imgBlock = `<img class="illus" src="/havline-errors/429.png" alt="">`
 	} else {
 		imgBlock = fmt.Sprintf(`<div class="sprite" role="img" aria-label="%d"></div>`, code)
 	}
@@ -126,7 +126,7 @@ func errorPageHTML(code int, title, message, sprite, bgPos string) string {
 *{box-sizing:border-box;margin:0;padding:0}
 body{min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0f1419;color:#e2e8f0;padding:24px}
 .card{text-align:center;max-width:420px;width:100%%}
-.sprite{width:280px;height:186px;margin:0 auto 24px;background:url(/fonu-errors/error.png) no-repeat;background-size:200%% 200%%;background-position:%s}
+.sprite{width:280px;height:186px;margin:0 auto 24px;background:url(/havline-errors/error.png) no-repeat;background-size:200%% 200%%;background-position:%s}
 .illus{width:280px;height:auto;margin:0 auto 24px;display:block}
 .code{font-size:14px;font-weight:600;color:#22c55e;letter-spacing:.08em;margin-bottom:8px}
 h1{font-size:22px;font-weight:600;margin-bottom:8px}

@@ -259,7 +259,7 @@ func (s *Service) dnsCheck(ctx context.Context, tunnel Tunnel) DiagnosticCheck {
 		return DiagnosticCheck{Name: "DNS 记录", Status: "error", Message: err.Error()}
 	}
 	if len(records) == 0 {
-		return DiagnosticCheck{Name: "DNS 记录", Status: "warning", Message: "没有 Fonu 接管的 DNS 记录"}
+		return DiagnosticCheck{Name: "DNS 记录", Status: "warning", Message: "没有 Havline 接管的 DNS 记录"}
 	}
 	return DiagnosticCheck{Name: "DNS 记录", Status: "ok", Message: fmt.Sprintf("已接管 %d 条记录", len(records))}
 }

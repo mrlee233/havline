@@ -150,11 +150,11 @@ defineExpose({ scrollToBottom })
   color: #e2e8f0;
   overflow-y: auto;
   overflow-x: auto;
-  padding: var(--fonu-space-3);
-  font-family: var(--fonu-mono);
+  padding: var(--havline-space-3);
+  font-family: var(--havline-mono);
   font-size: 12px;
   line-height: 1.7;
-  border-radius: var(--fonu-radius-sm);
+  border-radius: var(--havline-radius-sm);
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 184, 0.2) transparent;
 }
@@ -195,7 +195,7 @@ defineExpose({ scrollToBottom })
 .proxy-log-box--fullscreen {
   flex: 1;
   min-height: 0;
-  border-radius: var(--fonu-radius);
+  border-radius: var(--havline-radius);
 }
 
 .proxy-log-entry {
@@ -297,11 +297,11 @@ defineExpose({ scrollToBottom })
 }
 
 .proxy-log-empty {
-  padding: var(--fonu-space-5);
+  padding: var(--havline-space-5);
   text-align: center;
   color: #94a3b8;
   white-space: normal;
 }
 
-.mono { font-family: var(--fonu-mono); }
+.mono { font-family: var(--havline-mono); }
 </style>

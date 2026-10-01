@@ -11,14 +11,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/cloudflared"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/db"
-	"github.com/fonu/fonu/internal/frp"
-	"github.com/fonu/fonu/internal/secret"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/cloudflared"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/db"
+	"github.com/havline/havline/internal/frp"
+	"github.com/havline/havline/internal/secret"
+	"github.com/havline/havline/internal/settings"
 )
 
 var routeParamPattern = regexp.MustCompile(`\{[^}]+\}`)
@@ -26,7 +26,7 @@ var routeParamPattern = regexp.MustCompile(`\{[^}]+\}`)
 // TestProtectedRoutesRequireAuth 遍历路由表：受保护路由匿名必须 401，公开路由不能被鉴权误拦。
 func TestProtectedRoutesRequireAuth(t *testing.T) {
 	dir := t.TempDir()
-	conn, err := db.Open(filepath.Join(dir, "fonu.db"))
+	conn, err := db.Open(filepath.Join(dir, "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

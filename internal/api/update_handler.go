@@ -3,7 +3,7 @@ package api
 import (
 	"net/http"
 
-	"github.com/fonu/fonu/internal/updater"
+	"github.com/havline/havline/internal/updater"
 )
 
 type UpdateHandler struct {

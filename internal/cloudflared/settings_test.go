@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/db"
-	"github.com/fonu/fonu/internal/secret"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/db"
+	"github.com/havline/havline/internal/secret"
 )
 
 func TestAppSettingsAccountAndAPIToken(t *testing.T) {

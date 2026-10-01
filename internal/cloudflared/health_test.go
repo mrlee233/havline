@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/db"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/db"
 )
 
 func TestComputeHealthUptimeExcludesUnknown(t *testing.T) {

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 变更
+
+- **品牌全量切换为 Havline**：项目显示名、Go module、命令目录、二进制、环境变量、数据库、Cookie、Docker/Compose、Agent、Updater、脚本和当前文档统一切换到 `Havline / havline / HAVLINE_`
+- **AgentVersion 提升到 0.15.0**：Agent 安装路径、配置目录、数据目录、systemd unit、Nginx 托管标记和 API 服务标识全部切换到 `havline-agent`
+- **历史文档保留原品牌名**：`CHANGELOG.md` 历史版本、旧品牌评估文档和带日期的历史分析报告保留原始名称，作为项目沿革和 GPL 来源记录
+
 ## [v1.9.0] - 2026-10-01
 
 ### 新增

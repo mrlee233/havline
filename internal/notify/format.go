@@ -6,7 +6,7 @@ import (
 )
 
 func formatFooter(at time.Time) string {
-	return "Fonu · " + at.Format("2006-01-02 15:04:05")
+	return "Havline · " + at.Format("2006-01-02 15:04:05")
 }
 
 type eventMeta struct {
@@ -35,7 +35,7 @@ func FormatAlertAt(event, title, message string, at time.Time) AlertContent {
 	title = strings.TrimSpace(title)
 	message = strings.TrimSpace(message)
 	pushTitle := strings.TrimSpace(meta.icon + " " + title)
-	subject := "[Fonu] " + pushTitle
+	subject := "[Havline] " + pushTitle
 	footer := formatFooter(at)
 
 	detail := message

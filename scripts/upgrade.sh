@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fonu 容器升级：在部署机（NAS）上直接构建，不需要再从别处传镜像包
+# Havline 容器升级：在部署机（NAS）上直接构建，不需要再从别处传镜像包
 #
 #   sudo bash scripts/upgrade.sh                     # 拉取最新源码 → 构建 → 重建容器
 #   sudo bash scripts/upgrade.sh --no-pull           # 不拉代码，用当前源码重建
@@ -8,12 +8,12 @@
 # 用 COMPOSE_FILE 指定编排文件（默认 docker-compose.yml）：
 #   COMPOSE_FILE=docker-compose.host.yml sudo bash scripts/upgrade.sh
 #
-# 数据在 fonu-data 卷里，重建容器不会丢。每次构建按仓库 VERSION 打一个新 tag
+# 数据在 havline-data 卷里，重建容器不会丢。每次构建按仓库 VERSION 打一个新 tag
 # （旧的 tag 会留着），所以出问题可以直接 --rollback 回上一个版本。
 set -euo pipefail
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
-APP_CONTAINER="${APP_CONTAINER:-fonu}"
+APP_CONTAINER="${APP_CONTAINER:-havline}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:6893/api/version}"
 NO_PULL=0
 ROLLBACK_TAG=""
@@ -33,7 +33,7 @@ while [ $# -gt 0 ]; do
 done
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "没有找到 docker 命令：这个脚本要在运行 Fonu 容器的那台机器上执行" >&2
+  echo "没有找到 docker 命令：这个脚本要在运行 Havline 容器的那台机器上执行" >&2
   exit 1
 fi
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -49,12 +49,12 @@ current_image() {
 echo "==> 升级前：$(current_image)"
 
 if [ -n "$ROLLBACK_TAG" ]; then
-  if ! docker image inspect "fonu:$ROLLBACK_TAG" >/dev/null 2>&1; then
-    echo "本机没有 fonu:$ROLLBACK_TAG；已有 tag：$(docker images --format '{{.Tag}}' fonu | tr '\n' ' ')" >&2
+  if ! docker image inspect "havline:$ROLLBACK_TAG" >/dev/null 2>&1; then
+    echo "本机没有 havline:$ROLLBACK_TAG；已有 tag：$(docker images --format '{{.Tag}}' havline | tr '\n' ' ')" >&2
     exit 1
   fi
-  FONU_VERSION="$ROLLBACK_TAG" docker compose -f "$COMPOSE_FILE" up -d
-  echo "==> 已切回 fonu:$ROLLBACK_TAG"
+  HAVLINE_VERSION="$ROLLBACK_TAG" docker compose -f "$COMPOSE_FILE" up -d
+  echo "==> 已切回 havline:$ROLLBACK_TAG"
 else
   if [ "$NO_PULL" -eq 0 ]; then
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -68,9 +68,9 @@ else
     echo '找不到 VERSION 文件：请在仓库根目录运行' >&2
     exit 1
   fi
-  FONU_VERSION="$(tr -d ' \t\n\r' < VERSION)"
-  export FONU_VERSION
-  echo "==> 构建并重建：fonu:$FONU_VERSION（首次构建较慢，之后有构建缓存）"
+  HAVLINE_VERSION="$(tr -d ' \t\n\r' < VERSION)"
+  export HAVLINE_VERSION
+  echo "==> 构建并重建：havline:$HAVLINE_VERSION（首次构建较慢，之后有构建缓存）"
   docker compose -f "$COMPOSE_FILE" up -d --build
 fi
 

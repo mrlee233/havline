@@ -15,7 +15,7 @@ withDefaults(
   defineProps<{
     message?: string
   }>(),
-  { message: '请检查 Fonu 服务是否正常运行' },
+  { message: '请检查 Havline 服务是否正常运行' },
 )
 
 defineEmits<{ retry: [] }>()
@@ -23,6 +23,6 @@ defineEmits<{ retry: [] }>()
 
 <style scoped>
 .load-error {
-  padding: var(--fonu-space-6) 0;
+  padding: var(--havline-space-6) 0;
 }
 </style>

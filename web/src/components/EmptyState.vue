@@ -22,17 +22,17 @@ withDefaults(
 
 <style scoped>
 .empty-state {
-  padding: var(--fonu-space-6) var(--fonu-space-5);
+  padding: var(--havline-space-6) var(--havline-space-5);
   text-align: center;
 }
 
 .empty-state__icon {
   width: 48px;
   height: 48px;
-  margin: 0 auto var(--fonu-space-4);
+  margin: 0 auto var(--havline-space-4);
   border-radius: 50%;
-  background: var(--fonu-brand-soft);
-  color: var(--fonu-brand);
+  background: var(--havline-brand-soft);
+  color: var(--havline-brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,10 +41,10 @@ withDefaults(
 }
 
 .empty-state__title {
-  margin: 0 0 var(--fonu-space-2);
+  margin: 0 0 var(--havline-space-2);
   font-size: 16px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .empty-state__desc {
@@ -52,10 +52,10 @@ withDefaults(
   max-width: 360px;
   font-size: 14px;
   line-height: 1.6;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .empty-state__action {
-  margin-top: var(--fonu-space-5);
+  margin-top: var(--havline-space-5);
 }
 </style>

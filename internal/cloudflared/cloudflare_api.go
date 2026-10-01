@@ -228,7 +228,7 @@ func (a *CloudflareAPI) EnsureCNAME(ctx context.Context, zoneID, hostname, targe
 	return created.ID, nil
 }
 
-// DeleteDNSRecord 删除一条明确由 Fonu 接管的 DNS 记录。
+// DeleteDNSRecord 删除一条明确由 Havline 接管的 DNS 记录。
 func (a *CloudflareAPI) DeleteDNSRecord(ctx context.Context, zoneID, recordID string) error {
 	return a.do(ctx, http.MethodDelete, "/zones/"+zoneID+"/dns_records/"+recordID, nil, nil)
 }

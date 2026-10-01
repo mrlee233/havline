@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/validate"
 )
 
 // RouteView 是配置页展示的一条 ingress 路由。

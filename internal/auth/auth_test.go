@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fonu/fonu/internal/db"
+	"github.com/havline/havline/internal/db"
 )
 
 func TestEnsureDefaultAdminCreatesOnce(t *testing.T) {
-	conn, err := db.Open(filepath.Join(t.TempDir(), "fonu.db"))
+	conn, err := db.Open(filepath.Join(t.TempDir(), "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

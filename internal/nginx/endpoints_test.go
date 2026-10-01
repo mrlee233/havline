@@ -47,7 +47,7 @@ func TestParseServerEndpointsDefaultsToPort80(t *testing.T) {
 func TestParseServerEndpointsIgnoresUnparseable(t *testing.T) {
 	content := `include /etc/nginx/snippets/extra.conf;
 server {
-    listen unix:/run/fonu.sock;
+    listen unix:/run/havline.sock;
     server_name $host;
 }
 `

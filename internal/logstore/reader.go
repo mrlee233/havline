@@ -270,7 +270,7 @@ func isDashboardAccess(entry AccessEntry) bool {
 	case "/favicon.ico", "/robots.txt":
 		return false
 	}
-	if strings.HasPrefix(entry.Path, "/fonu-errors/") {
+	if strings.HasPrefix(entry.Path, "/havline-errors/") {
 		return false
 	}
 	return true

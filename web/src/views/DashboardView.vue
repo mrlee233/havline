@@ -5,7 +5,7 @@
     <section class="hero-banner">
       <div class="hero-content">
         <h1 class="hero-banner__title">{{ greetingText }}</h1>
-        <p class="hero-banner__desc">Fonu 正在为你的 NAS 提供稳定、安全的访问服务。</p>
+        <p class="hero-banner__desc">Havline 正在为你的 NAS 提供稳定、安全的访问服务。</p>
         <div class="hero-banner__badges">
           <span class="hero-banner__badge"><n-icon :component="CheckmarkCircleOutline" /> 简单易用</span>
           <span class="hero-banner__badge"><n-icon :component="FlashOutline" /> 安全稳定</span>
@@ -60,7 +60,7 @@
           <template #value>{{ serviceHealth.value }}</template>
           <p class="stat-desc">{{ serviceHealth.desc }}</p>
           <div class="stat-foot">
-            <div class="stat-foot__line">Fonu · Nginx · DDNS · 证书</div>
+            <div class="stat-foot__line">Havline · Nginx · DDNS · 证书</div>
             <div class="stat-foot__muted">
               运行 {{ formatUptime(status?.uptime_seconds ?? 0) }} · 上次检查 {{ formatRelativeTime(status?.started_at) || '刚刚' }}
             </div>
@@ -80,7 +80,7 @@
       </div>
 
       <div class="metrics-row">
-        <FonuCard class="panel requests-panel">
+        <HavlineCard class="panel requests-panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="FlashOutline" class="panel-title__icon panel-title__icon--amber" />
@@ -98,9 +98,9 @@
               <MiniBarChart :values="hourlyBars.values" :labels="hourlyBars.labels" />
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="panel traffic-panel">
+        <HavlineCard class="panel traffic-panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="SwapVerticalOutline" class="panel-title__icon panel-title__icon--teal" />
@@ -154,9 +154,9 @@
               </ul>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="panel trend-card">
+        <HavlineCard class="panel trend-card">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="StatsChartOutline" class="panel-title__icon panel-title__icon--teal" />
@@ -178,12 +178,12 @@
           <div class="panel__body">
             <MetricsTrendPanel :hours="trendHours" />
           </div>
-        </FonuCard>
+        </HavlineCard>
 
       </div>
 
       <div class="ops-row">
-        <FonuCard class="panel perf-panel">
+        <HavlineCard class="panel perf-panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="FlashOutline" class="panel-title__icon panel-title__icon--amber" />
@@ -219,9 +219,9 @@
               <span class="perf-value" :class="{ 'perf-value--error': errorToday > 0 }">{{ errorTodayLabel }}</span>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="panel">
+        <HavlineCard class="panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="ServerOutline" class="panel-title__icon panel-title__icon--teal" />
@@ -243,9 +243,9 @@
               <span class="perf-value">{{ item.value }}</span>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="panel">
+        <HavlineCard class="panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="GlobeOutline" class="panel-title__icon panel-title__icon--teal" />
@@ -268,9 +268,9 @@
               <span class="perf-value">{{ item.value }}</span>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard class="panel">
+        <HavlineCard class="panel">
           <div class="panel__head">
             <div class="panel-title">
               <n-icon :component="ShieldCheckmarkOutline" class="panel-title__icon panel-title__icon--teal" />
@@ -296,11 +296,11 @@
               <span class="perf-value">{{ row.value }}</span>
             </div>
           </div>
-        </FonuCard>
+        </HavlineCard>
       </div>
 
       <div class="bottom-row">
-        <FonuCard flush class="bottom-card">
+        <HavlineCard flush class="bottom-card">
           <template #title>
             <n-icon :component="ListOutline" class="card-title-icon" />
             <span>最近访问</span>
@@ -322,9 +322,9 @@
             />
             <EmptyState v-else title="暂无访问记录" description="产生访问后这里会显示最近请求。" />
           </div>
-        </FonuCard>
+        </HavlineCard>
 
-        <FonuCard flush class="bottom-card">
+        <HavlineCard flush class="bottom-card">
           <template #title>
             <n-icon :component="DocumentTextOutline" class="card-title-icon" />
             <span>最新日志</span>
@@ -346,7 +346,7 @@
             />
             <EmptyState v-else title="暂无系统日志" description="应用运行后会产生日志。" />
           </div>
-        </FonuCard>
+        </HavlineCard>
       </div>
     </n-spin>
   </template>
@@ -394,7 +394,7 @@ import type {
   SystemLogEntry,
 } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import MiniBarChart from '../components/MiniBarChart.vue'
 import MiniTrafficChart from '../components/MiniTrafficChart.vue'
@@ -442,7 +442,7 @@ type RatePoint = { at: number; upload: number; download: number }
 const rateHistory = ref<RatePoint[]>([])
 const RATE_HISTORY_MS = 5 * 60 * 1000
 
-// 实时流量的数据源：本机（Fonu 管理的本机 Nginx 访问日志）或公网（frps 侧的逐规则计数）
+// 实时流量的数据源：本机（Havline 管理的本机 Nginx 访问日志）或公网（frps 侧的逐规则计数）
 type TrafficSource = 'local' | 'public'
 type TrafficRow = { name: string; uploadRate: number; downloadRate: number }
 const trafficSource = ref<TrafficSource>('local')
@@ -702,7 +702,7 @@ const requestTrend = computed(() => {
 
 const healthItems = computed(() => [
   {
-    name: 'Fonu',
+    name: 'Havline',
     desc: '应用核心服务',
     meta: `运行 ${formatUptime(status.value?.uptime_seconds ?? 0)}`,
     status: 'running',
@@ -1145,7 +1145,7 @@ async function load() {
       })
       .catch(() => {})
   } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    loadError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
     message.error('加载仪表盘失败')
   } finally {
     loading.value = false
@@ -1165,11 +1165,11 @@ useVisibilityPolling(pollCIDR, 2000, { enabled: cidrPolling })
 .hero-banner {
   position: relative;
   overflow: hidden;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
   min-height: 208px;
   height: 220px;
   border-radius: 16px;
-  box-shadow: var(--fonu-shadow);
+  box-shadow: var(--havline-shadow);
   border: 1px solid rgba(16, 185, 129, 0.08);
   background: linear-gradient(100deg, #f4fffc 0%, #f1fbff 55%, #eef9ff 100%);
 }
@@ -1215,14 +1215,14 @@ html.dark .hero-art {
   margin: 0;
   font-size: 30px;
   font-weight: 700;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   letter-spacing: -0.03em;
 }
 
 .hero-banner__desc {
   margin: 10px 0 0;
   font-size: 14px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   max-width: 520px;
   line-height: 1.65;
 }
@@ -1241,14 +1241,14 @@ html.dark .hero-art {
   padding: 6px 12px;
   border-radius: 999px;
   font-size: 13px;
-  color: var(--fonu-text-secondary);
-  background: var(--fonu-surface);
+  color: var(--havline-text-secondary);
+  background: var(--havline-surface);
   border: 1px solid rgba(16, 185, 129, 0.14);
 }
 
 .hero-banner__badge .n-icon {
   font-size: 16px;
-  color: var(--fonu-brand);
+  color: var(--havline-brand);
 }
 
 @media (max-width: 768px) {
@@ -1284,28 +1284,28 @@ html.dark .hero-art {
 .stats-row {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .stat-primary {
   font-size: 22px;
   font-weight: 700;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   line-height: 1.3;
 }
 
 .stat-desc {
   margin: 8px 0 0;
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.5;
 }
 
 .stat-foot {
-  margin-top: var(--fonu-space-3);
-  padding-top: var(--fonu-space-3);
-  border-top: 1px solid var(--fonu-border);
+  margin-top: var(--havline-space-3);
+  padding-top: var(--havline-space-3);
+  border-top: 1px solid var(--havline-border);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1316,12 +1316,12 @@ html.dark .hero-art {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .stat-foot__muted {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .traffic-panel {
@@ -1329,7 +1329,7 @@ html.dark .hero-art {
   flex-direction: column;
 }
 
-.traffic-panel :deep(.fonu-card__body) {
+.traffic-panel :deep(.havline-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1356,8 +1356,8 @@ html.dark .hero-art {
 
 .traffic-rates {
   display: flex;
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-3);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-3);
 }
 
 .traffic-rate {
@@ -1384,25 +1384,25 @@ html.dark .hero-art {
 
 .traffic-rate__label {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .traffic-rate__value {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   font-variant-numeric: tabular-nums;
 }
 
 .traffic-top {
-  margin-top: var(--fonu-space-3);
-  padding-top: var(--fonu-space-3);
-  border-top: 1px solid var(--fonu-border);
+  margin-top: var(--havline-space-3);
+  padding-top: var(--havline-space-3);
+  border-top: 1px solid var(--havline-border);
 }
 
 .traffic-top__title {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .traffic-top__list {
@@ -1416,7 +1416,7 @@ html.dark .hero-art {
 .traffic-top__item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   font-size: 13px;
 }
 
@@ -1424,37 +1424,37 @@ html.dark .hero-art {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .traffic-top__rate {
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
 .ops-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .metrics-row {
   display: grid;
   grid-template-columns: 3fr 3fr 2fr 2fr;
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
   align-items: stretch;
 }
 
 /* 趋势卡片占两列：这样「性能」才能跟「系统资源」等一起排到下一行的四列里 */
 .trend-card { grid-column: span 2; }
 
-.metrics-row > .fonu-card {
+.metrics-row > .havline-card {
   height: 100%;
 }
 
-.panel :deep(.fonu-card__body) {
+.panel :deep(.havline-card__body) {
   padding-top: 0;
 }
 
@@ -1462,11 +1462,11 @@ html.dark .hero-art {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--fonu-space-5) var(--fonu-space-5) 0;
+  padding: var(--havline-space-5) var(--havline-space-5) 0;
 }
 
 .panel__body {
-  padding: var(--fonu-space-3) var(--fonu-space-5) var(--fonu-space-5);
+  padding: var(--havline-space-3) var(--havline-space-5) var(--havline-space-5);
 }
 
 .panel-title {
@@ -1475,12 +1475,12 @@ html.dark .hero-art {
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .panel-title__icon {
   font-size: 18px;
-  color: var(--fonu-brand);
+  color: var(--havline-brand);
 }
 
 .panel-title__icon--amber {
@@ -1497,14 +1497,14 @@ html.dark .hero-art {
 .trend-range { display: flex; gap: 2px; }
 
 .range-tag {
-  background: var(--fonu-bg) !important;
-  color: var(--fonu-text-secondary) !important;
+  background: var(--havline-bg) !important;
+  color: var(--havline-text-secondary) !important;
 }
 
 .metric-hero {
   display: flex;
   align-items: baseline;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   margin-bottom: 4px;
 }
 
@@ -1512,7 +1512,7 @@ html.dark .hero-art {
   font-size: 34px;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   line-height: 1.1;
 }
 
@@ -1521,7 +1521,7 @@ html.dark .hero-art {
   flex-direction: column;
 }
 
-.requests-panel :deep(.fonu-card__body) {
+.requests-panel :deep(.havline-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1532,7 +1532,7 @@ html.dark .hero-art {
   flex-direction: column;
 }
 
-.health-panel :deep(.fonu-card__body) {
+.health-panel :deep(.havline-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1556,7 +1556,7 @@ html.dark .hero-art {
   justify-self: end;
   font-size: 16px;
   font-weight: 700;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1565,17 +1565,17 @@ html.dark .hero-art {
   margin-left: 2px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .perf-value--error {
-  color: var(--fonu-error);
+  color: var(--havline-error);
 }
 
 .head-actions {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-2);
+  gap: var(--havline-space-2);
 }
 
 .res-bar {
@@ -1583,7 +1583,7 @@ html.dark .hero-art {
   height: 4px;
   margin-top: 6px;
   border-radius: 2px;
-  background: var(--fonu-border);
+  background: var(--havline-border);
   overflow: hidden;
 }
 
@@ -1591,25 +1591,25 @@ html.dark .hero-art {
   display: block;
   height: 100%;
   border-radius: 2px;
-  background: var(--fonu-brand);
+  background: var(--havline-brand);
   transition: width 0.3s ease;
 }
 
 .res-bar--warn .res-bar__fill {
-  background: var(--fonu-warning);
+  background: var(--havline-warning);
 }
 
 .res-bar--danger .res-bar__fill {
-  background: var(--fonu-error);
+  background: var(--havline-error);
 }
 
 .health-panel .panel__head {
-  padding: var(--fonu-space-3) var(--fonu-space-4) 0;
+  padding: var(--havline-space-3) var(--havline-space-4) 0;
 }
 
 .health-panel .panel__body {
   flex: 1;
-  padding: var(--fonu-space-2) var(--fonu-space-4) var(--fonu-space-3);
+  padding: var(--havline-space-2) var(--havline-space-4) var(--havline-space-3);
 }
 
 .health-list {
@@ -1629,8 +1629,8 @@ html.dark .hero-art {
   flex: 1;
   min-height: 64px;
   padding: 12px 14px;
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
   min-width: 0;
 }
 
@@ -1646,8 +1646,8 @@ html.dark .hero-art {
 }
 
 .health-item__icon--brand {
-  background: var(--fonu-brand-soft);
-  color: var(--fonu-brand);
+  background: var(--havline-brand-soft);
+  color: var(--havline-brand);
 }
 
 .health-item__icon--blue {
@@ -1666,8 +1666,8 @@ html.dark .hero-art {
 }
 
 .health-item__icon--error {
-  background: color-mix(in srgb, var(--fonu-error) 12%, transparent);
-  color: var(--fonu-error);
+  background: color-mix(in srgb, var(--havline-error) 12%, transparent);
+  color: var(--havline-error);
 }
 
 .health-item__main {
@@ -1687,19 +1687,19 @@ html.dark .hero-art {
 .health-item__name {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   line-height: 1.2;
 }
 
 .health-item__meta {
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.3;
 }
 
 .health-item__detail {
   font-size: 11px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.3;
 }
 
@@ -1712,7 +1712,7 @@ html.dark .hero-art {
 .bottom-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   align-items: stretch;
 }
 
@@ -1722,7 +1722,7 @@ html.dark .hero-art {
   height: 100%;
 }
 
-.bottom-card :deep(.fonu-card__body) {
+.bottom-card :deep(.havline-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -1732,8 +1732,8 @@ html.dark .hero-art {
   padding-bottom: 0;
 }
 
-.bottom-card :deep(.fonu-card__header) {
-  padding-bottom: var(--fonu-space-3);
+.bottom-card :deep(.havline-card__header) {
+  padding-bottom: var(--havline-space-3);
 }
 
 .bottom-card__body {
@@ -1764,12 +1764,12 @@ html.dark .hero-art {
 
 .bottom-card__body :deep(.n-data-table-th:first-child),
 .bottom-card__body :deep(.n-data-table-td:first-child) {
-  padding-left: var(--fonu-space-5);
+  padding-left: var(--havline-space-5);
 }
 
 .bottom-card__body :deep(.n-data-table-th:last-child),
 .bottom-card__body :deep(.n-data-table-td:last-child) {
-  padding-right: var(--fonu-space-5);
+  padding-right: var(--havline-space-5);
 }
 
 .nowrap-cell {
@@ -1778,7 +1778,7 @@ html.dark .hero-art {
 
 .card-title-icon {
   font-size: 18px;
-  color: var(--fonu-brand);
+  color: var(--havline-brand);
 }
 
 .card-link {
@@ -1786,17 +1786,17 @@ html.dark .hero-art {
   align-items: center;
   gap: 2px;
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   text-decoration: none;
   font-weight: 500;
 }
 
 .card-link:hover {
-  color: var(--fonu-brand);
+  color: var(--havline-brand);
 }
 
 .mono {
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
 }
 
 @media (max-width: 1199px) {

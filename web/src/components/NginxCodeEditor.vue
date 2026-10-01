@@ -56,32 +56,32 @@ const nginxLanguage = StreamLanguage.define(nginx)
 const lightTheme = EditorView.theme(
   {
     '&': {
-      backgroundColor: 'var(--fonu-surface)',
-      color: 'var(--fonu-text)',
+      backgroundColor: 'var(--havline-surface)',
+      color: 'var(--havline-text)',
     },
     '.cm-content': {
-      caretColor: 'var(--fonu-brand)',
-      fontFamily: 'var(--fonu-mono)',
+      caretColor: 'var(--havline-brand)',
+      fontFamily: 'var(--havline-mono)',
       fontSize: '12px',
       lineHeight: '1.7',
     },
     '.cm-gutters': {
-      backgroundColor: 'var(--fonu-bg-muted)',
-      color: 'var(--fonu-text-muted)',
-      borderRight: '1px solid var(--fonu-border)',
+      backgroundColor: 'var(--havline-bg-muted)',
+      color: 'var(--havline-text-muted)',
+      borderRight: '1px solid var(--havline-border)',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'var(--fonu-bg)',
-      color: 'var(--fonu-text-secondary)',
+      backgroundColor: 'var(--havline-bg)',
+      color: 'var(--havline-text-secondary)',
     },
     '.cm-activeLine': {
-      backgroundColor: 'var(--fonu-brand-soft)',
+      backgroundColor: 'var(--havline-brand-soft)',
     },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: 'color-mix(in srgb, var(--fonu-brand) 22%, transparent) !important',
+      backgroundColor: 'color-mix(in srgb, var(--havline-brand) 22%, transparent) !important',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--fonu-brand)',
+      borderLeftColor: 'var(--havline-brand)',
     },
     '&.cm-focused': {
       outline: 'none',
@@ -128,10 +128,10 @@ function onUpdate(value: string) {
 
 <style scoped>
 .nginx-code-editor {
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
   overflow: hidden;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
 }
 
 .nginx-code-editor--embedded {
@@ -146,11 +146,11 @@ function onUpdate(value: string) {
 .nginx-code-editor :deep(.cm-scroller) {
   overflow: auto;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--fonu-text-muted) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--havline-text-muted) 35%, transparent) transparent;
 }
 
 .nginx-code-editor:hover :deep(.cm-scroller) {
-  scrollbar-color: color-mix(in srgb, var(--fonu-text-muted) 65%, transparent) var(--fonu-bg-muted);
+  scrollbar-color: color-mix(in srgb, var(--havline-text-muted) 65%, transparent) var(--havline-bg-muted);
 }
 
 .nginx-code-editor :deep(.cm-scroller)::-webkit-scrollbar {
@@ -163,12 +163,12 @@ function onUpdate(value: string) {
 }
 
 .nginx-code-editor :deep(.cm-scroller)::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--fonu-text-muted) 30%, transparent);
+  background: color-mix(in srgb, var(--havline-text-muted) 30%, transparent);
   border-radius: 4px;
 }
 
 .nginx-code-editor:hover :deep(.cm-scroller)::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--fonu-text-muted) 55%, transparent);
+  background: color-mix(in srgb, var(--havline-text-muted) 55%, transparent);
 }
 
 .nginx-code-editor--readonly :deep(.cm-cursor) {

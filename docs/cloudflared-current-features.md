@@ -5,19 +5,19 @@
 > 相关文档：
 > - `cloudflared-integration-plan.md`：早期融合方案
 > - `cloudflared-feature-plan.md`：官方与参考项目功能全集，用于查漏
-> - `cloudflared-fonu-fit-plan.md`：Fonu 适配版阶段计划
+> - `cloudflared-havline-fit-plan.md`：Havline 适配版阶段计划
 
 ---
 
 ## 一、模块定位
 
-Cloudflare 隧道在 Fonu 中不是独立的 cloudflared 管理面板，而是公网访问的第二条出口：
+Cloudflare 隧道在 Havline 中不是独立的 cloudflared 管理面板，而是公网访问的第二条出口：
 
 - 本机 Nginx：适合有公网 IP 或已有端口映射的场景。
 - FRP：适合需要 TCP/UDP、自控 VPS 或大流量的场景。
 - Cloudflare 隧道：适合没有公网 IP、主要发布 HTTP/HTTPS Web 服务的场景。
 
-当前模块已经融入 Fonu 的规则、监控、通知、状态页、日志、备份、诊断和升级体系。
+当前模块已经融入 Havline 的规则、监控、通知、状态页、日志、备份、诊断和升级体系。
 
 ---
 
@@ -183,7 +183,7 @@ Cloudflare 隧道在 Fonu 中不是独立的 cloudflared 管理面板，而是�
   - 崩溃后读取日志尾部便于诊断。
 - 开机启动：
   - 全局托管开启时，应用启动会恢复全部隧道。
-  - “随 Fonu 自动启动”开关保留为隧道级选项。
+  - “随 Havline 自动启动”开关保留为隧道级选项。
 - 全局总开关：
   - 开启时启动全部隧道。
   - 关闭时停止全部隧道。
@@ -300,10 +300,10 @@ Cloudflare 隧道在 Fonu 中不是独立的 cloudflared 管理面板，而是�
   <hostname> -> <tunnel-id>.cfargotunnel.com
   ```
 - 开启 Cloudflare 代理（橙云）。
-- 记录 Fonu 创建或接管的 DNS 记录：
+- 记录 Havline 创建或接管的 DNS 记录：
   - `cf_dns_records`
 - 删除域名或移除出口时：
-  - 只删除 Fonu 自己接管的记录。
+  - 只删除 Havline 自己接管的记录。
 - 不覆盖指向其他目标的用户 DNS 记录。
 - 域名从一条隧道迁移到另一条隧道时支持接管迁移。
 
@@ -395,15 +395,15 @@ Cloudflare 隧道在 Fonu 中不是独立的 cloudflared 管理面板，而是�
 已实现：
 
 - 备份内容包含：
-  - `fonu.db`
+  - `havline.db`
   - `certs`
   - `nginx`
   - `cloudflared/tunnels`
 - `cloudflared/tunnels` 包含：
   - `config.yml`
   - `creds.json`
-- 数据库中的 `cf_tunnels`、`cf_settings`、`cf_dns_records` 随 `fonu.db` 恢复。
-- 恢复后仍建议重启 Fonu，由启动流程恢复全部隧道。
+- 数据库中的 `cf_tunnels`、`cf_settings`、`cf_dns_records` 随 `havline.db` 恢复。
+- 恢复后仍建议重启 Havline，由启动流程恢复全部隧道。
 
 ---
 
@@ -436,7 +436,7 @@ Cloudflare 隧道在 Fonu 中不是独立的 cloudflared 管理面板，而是�
 - 本地 `config.yml`。
 - 隧道进程状态。
 - Cloudflare API 与云端配置可访问性。
-- Fonu 接管的 DNS 记录。
+- Havline 接管的 DNS 记录。
 - Cloudflare edge region1。
 - Cloudflare edge region2。
 
@@ -572,7 +572,7 @@ GET    /api/cloudflare/access-status
 
 ### `cf_dns_records`
 
-保存 Fonu 接管的 DNS 记录：
+保存 Havline 接管的 DNS 记录：
 
 - 本地隧道 ID。
 - Zone ID。

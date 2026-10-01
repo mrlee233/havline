@@ -25,7 +25,7 @@ type RouteDriftItem struct {
 	Actual   string `json:"actual,omitempty"`
 }
 
-// RouteDriftReport 部署漂移报告：Expected = 库里启用中的规则域名数，Deployed = VPS 上 fonu-*.conf 数，Loaded = 其中被加载的数
+// RouteDriftReport 部署漂移报告：Expected = 库里启用中的规则域名数，Deployed = VPS 上 havline-*.conf 数，Loaded = 其中被加载的数
 type RouteDriftReport struct {
 	ServerID  int64            `json:"server_id"`
 	Expected  int              `json:"expected"`
@@ -35,7 +35,7 @@ type RouteDriftReport struct {
 	CheckedAt string           `json:"checked_at"`
 }
 
-// RouteDrift 比对「数据库里启用中的公网反代规则」与「VPS 上 fonu-*.conf 的实际状态」。
+// RouteDrift 比对「数据库里启用中的公网反代规则」与「VPS 上 havline-*.conf 的实际状态」。
 // 内容比对只做上流地址（proxy_pass）：配置文件由 agent 渲染，应用侧不重复实现一套渲染器，
 // 因此不做全文 diff，避免两套渲染逻辑漂移带来的误报。
 func (s *Service) RouteDrift(ctx context.Context, serverID int64) (RouteDriftReport, error) {
@@ -113,7 +113,7 @@ func (s *Service) RouteDrift(ctx context.Context, serverID int64) (RouteDriftRep
 		if got != "" && got != normalizeUpstream(want) {
 			report.Items = append(report.Items, RouteDriftItem{
 				Domain: domain, Kind: RouteDriftContentMismatch,
-				Detail:   "VPS 上的上流地址与 Fonu 记录不一致（可能被手工修改过）",
+				Detail:   "VPS 上的上流地址与 Havline 记录不一致（可能被手工修改过）",
 				Expected: want, Actual: got,
 			})
 		}
@@ -125,7 +125,7 @@ func (s *Service) RouteDrift(ctx context.Context, serverID int64) (RouteDriftRep
 		}
 		report.Items = append(report.Items, RouteDriftItem{
 			Domain: domain, Kind: RouteDriftOrphan,
-			Detail: "VPS 上存在该域名配置，但 Fonu 里没有对应规则（手工添加，或已删除规则的残留）",
+			Detail: "VPS 上存在该域名配置，但 Havline 里没有对应规则（手工添加，或已删除规则的残留）",
 		})
 	}
 

@@ -33,7 +33,7 @@
 
 - 手动部署 / 移除单条规则的反代（部署时自动推证书、自动读最新 vhost 端口）；
 - VPS 当前已加载路由展示（`agentStatus.routes`）；
-- 反代文件按 `fonu-<域名>.conf` 写入 Nginx 实际加载目录（`-T` 试探-验证）。
+- 反代文件按 `havline-<域名>.conf` 写入 Nginx 实际加载目录（`-T` 试探-验证）。
 
 ---
 
@@ -103,7 +103,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Host: <域名>" http://127.0.0.1:<vho
 
 ### 8. 部署历史与回滚
 
-每次部署在 agent 侧留 `fonu-<域名>.conf.bak-<时间戳>`（保留最近 N 份），
+每次部署在 agent 侧留 `havline-<域名>.conf.bak-<时间戳>`（保留最近 N 份），
 页面提供「查看历史 / 回滚到此版本」。
 
 - 误操作（比如改坏了 upstream）30 秒恢复；
@@ -112,7 +112,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Host: <域名>" http://127.0.0.1:<vho
 ### 9. 域名健康检查面板
 
 页面顶部一行：每个已部署域名的公网可达性（HTTPS 状态码 + 证书剩余天数），
-由 Fonu 侧定时探测（复用服务端诊断的 TTL 缓存模式）。
+由 Havline 侧定时探测（复用服务端诊断的 TTL 缓存模式）。
 
 - 证书临期/隧道断链主动可见；
 - 成本：中。
@@ -128,7 +128,7 @@ curl -s -o /dev/null -w "%{http_code}" -H "Host: <域名>" http://127.0.0.1:<vho
 
 ### 11. 流量统计接入
 
-frps dashboard 已有连接数/流量数据（Fonu 正在拉取），按域名聚合展示到反代列表，
+frps dashboard 已有连接数/流量数据（Havline 正在拉取），按域名聚合展示到反代列表，
 可见每条反代的实际使用量。
 
 - 成本：中。

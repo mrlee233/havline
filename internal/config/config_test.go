@@ -6,8 +6,8 @@ import (
 )
 
 func TestLoadNginxDefaultPorts(t *testing.T) {
-	t.Setenv("FONU_NGINX_HTTP_PORT", "18080")
-	t.Setenv("FONU_NGINX_HTTPS_PORT", "9443")
+	t.Setenv("HAVLINE_NGINX_HTTP_PORT", "18080")
+	t.Setenv("HAVLINE_NGINX_HTTPS_PORT", "9443")
 
 	cfg := Load()
 	if cfg.NginxDefaultHTTPPort != 18080 {
@@ -25,8 +25,8 @@ func TestLoadNginxDefaultPorts(t *testing.T) {
 }
 
 func TestLoadNginxDefaultPortsFallback(t *testing.T) {
-	os.Unsetenv("FONU_NGINX_HTTP_PORT")
-	os.Unsetenv("FONU_NGINX_HTTPS_PORT")
+	os.Unsetenv("HAVLINE_NGINX_HTTP_PORT")
+	os.Unsetenv("HAVLINE_NGINX_HTTPS_PORT")
 
 	cfg := Load()
 	if cfg.NginxDefaultHTTPPort != 80 || cfg.NginxDefaultHTTPSPort != 443 {

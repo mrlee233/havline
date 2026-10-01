@@ -6,11 +6,11 @@
 
       <div class="auth-brand">
 
-        <img class="auth-brand__logo" :src="logoImg" alt="Fonu" />
+        <img class="auth-brand__logo" :src="logoImg" alt="Havline" />
 
         <div>
 
-          <h1>Fonu</h1>
+          <h1>Havline</h1>
 
           <p>让 NAS 访问更简单</p>
 
@@ -57,7 +57,7 @@ import { useRouter } from 'vue-router'
 import { NButton, NForm, NFormItem, NInput, useMessage } from 'naive-ui'
 
 import { api } from '../api/client'
-import logoImg from '../assets/brand/logo.png'
+import logoImg from '../assets/brand/havline-logo.svg'
 
 
 
@@ -111,9 +111,9 @@ async function submit() {
 
   place-items: center;
 
-  padding: var(--fonu-space-5);
+  padding: var(--havline-space-5);
 
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 
 }
 
@@ -125,15 +125,15 @@ async function submit() {
 
   max-width: 420px;
 
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
 
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
 
-  border-radius: var(--fonu-radius);
+  border-radius: var(--havline-radius);
 
-  box-shadow: var(--fonu-shadow-md);
+  box-shadow: var(--havline-shadow-md);
 
-  padding: var(--fonu-space-6) var(--fonu-space-5);
+  padding: var(--havline-space-6) var(--havline-space-5);
 
 }
 
@@ -145,9 +145,9 @@ async function submit() {
 
   align-items: center;
 
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
 
-  margin-bottom: var(--fonu-space-5);
+  margin-bottom: var(--havline-space-5);
 
 }
 
@@ -187,7 +187,7 @@ async function submit() {
 
   font-size: 13px;
 
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 
 }
 
@@ -195,23 +195,22 @@ async function submit() {
 
 .auth-title {
 
-  margin: 0 0 var(--fonu-space-5);
+  margin: 0 0 var(--havline-space-5);
 
   font-size: 16px;
 
   font-weight: 600;
 
-  color: var(--fonu-text);
+  color: var(--havline-text);
 
 }
 
 .auth-hint {
-  margin: var(--fonu-space-4) 0 0;
+  margin: var(--havline-space-4) 0 0;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 </style>
-
 

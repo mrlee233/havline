@@ -100,14 +100,14 @@ export const NOTIFY_EVENT_GROUPS: NotifyEventGroup[] = [
       {
         key: 'on_agent_unreachable',
         label: '公网 agent 不可达',
-        hint: 'VPS 上的 fonu-agent 连续无响应（重启后没起来最常见），恢复时再通知一次',
+        hint: 'VPS 上的 havline-agent 连续无响应（重启后没起来最常见），恢复时再通知一次',
         hasThreshold: true,
         thresholdKey: 'agent_fail',
       },
       {
         key: 'on_route_drift',
         label: '配置漂移',
-        hint: 'VPS 上的 vhost 与 Fonu 记录不一致（被手工改过或重装后未重部署），同一台按提醒间隔重复提醒',
+        hint: 'VPS 上的 vhost 与 Havline 记录不一致（被手工改过或重装后未重部署），同一台按提醒间隔重复提醒',
         hasThreshold: true,
         thresholdKey: 'drift_cooldown',
       },

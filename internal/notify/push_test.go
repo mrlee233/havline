@@ -120,8 +120,8 @@ func TestSendDingtalkUsesAccessTokenAndKeyword(t *testing.T) {
 	if path != "/robot/send" || query != "access_token=tok" {
 		t.Fatalf("unexpected endpoint: %s?%s", path, query)
 	}
-	// 「自定义关键词」安全设置靠正文里的 Fonu 命中（PushTitle 前面还有事件图标）
-	if !strings.Contains(body, "Fonu · ") || !strings.Contains(body, "标题") {
+	// 「自定义关键词」安全设置靠正文里的 Havline 命中（PushTitle 前面还有事件图标）
+	if !strings.Contains(body, "Havline · ") || !strings.Contains(body, "标题") {
 		t.Fatalf("missing keyword prefix: %s", body)
 	}
 }

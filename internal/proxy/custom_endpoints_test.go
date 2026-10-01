@@ -10,7 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/fonu/fonu/internal/db"
+	"github.com/havline/havline/internal/db"
 )
 
 func newTestStore(t *testing.T) (*Store, *sql.DB) {

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Fonu 一键升级（适用于「只有编排文件」的部署目录，即 docker-compose.hub.yml 那种）
+# Havline 一键升级（适用于「只有编排文件」的部署目录，即 docker-compose.hub.yml 那种）
 #
 #   sudo bash upgrade-hub.sh
 #
 # 可选环境变量：
 #   COMPOSE_FILE=docker-compose.hub.yml   # 要用的编排文件
-#   REPO=http://.../mrlee/-Fonu.git       # 源码仓库
+#   REPO=http://.../mrlee/Havline.git       # 源码仓库
 #   BRANCH=main                           # 分支
 #
 # 它做四件事：
@@ -16,14 +16,14 @@
 #   4) 打印「回滚到上一个 tag」的命令
 set -euo pipefail
 
-REPO="${REPO:-http://45.207.223.190:10082/mrlee/-Fonu.git}"
+REPO="${REPO:-http://45.207.223.190:10082/mrlee/Havline.git}"
 BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.hub.yml}"
-APP_CONTAINER="${APP_CONTAINER:-fonu}"
+APP_CONTAINER="${APP_CONTAINER:-havline}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:6893/api/version}"
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "没有找到 docker：这个脚本要在运行 Fonu 容器的那台机器上执行" >&2
+  echo "没有找到 docker：这个脚本要在运行 Havline 容器的那台机器上执行" >&2
   exit 1
 fi
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -50,8 +50,8 @@ if [ -z "$version" ]; then
   echo "==> 未能从仓库读到 VERSION（可能没装 git），改用时间戳 tag：$version"
 fi
 
-export FONU_VERSION="$version"
-echo "==> 构建并重建：fonu:$version（构建上下文是 Git 地址，会自动拉最新 $BRANCH；有缓存时只重编改动的部分）"
+export HAVLINE_VERSION="$version"
+echo "==> 构建并重建：havline:$version（构建上下文是 Git 地址，会自动拉最新 $BRANCH；有缓存时只重编改动的部分）"
 docker compose -f "$COMPOSE_FILE" up -d --build
 
 echo '==> 等待服务就绪…'
@@ -60,7 +60,7 @@ for _ in $(seq 1 30); do
     echo "==> 升级完成"
     echo "    当前版本：$(curl -fsS "$HEALTH_URL" 2>/dev/null)"
     if [ -n "$previous_image" ]; then
-      echo "    回滚：FONU_VERSION=${previous_image#fonu:} docker compose -f $COMPOSE_FILE up -d"
+      echo "    回滚：HAVLINE_VERSION=${previous_image#havline:} docker compose -f $COMPOSE_FILE up -d"
     fi
     echo "    日志：docker logs --tail 50 $APP_CONTAINER"
     exit 0
@@ -70,6 +70,6 @@ done
 
 echo "服务在 60 秒内没有响应 $HEALTH_URL，请看：docker logs --tail 100 $APP_CONTAINER" >&2
 if [ -n "$previous_image" ]; then
-  echo "如需回滚：FONU_VERSION=${previous_image#fonu:} docker compose -f $COMPOSE_FILE up -d" >&2
+  echo "如需回滚：HAVLINE_VERSION=${previous_image#havline:} docker compose -f $COMPOSE_FILE up -d" >&2
 fi
 exit 1

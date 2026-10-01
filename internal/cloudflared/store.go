@@ -112,7 +112,7 @@ type settingsRow struct {
 	Network     NetworkSettings
 }
 
-// DNSRecord 是 Fonu 自动创建或接管的 Cloudflare DNS 记录。
+// DNSRecord 是 Havline 自动创建或接管的 Cloudflare DNS 记录。
 type DNSRecord struct {
 	ID        int64  `json:"id"`
 	TunnelID  int64  `json:"tunnel_id"`

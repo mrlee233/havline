@@ -114,7 +114,7 @@ func sendWecom(ctx context.Context, client *http.Client, cfg RuntimeConfig, titl
 }
 
 // 钉钉群机器人：POST /robot/send?access_token=<key>。
-// 正文固定带 “Fonu · ” 前缀，机器人用「自定义关键词 = Fonu」的安全设置即可命中。
+// 正文固定带 “Havline · ” 前缀，机器人用「自定义关键词 = Havline」的安全设置即可命中。
 func sendDingtalk(ctx context.Context, client *http.Client, cfg RuntimeConfig, title, message string) error {
 	key := webhookSecret(cfg)
 	if key == "" {
@@ -124,7 +124,7 @@ func sendDingtalk(ctx context.Context, client *http.Client, cfg RuntimeConfig, t
 	if server == "" {
 		server = DefaultDingtalkServer
 	}
-	titled := "Fonu · " + title
+	titled := "Havline · " + title
 	endpoint := joinURL(server, "robot", "send") + "?access_token=" + url.QueryEscape(key)
 	return postJSON(ctx, client, endpoint, map[string]any{
 		"msgtype":  "markdown",

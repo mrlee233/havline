@@ -36,28 +36,28 @@ const label = computed(() => props.text ?? statusLabel(props.value))
 .status-badge.pill {
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .status-badge.pill.success {
   background: rgba(16, 185, 129, 0.12);
-  color: var(--fonu-success);
+  color: var(--havline-success);
 }
 
 .status-badge.pill.warning {
   background: rgba(245, 158, 11, 0.12);
-  color: var(--fonu-warning);
+  color: var(--havline-warning);
 }
 
 .status-badge.pill.error {
   background: rgba(239, 68, 68, 0.12);
-  color: var(--fonu-error);
+  color: var(--havline-error);
 }
 
 .status-badge.pill.disabled,
 .status-badge.pill.unknown {
-  background: var(--fonu-bg-muted);
-  color: var(--fonu-text-secondary);
+  background: var(--havline-bg-muted);
+  color: var(--havline-text-secondary);
 }
 
 .dot {
@@ -67,11 +67,11 @@ const label = computed(() => props.text ?? statusLabel(props.value))
   flex-shrink: 0;
 }
 
-.success .dot { background: var(--fonu-success); }
-.warning .dot { background: var(--fonu-warning); }
-.error .dot { background: var(--fonu-error); }
-.disabled .dot { background: var(--fonu-disabled); }
-.unknown .dot { background: var(--fonu-text-muted); }
+.success .dot { background: var(--havline-success); }
+.warning .dot { background: var(--havline-warning); }
+.error .dot { background: var(--havline-error); }
+.disabled .dot { background: var(--havline-disabled); }
+.unknown .dot { background: var(--havline-text-muted); }
 
 .success .label { color: inherit; }
 .warning .label { color: inherit; }
@@ -79,9 +79,9 @@ const label = computed(() => props.text ?? statusLabel(props.value))
 .disabled .label { color: inherit; }
 .unknown .label { color: inherit; }
 
-.status-badge:not(.pill) .success .label { color: var(--fonu-success); }
-.status-badge:not(.pill) .warning .label { color: var(--fonu-warning); }
-.status-badge:not(.pill) .error .label { color: var(--fonu-error); }
+.status-badge:not(.pill) .success .label { color: var(--havline-success); }
+.status-badge:not(.pill) .warning .label { color: var(--havline-warning); }
+.status-badge:not(.pill) .error .label { color: var(--havline-error); }
 .status-badge:not(.pill) .disabled .label,
-.status-badge:not(.pill) .unknown .label { color: var(--fonu-text-secondary); }
+.status-badge:not(.pill) .unknown .label { color: var(--havline-text-secondary); }
 </style>

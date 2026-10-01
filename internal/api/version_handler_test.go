@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/version"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/version"
 )
 
 func TestVersionEndpoint(t *testing.T) {

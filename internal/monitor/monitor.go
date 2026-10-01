@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/metrics"
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/settings"
-	"github.com/fonu/fonu/internal/sysinfo"
+	"github.com/havline/havline/internal/metrics"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/settings"
+	"github.com/havline/havline/internal/sysinfo"
 )
 
 // RouteStatus 是巡检关心的隧道与健康状态。
@@ -99,7 +99,7 @@ type ServerStatus struct {
 	Detail          string
 }
 
-// AgentStatus 是某台服务端上 fonu-agent 的可达性；没配 agent 的服务端不会出现在这里。
+// AgentStatus 是某台服务端上 havline-agent 的可达性；没配 agent 的服务端不会出现在这里。
 type AgentStatus struct {
 	ID        int64
 	Name      string
@@ -586,15 +586,15 @@ func (c *Checker) checkAgents(ctx context.Context) {
 		switch event {
 		case failureEventDown:
 			c.notify.Alert(ctx, notify.EventAgentUnreachable, "公网 agent 不可达",
-				fmt.Sprintf("%s 的 fonu-agent 连续 %d 次无响应：%s", label, limit, detailOr(agent.Detail)))
+				fmt.Sprintf("%s 的 havline-agent 连续 %d 次无响应：%s", label, limit, detailOr(agent.Detail)))
 		case failureEventRecovered:
 			c.notify.Alert(ctx, notify.EventAgentUnreachable, "公网 agent 已恢复",
-				fmt.Sprintf("%s 的 fonu-agent 已恢复响应", label))
+				fmt.Sprintf("%s 的 havline-agent 已恢复响应", label))
 		}
 	}
 }
 
-// checkDrift 配置漂移：VPS 上的 vhost 与 Fonu 记录不一致（被手工改过、或 agent 重装后没重部署）。
+// checkDrift 配置漂移：VPS 上的 vhost 与 Havline 记录不一致（被手工改过、或 agent 重装后没重部署）。
 // 它不是「连续 N 次」型故障，因此用冷却时间限流：首次发现即报，之后每 cooldown 提醒一次，漂移清空时补一条恢复。
 func (c *Checker) checkDrift(ctx context.Context) {
 	if c.source == nil {
@@ -629,7 +629,7 @@ func (c *Checker) checkDrift(ctx context.Context) {
 		if report.Count == 0 {
 			if alerted {
 				c.notify.Alert(ctx, notify.EventRouteDrift, "配置漂移已消除",
-					fmt.Sprintf("%s 上的 vhost 已与 Fonu 记录一致", label))
+					fmt.Sprintf("%s 上的 vhost 已与 Havline 记录一致", label))
 			}
 			continue
 		}
@@ -641,7 +641,7 @@ func (c *Checker) checkDrift(ctx context.Context) {
 		c.driftNotified[report.ID] = now
 		c.mu.Unlock()
 		c.notify.Alert(ctx, notify.EventRouteDrift, "公网反代配置漂移",
-			fmt.Sprintf("%s 有 %d 项与 Fonu 记录不一致：%s", label, report.Count, strings.Join(report.Items, "、")))
+			fmt.Sprintf("%s 有 %d 项与 Havline 记录不一致：%s", label, report.Count, strings.Join(report.Items, "、")))
 	}
 }
 

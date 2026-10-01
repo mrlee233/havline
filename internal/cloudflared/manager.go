@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/config"
 )
 
 var metricsPortPattern = regexp.MustCompile(`(?i)starting metrics server on 127\.0\.0\.1:(\d+)/metrics`)

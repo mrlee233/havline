@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/validate"
 )
 
 const (

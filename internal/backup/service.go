@@ -35,7 +35,7 @@ func (s *Service) Export(ctx context.Context) (string, error) {
 		return "", err
 	}
 	// CreateTemp 保证同一秒内多次导出不会覆盖已有备份（文件名带随机后缀）
-	file, err := os.CreateTemp(s.backupsDir(), fmt.Sprintf("fonu-backup-%s-*.tar.gz", time.Now().Format(backupTimeFmt)))
+	file, err := os.CreateTemp(s.backupsDir(), fmt.Sprintf("havline-backup-%s-*.tar.gz", time.Now().Format(backupTimeFmt)))
 	if err != nil {
 		return "", err
 	}
@@ -59,7 +59,7 @@ func (s *Service) writeArchive(ctx context.Context, file *os.File, outPath strin
 
 	gw := gzip.NewWriter(file)
 	tw := tar.NewWriter(gw)
-	for _, entry := range []string{"fonu.db", "certs", "nginx", "cloudflared/tunnels"} {
+	for _, entry := range []string{"havline.db", "certs", "nginx", "cloudflared/tunnels"} {
 		if err := addToArchive(ctx, tw, s.dataDir, entry); err != nil {
 			discard()
 			return err

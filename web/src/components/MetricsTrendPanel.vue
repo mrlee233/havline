@@ -131,11 +131,11 @@ watch(() => props.hours, load)
 </script>
 
 <style scoped>
-.trend-panel { display: flex; flex-direction: column; gap: var(--fonu-space-4); }
+.trend-panel { display: flex; flex-direction: column; gap: var(--havline-space-4); }
 .trend-panel--loading { opacity: 0.6; }
 /* 每块自带小标题，卡片被同行撑高时也不会显得内容散掉 */
 .trend-panel__section { display: flex; flex-direction: column; gap: 6px; }
-.trend-panel__label { font-size: 12px; font-weight: 600; color: var(--fonu-text-secondary); }
-.trend-panel__hint { margin: 0; font-size: 12.5px; color: var(--fonu-text-muted); }
-.trend-panel__hint--error { color: var(--fonu-error); }
+.trend-panel__label { font-size: 12px; font-weight: 600; color: var(--havline-text-secondary); }
+.trend-panel__hint { margin: 0; font-size: 12.5px; color: var(--havline-text-muted); }
+.trend-panel__hint--error { color: var(--havline-error); }
 </style>

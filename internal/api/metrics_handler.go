@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fonu/fonu/internal/metrics"
+	"github.com/havline/havline/internal/metrics"
 )
 
 type MetricsHandler struct {

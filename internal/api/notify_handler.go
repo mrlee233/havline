@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/fonu/fonu/internal/notify"
+	"github.com/havline/havline/internal/notify"
 )
 
 type NotifyHandler struct {

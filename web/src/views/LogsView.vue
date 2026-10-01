@@ -1,12 +1,12 @@
 <template>
   <PageHeader
     title="日志中心"
-    description="系统日志记录 Fonu 全部运行输出；访问日志与 Nginx 错误日志来自反向代理"
+    description="系统日志记录 Havline 全部运行输出；访问日志与 Nginx 错误日志来自反向代理"
   />
 
   <LoadError v-if="pageError" :message="pageError" @retry="loadAll" />
 
-  <FonuCard v-else flush class="logs-card">
+  <HavlineCard v-else flush class="logs-card">
     <n-tabs v-model:value="tab" type="line" animated class="logs-tabs">
       <n-tab-pane name="system" tab="系统日志">
         <LogToolbar
@@ -15,7 +15,7 @@
           :show-level="true"
           @refresh="loadSystemLogs"
         />
-        <p class="tab-hint">Fonu 全部运行日志（API、DDNS、证书、通知、Nginx 重载等），不含 Nginx 访问与错误文件。</p>
+        <p class="tab-hint">Havline 全部运行日志（API、DDNS、证书、通知、Nginx 重载等），不含 Nginx 访问与错误文件。</p>
         <n-data-table
           v-if="filteredSystemLogs.length > 0"
           class="log-table"
@@ -150,7 +150,7 @@
         <EmptyState
           v-if="!loadingAccess && accessLogs.length === 0"
           title="暂无访问日志"
-          description="此处记录经 Nginx 反向代理的访问（非 Fonu 管理界面本身）。请通过代理域名访问后刷新。"
+          description="此处记录经 Nginx 反向代理的访问（非 Havline 管理界面本身）。请通过代理域名访问后刷新。"
         />
       </n-tab-pane>
 
@@ -178,7 +178,7 @@
         />
       </n-tab-pane>
     </n-tabs>
-  </FonuCard>
+  </HavlineCard>
 </template>
 
 <script setup lang="ts">
@@ -200,7 +200,7 @@ import { api, asList } from '../api/client'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type { AccessLogEntry, CfTunnel, ProxyRule, SystemLogEntry } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import {
@@ -863,7 +863,7 @@ async function loadAll() {
   try {
     await Promise.all([loadAccess(), loadErrorLogs(), loadSystemLogs(), loadFrpLogs(), loadCfTunnels()])
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    pageError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
   }
 }
 
@@ -909,7 +909,7 @@ onMounted(() => {
 
 <style scoped>
 .logs-card :deep(.n-tabs-nav) {
-  padding: var(--fonu-space-4) var(--fonu-space-5) 0;
+  padding: var(--havline-space-4) var(--havline-space-5) 0;
 }
 
 .logs-card :deep(.n-tabs-tab) {
@@ -917,26 +917,26 @@ onMounted(() => {
 }
 
 .logs-card :deep(.n-tab-pane) {
-  padding-top: var(--fonu-space-2);
+  padding-top: var(--havline-space-2);
 }
 
 .tab-hint {
-  margin: 0 var(--fonu-space-5) var(--fonu-space-3);
+  margin: 0 var(--havline-space-5) var(--havline-space-3);
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .log-pagination {
   display: flex;
   justify-content: flex-end;
-  padding: var(--fonu-space-4) var(--fonu-space-5);
-  border-top: 1px solid var(--fonu-border);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  border-top: 1px solid var(--havline-border);
 }
 
 .logs-card :deep(.log-table .n-data-table-th) {
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .logs-card :deep(.log-table .n-data-table-base-table) {
@@ -962,12 +962,12 @@ onMounted(() => {
 }
 
 .logs-card :deep(.log-table .n-data-table-tr.log-row:hover .n-data-table-td) {
-  background: color-mix(in srgb, var(--fonu-brand) 5%, var(--fonu-surface));
+  background: color-mix(in srgb, var(--havline-brand) 5%, var(--havline-surface));
 }
 
 .log-time {
   white-space: nowrap;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
@@ -976,7 +976,7 @@ onMounted(() => {
 }
 
 .log-path {
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .log-message {
@@ -984,7 +984,7 @@ onMounted(() => {
 }
 
 .mono {
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   font-size: 12px;
 }
 
@@ -1009,18 +1009,18 @@ onMounted(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: var(--fonu-space-3);
-  margin-bottom: var(--fonu-space-2);
+  gap: var(--havline-space-3);
+  margin-bottom: var(--havline-space-2);
 }
 
 .cf-log-pre {
   max-height: 620px;
-  margin: 0 var(--fonu-space-5);
-  padding: var(--fonu-space-4);
+  margin: 0 var(--havline-space-5);
+  padding: var(--havline-space-4);
   overflow: auto;
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
   font-size: 12px;
   line-height: 1.6;
   white-space: pre-wrap;

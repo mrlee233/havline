@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/settings"
 )
 
 // AutoInterval 自动备份间隔。scheduler 启动时会先跑一轮，靠「最新备份是否还在间隔内」

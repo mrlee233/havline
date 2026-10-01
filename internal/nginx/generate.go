@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/nginxtmpl"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/nginxtmpl"
+	"github.com/havline/havline/internal/proxy"
 )
 
 func Generate(cfg config.Config, rules []proxy.Rule, certs []CertSource, opts GenerateOptions) (string, error) {
@@ -26,8 +26,8 @@ http {
     include       ` + absNginxPath(cfg.NginxMimeTypes) + `;
     default_type  application/octet-stream;
 
-    log_format fonu_access '$time_iso8601 $host $server_port $request_method $request_uri $status $request_time $remote_addr $upstream_addr $request_length $bytes_sent';
-    access_log ` + absNginxPath(filepath.Join(cfg.LogsDir(), "access.log")) + ` fonu_access;
+    log_format havline_access '$time_iso8601 $host $server_port $request_method $request_uri $status $request_time $remote_addr $upstream_addr $request_length $bytes_sent';
+    access_log ` + absNginxPath(filepath.Join(cfg.LogsDir(), "access.log")) + ` havline_access;
 
     sendfile on;
     keepalive_timeout 65;

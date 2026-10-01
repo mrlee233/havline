@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/fsutil"
-	"github.com/fonu/fonu/internal/secret"
+	"github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/fsutil"
+	"github.com/havline/havline/internal/secret"
 )
 
 // maskedToken 是敏感凭据的统一回显掩码：API 永不返回明文；保存时收到掩码一律视为保留旧值
@@ -29,7 +29,7 @@ type Service struct {
 	secretBox *secret.Box
 	manager   *Manager
 	logger    *slog.Logger
-	certStore *certificate.Store // 用于 HTTPS 规则部署时把 Fonu 本地证书推送到公网 agent
+	certStore *certificate.Store // 用于 HTTPS 规则部署时把 Havline 本地证书推送到公网 agent
 
 	managersMu sync.RWMutex
 	managers   map[int64]*Manager
@@ -790,7 +790,7 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 		_ = (AgentInstaller{SSH: installer}).RestorePreviousConfig(ctx)
 		return Server{}, err
 	}
-	// 旧版升级流程可能残留 fonuagent-https.conf，这里通过隧道顺手关闭，避免 7443 继续暴露。
+	// 旧版升级流程可能残留 havlineagent-https.conf，这里通过隧道顺手关闭，避免 7443 继续暴露。
 	_ = client.DisableHTTPS(ctx)
 	s.invalidateAgentClient(serverID)
 	return updated, nil
@@ -930,7 +930,7 @@ func (s *Service) StartAgentTunnels(ctx context.Context) {
 	}
 }
 
-// cleanupLegacyAgentHTTPS 清理隧道模式下可能残留的 fonuagent-https.conf，避免 7443 继续暴露。
+// cleanupLegacyAgentHTTPS 清理隧道模式下可能残留的 havlineagent-https.conf，避免 7443 继续暴露。
 func (s *Service) cleanupLegacyAgentHTTPS(ctx context.Context, serverID int64) {
 	client, ok := s.agentClient(ctx, serverID)
 	if !ok {
@@ -1655,7 +1655,7 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 			} else {
 				item.TunnelDetail = dashboardDiag
 			}
-			// ④ 内网服务探活：Fonu 与服务同在内网，直接 TCP 拨测
+			// ④ 内网服务探活：Havline 与服务同在内网，直接 TCP 拨测
 			conn, serr2 := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", proxy.LocalIP, proxy.LocalPort), 2*time.Second)
 			if serr2 == nil {
 				_ = conn.Close()
@@ -1774,7 +1774,7 @@ func (s *Service) DeployAgentRoute(ctx context.Context, proxyID int64) error {
 	return nil
 }
 
-// pushAgentCertificate 从 Fonu 本地证书存储读取域名对应证书并推送到公网 agent；
+// pushAgentCertificate 从 Havline 本地证书存储读取域名对应证书并推送到公网 agent；
 // 支持精确域名与通配符（*.example.com）匹配。
 func (s *Service) pushAgentCertificate(ctx context.Context, client *AgentClient, domain string) error {
 	if s.certStore == nil {
@@ -1807,7 +1807,7 @@ func (s *Service) pushAgentCertificate(ctx context.Context, client *AgentClient,
 		}
 		return client.PushCertificate(ctx, domain, string(certPEM), string(keyPEM))
 	}
-	return fmt.Errorf("Fonu 本地没有域名 %s 的证书；请先在「证书」页申请，或改用 HTTP 类型规则", domain)
+	return fmt.Errorf("Havline 本地没有域名 %s 的证书；请先在「证书」页申请，或改用 HTTP 类型规则", domain)
 }
 
 // RemoveAgentRoute 手动移除单条穿透规则对应的公网 Nginx 反代。
@@ -2356,7 +2356,7 @@ func (s *Service) saveOIDCSecret(ctx context.Context, serverID int64, in ServerI
 	return s.store.SetOIDCSecret(ctx, serverID, value)
 }
 
-// saveDashboardPassword 保存 frps 管理接口密码（与 frpc Token 无关，仅用于 Fonu 拉取流量信息）。
+// saveDashboardPassword 保存 frps 管理接口密码（与 frpc Token 无关，仅用于 Havline 拉取流量信息）。
 func (s *Service) saveDashboardPassword(ctx context.Context, serverID int64, in ServerInput) error {
 	if in.ClearDashboardPassword {
 		return s.store.SetDashboardPassword(ctx, serverID, "")

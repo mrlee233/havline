@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/fonu/fonu/internal/service"
+	"github.com/havline/havline/internal/service"
 )
 
 type NginxHandler struct {

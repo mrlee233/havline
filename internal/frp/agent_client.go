@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// AgentClient 调用公网 VPS 上的 fonu-agent。凭据由调用方解密后只在内存中使用。
+// AgentClient 调用公网 VPS 上的 havline-agent。凭据由调用方解密后只在内存中使用。
 type AgentClient struct {
 	baseURL string
 	token   string

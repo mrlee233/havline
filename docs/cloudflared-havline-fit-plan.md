@@ -1,22 +1,22 @@
-# Cloudflare 隧道：Fonu 适配版功能计划
+# Cloudflare 隧道：Havline 适配版功能计划
 
 > 日期：2026-09-30
-> 定位：`cloudflared-feature-plan.md` 是「官方 + 参考项目的功能全集」；本文是**按 Fonu 产品定位筛选后的适配版计划**，实施以本文为准。
-> 核心原则：Fonu 不是 cloudflared 管理面板，而是「NAS / 家庭服务器的公网访问管理面板」。Cloudflare 隧道只是它的第二条出口。
+> 定位：`cloudflared-feature-plan.md` 是「官方 + 参考项目的功能全集」；本文是**按 Havline 产品定位筛选后的适配版计划**，实施以本文为准。
+> 核心原则：Havline 不是 cloudflared 管理面板，而是「NAS / 家庭服务器的公网访问管理面板」。Cloudflare 隧道只是它的第二条出口。
 
 ---
 
-## 一、先明确 Fonu 是什么
+## 一、先明确 Havline 是什么
 
 ### 1.1 产品定位
 
-Fonu 面对的是家庭 NAS、小主机、家用服务器的用户，核心价值是：
+Havline 面对的是家庭 NAS、小主机、家用服务器的用户，核心价值是：
 
 - 用域名访问内网服务，而不是记 IP 和端口；
 - 自动处理证书、反代、穿透、DDNS；
 - 尽量少配置、少暴露、少维护。
 
-Fonu 已经有三条主线：
+Havline 已经有三条主线：
 
 1. **反向代理**：域名 → 本机 Nginx → 内网服务；
 2. **FRP 穿透**：本机 frpc → VPS frps → 域名；
@@ -30,7 +30,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 1. **CF 隧道是第二条出口，不是替代 FRP**：TCP/UDP、自主可控、大流量仍走 FRP。
 2. **规则同源**：用户维护的是「服务发布规则」，不是「隧道 ingress」。CF 只是一个出口选项。
-3. **融入 Fonu 体系**：监控、通知、状态页、日志、备份、升级、审计都复用现有模块，不另造一套面板。
+3. **融入 Havline 体系**：监控、通知、状态页、日志、备份、升级、审计都复用现有模块，不另造一套面板。
 
 ---
 
@@ -54,45 +54,45 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 ## 三、借鉴与不借鉴
 
-参考项目 `Tunnel-Cloudflared-Manager 1.0.1` 是一个独立的 cloudflared 面板。以下判断按「是否符合 Fonu 产品形态」给出：
+参考项目 `Tunnel-Cloudflared-Manager 1.0.1` 是一个独立的 cloudflared 面板。以下判断按「是否符合 Havline 产品形态」给出：
 
 ### 3.1 值得借鉴
 
-| 参考项目做法 | Fonu 该怎么用 |
+| 参考项目做法 | Havline 该怎么用 |
 | --- | --- |
 | token 解码成本地凭据 | 已用 Account ID + API Token 替代；保留解码能力用于导入 |
 | metrics 端口从日志发现 | 已实现，继续沿用 |
 | ingress 三条不变式 | 已实现，继续沿用 |
 | 云端 / 本地配置互相同步 | 值得做，但要简化为「diff → 拉取或覆盖」 |
-| 端点级增删改 | 值得做，但必须挂在 Fonu 的「服务发布规则」下 |
+| 端点级增删改 | 值得做，但必须挂在 Havline 的「服务发布规则」下 |
 | 快速隧道 | 只做「临时演示」，不做正式功能 |
-| 网络诊断 | 值得做，做成 Fonu 的一键诊断 |
-| 镜像与下载进度 | 值得做，但复用 Fonu 现有镜像表，不做用户自定义镜像管理 |
+| 网络诊断 | 值得做，做成 Havline 的一键诊断 |
+| 镜像与下载进度 | 值得做，但复用 Havline 现有镜像表，不做用户自定义镜像管理 |
 | Windows 隐藏控制台 | 已实现，继续沿用 |
 
 ### 3.2 不借鉴
 
 | 参考项目做法 | 不借鉴的理由 |
 | --- | --- |
-| 自带 JWT + 账号体系 | Fonu 已有会话 + API Token，重复建设 |
-| 独立主题、多语言 | 与 Fonu 全局设置重复 |
-| 多账号 cert.pem 登录 | 与 Fonu 的 Account ID + API Token 模型冲突；远期若有需求再评估 |
+| 自带 JWT + 账号体系 | Havline 已有会话 + API Token，重复建设 |
+| 独立主题、多语言 | 与 Havline 全局设置重复 |
+| 多账号 cert.pem 登录 | 与 Havline 的 Account ID + API Token 模型冲突；远期若有需求再评估 |
 | 私有网络 / WARP routing / virtual network | 面向企业 Zero Trust，NAS 用户不需要 |
-| Kubernetes / Ansible / Terraform / 云厂商部署指南 | 不是 Fonu 的交付形态 |
+| Kubernetes / Ansible / Terraform / 云厂商部署指南 | 不是 Havline 的交付形态 |
 | 负载均衡 | 家用单机场景不需要 |
-| Workers VPC / Hyperdrive / Spectrum / Keyless SSL | 超出 Fonu 定位 |
-| WebSocket 实时日志 | Fonu 已有 SSE 日志模式，不为 CF 单独引入 WSS |
-| 自定义镜像管理（增删改测） | Fonu 只需内置镜像表 + 自定义 URL，不需要用户维护镜像源 |
-| 独立 systemd / Windows service 安装 | Fonu 自己托管进程，不接管外部服务 |
+| Workers VPC / Hyperdrive / Spectrum / Keyless SSL | 超出 Havline 定位 |
+| WebSocket 实时日志 | Havline 已有 SSE 日志模式，不为 CF 单独引入 WSS |
+| 自定义镜像管理（增删改测） | Havline 只需内置镜像表 + 自定义 URL，不需要用户维护镜像源 |
+| 独立 systemd / Windows service 安装 | Havline 自己托管进程，不接管外部服务 |
 | 快速隧道作为正式功能 | 官方明确不保证 SLA，只做演示入口 |
 
 ---
 
-## 四、符合 Fonu 的功能全景
+## 四、符合 Havline 的功能全景
 
 按「用户价值」而不是「参考项目有什么」重新分组。
 
-### 4.1 出口抽象（Fonu 的核心差异化）
+### 4.1 出口抽象（Havline 的核心差异化）
 
 **F-1 服务发布规则增加「出口」字段**
 
@@ -111,7 +111,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 - 出口支持多选（FRP + Cloudflare），用于灰度或双保险。
 - 验收：同一域名可同时存在 FRP 与 CF 入口，互不影响。
 
-### 4.2 自动化（延续 Fonu「自动为主」）
+### 4.2 自动化（延续 Havline「自动为主」）
 
 **F-4 一次配置，后续全自动**（大部分已完成）
 
@@ -134,14 +134,14 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 - 进程退出自动重启；
 - `/ready` 与 `ha_connections` 判活；
-- 连续失败进入 Fonu 告警；恢复后发通知。
+- 连续失败进入 Havline 告警；恢复后发通知。
 
-### 4.3 融入 Fonu 现有体系
+### 4.3 融入 Havline 现有体系
 
 **F-8 监控与可用率**
 
 - 新增 cloudflared 的 `monitor.Source`；
-- 隧道健康进入 Fonu 现有可用率与历史指标。
+- 隧道健康进入 Havline 现有可用率与历史指标。
 
 **F-9 通知**
 
@@ -155,7 +155,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 **F-11 日志中心**
 
-- CF 隧道日志进入 Fonu 日志页；
+- CF 隧道日志进入 Havline 日志页；
 - 复用 SSE 增量推送，不单独做 WebSocket。
 
 **F-12 仪表盘**
@@ -164,19 +164,19 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 **F-13 备份与迁移**
 
-- `cf_tunnels` 与凭据纳入 Fonu 备份/恢复流程；
+- `cf_tunnels` 与凭据纳入 Havline 备份/恢复流程；
 - 恢复后自动重启隧道。
 
 **F-14 一键升级与版本策略**
 
-- cloudflared 版本跟随 Fonu 升级流程；
+- cloudflared 版本跟随 Havline 升级流程；
 - 提供「检查更新 / 更新 cloudflared / 回滚」；
 - 不要求用户手工替换二进制。
 
 **F-15 审计**
 
 - 记录谁在何时修改了服务发布规则、出口、CF 凭据、全局开关；
-- 复用 Fonu 的日志/审计基础设施。
+- 复用 Havline 的日志/审计基础设施。
 
 ### 4.4 NAS 场景体验
 
@@ -198,13 +198,13 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 **F-19 证书提示**
 
 - 使用 CF 出口时，CF 边缘自动提供 HTTPS；
-- 页面提示「该域名无需在 Fonu 申请证书」，避免用户重复操作。
+- 页面提示「该域名无需在 Havline 申请证书」，避免用户重复操作。
 
 ### 4.5 运维与安全
 
 **F-20 端点级编辑**
 
-- 在 Fonu 规则详情里编辑 hostname、path、service、协议；
+- 在 Havline 规则详情里编辑 hostname、path、service、协议；
 - 提供 `ingress validate` 与 `ingress rule <url>` 校验。
 
 **F-21 云端漂移检测**
@@ -215,7 +215,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 **F-22 一键诊断**
 
 - `tunnel info`、`tunnel diag`、网络预检（region1/region2、7844、443）、系统要求检查；
-- 结果转成 Fonu 风格的可读结论与建议。
+- 结果转成 Havline 风格的可读结论与建议。
 
 **F-23 令牌轮换**
 
@@ -266,24 +266,24 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 | 功能 | 结论 | 理由 |
 | --- | --- | --- |
-| 独立登录、JWT、多用户体系 | 不做 | Fonu 已有认证与 API Token |
-| 独立主题、多语言 | 不做 | 属于 Fonu 全局设置 |
+| 独立登录、JWT、多用户体系 | 不做 | Havline 已有认证与 API Token |
+| 独立主题、多语言 | 不做 | 属于 Havline 全局设置 |
 | 私有网络 / WARP routing | 不做（远期评估） | 面向 Zero Trust 企业，NAS 用户不需要 |
 | 负载均衡 | 不做 | 家用单机场景不需要 |
-| Kubernetes / Ansible / Terraform 指南 | 不做 | 不是 Fonu 交付形态 |
+| Kubernetes / Ansible / Terraform 指南 | 不做 | 不是 Havline 交付形态 |
 | Workers VPC / Hyperdrive / Spectrum | 不做 | 超范围 |
-| WebSocket 实时日志 | 不做 | 复用 Fonu SSE |
+| WebSocket 实时日志 | 不做 | 复用 Havline SSE |
 | 自定义镜像管理 | 不做 | 内置镜像表 + 自定义 URL 足够 |
-| 接管外部 systemd / Windows service | 不做 | Fonu 只托管自己启动的进程 |
+| 接管外部 systemd / Windows service | 不做 | Havline 只托管自己启动的进程 |
 | 快速隧道作为正式功能 | 不做 | 官方不保证 SLA，只做演示 |
 | 代配 Access 策略 | 不做 | 高风险，只做只读检测 |
-| 自动扩权 / 自动改系统防火墙 | 不做 | 保持 Fonu 现有安全边界 |
+| 自动扩权 / 自动改系统防火墙 | 不做 | 保持 Havline 现有安全边界 |
 
 ---
 
 ## 六、与现有模块的整合点
 
-| Fonu 模块 | 整合方式 |
+| Havline 模块 | 整合方式 |
 | --- | --- |
 | 反向代理规则 | 增加「出口」字段；CF 隧道从规则派生 |
 | FRP 多服务端 | 与 CF 出口并列，互不影响 |
@@ -335,7 +335,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 | 阶段 | 内容 | 目标 |
 | --- | --- | --- |
 | 阶段 1 | F-1 ~ F-3 出口抽象；F-5 规则同步；F-6 DNS 管理完善 | 让 CF 成为反代规则的一个出口，而不是独立模块 |
-| 阶段 2 | F-8 ~ F-15 体系整合；F-20 ~ F-22 编辑与诊断 | 让 CF 隧道进入 Fonu 监控、通知、状态页、日志、备份、审计 |
+| 阶段 2 | F-8 ~ F-15 体系整合；F-20 ~ F-22 编辑与诊断 | 让 CF 隧道进入 Havline 监控、通知、状态页、日志、备份、审计 |
 | 阶段 3 | F-16 ~ F-19 NAS 体验；F-23 ~ F-26 运维安全 | 一键发布、域名选择、令牌轮换、条款提示、Access 检测 |
 | 阶段 4 | F-27 ~ F-30 可选增强 | 快速隧道、多副本、边缘优选、账号模式按需 |
 
@@ -347,7 +347,7 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 - 用户只维护「域名 → 服务」的规则，出口切换不需要改域名或端口；
 - 反代规则变化后，CF 隧道与 DNS 自动跟随；
-- 隧道断连能进 Fonu 告警与状态页；
+- 隧道断连能进 Havline 告警与状态页；
 - 一条规则可以同时走 FRP 与 CF，互不影响；
 - CF 出口域名不需要本地证书；
 - 备份恢复后隧道能自动恢复；
@@ -358,13 +358,13 @@ Cloudflare 隧道的加入，是为了解决一类现有链路解决不了的人
 
 ## 十、结论
 
-Fonu 需要的不是「另一个 cloudflared 面板」，而是：
+Havline 需要的不是「另一个 cloudflared 面板」，而是：
 
 > 把 Cloudflare 隧道做成反向代理规则的一个出口选项，并让监控、通知、状态页、日志、备份、升级、审计自动覆盖它。
 
-按本文阶段 1-3 实施，Fonu 的 CF 模块会形成与参考项目不同的产品形态：参考项目面向「管理 cloudflared」，Fonu 面向「管理我的服务怎么上公网」。
+按本文阶段 1-3 实施，Havline 的 CF 模块会形成与参考项目不同的产品形态：参考项目面向「管理 cloudflared」，Havline 面向「管理我的服务怎么上公网」。
 
 本文与 `cloudflared-feature-plan.md` 的关系：
 
 - `cloudflared-feature-plan.md`：官方 + 参考项目的功能全集，用于查漏；
-- 本文：按 Fonu 定位筛选后的实施计划，**实施以本文为准**。
+- 本文：按 Havline 定位筛选后的实施计划，**实施以本文为准**。

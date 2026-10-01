@@ -58,7 +58,7 @@ func readPlatform() (Stats, CPUSample) {
 	return stats, sample
 }
 
-// volumeRoot 取当前工作目录所在盘符（Fonu 的数据目录与工作目录同盘），失败时回落到 C:\
+// volumeRoot 取当前工作目录所在盘符（Havline 的数据目录与工作目录同盘），失败时回落到 C:\
 func volumeRoot() string {
 	wd, err := os.Getwd()
 	if err != nil || len(wd) < 2 || wd[1] != ':' {

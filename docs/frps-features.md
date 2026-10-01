@@ -3,7 +3,7 @@
 > 基于 frp v0.71.0 官方 `frps_full_example.toml` 全量对照。
 > 状态图例：✅ 已实现　🔶 部分实现（有缺口或需手动步骤）　⬜ 未实现　🚫 有意不实现（有说明理由）
 >
-> 「Fonu 入口」= 用户在 Fonu 界面操作的位置；「生成器」= `internal/frp/frps_template.go` 的 frps.toml 同源生成器。
+> 「Havline 入口」= 用户在 Havline 界面操作的位置；「生成器」= `internal/frp/frps_template.go` 的 frps.toml 同源生成器。
 > 更新日期：2026-09-21
 
 ---
@@ -44,7 +44,7 @@
 
 | 配置项 | 官方默认 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| `webServer.addr / port` | `127.0.0.1:0` | ✅ | 表单「frps 管理接口」地址/端口；Fonu 借此拉流量；「frps 管理」按钮直达面板 |
+| `webServer.addr / port` | `127.0.0.1:0` | ✅ | 表单「frps 管理接口」地址/端口；Havline 借此拉流量；「frps 管理」按钮直达面板 |
 | `webServer.user / password` | — | ✅ | 表单同源；密码加密存储（ConfiguredSecretField 掩码闭环） |
 | `webServer.tls.certFile / keyFile` | — | ⬜ | dashboard 自身 HTTPS 未提供 |
 
@@ -87,10 +87,10 @@
 
 | 配置项 | 官方默认 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| 多用户 `user` 前缀隔离 | — | ⬜ | 未提供（frps 端 `user` 是 frpc 登录名前缀隔离，与 Fonu 的服务端 user 概念不同） |
+| 多用户 `user` 前缀隔离 | — | ⬜ | 未提供（frps 端 `user` 是 frpc 登录名前缀隔离，与 Havline 的服务端 user 概念不同） |
 | `udpPacketSize` | 1500 | ⬜ | 未提供（需与 frpc 同源，frpc 侧也无此表单项） |
 
-## 十、Fonu Agent 侧的 frps 运维能力（与配置生成配套）
+## 十、Havline Agent 侧的 frps 运维能力（与配置生成配套）
 
 | 功能 | 状态 | 说明 |
 | --- | --- | --- |
@@ -116,6 +116,6 @@
 
 ## 附：架构口径
 
-- **frps.toml 是生成器产物，不是用户手写文件**：所有已实现项均以 Fonu 服务端表单为唯一事实源，VPS 侧禁止手改（改了会被下次「下发 frps 配置」覆盖）；
+- **frps.toml 是生成器产物，不是用户手写文件**：所有已实现项均以 Havline 服务端表单为唯一事实源，VPS 侧禁止手改（改了会被下次「下发 frps 配置」覆盖）；
 - **端口同源链**：表单 `vhost_http_port/vhost_https_port` → frps.toml `vhostHTTPPort/vhostHTTPSPort` → Nginx `proxy_pass 127.0.0.1:<port>`，三方由 `agentUpstreamFor`/生成器共用同一值；
-- **agent 与 frps 解耦**：agent 只管 Nginx 片段/证书/frps 生命周期，frps 进程由 systemd 托管；二者通过 Fonu 下发配置保持一致。
+- **agent 与 frps 解耦**：agent 只管 Nginx 片段/证书/frps 生命周期，frps 进程由 systemd 托管；二者通过 Havline 下发配置保持一致。

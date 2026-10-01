@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/fonu/fonu/internal/backup"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/backup"
+	"github.com/havline/havline/internal/settings"
 )
 
 type BackupHandler struct {
@@ -52,7 +52,7 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// 上传文件名完全由客户端控制：不能拼进临时路径（../ 可逃出临时目录），交给 CreateTemp 生成
-	out, err := os.CreateTemp("", "fonu-restore-*.tar.gz")
+	out, err := os.CreateTemp("", "havline-restore-*.tar.gz")
 	if err != nil {
 		writeError(r, w, http.StatusInternalServerError, "保存上传文件失败")
 		return
@@ -72,7 +72,7 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = os.Remove(tmpPath)
-	writeJSON(w, http.StatusOK, map[string]string{"message": "备份已恢复，建议重启 Fonu"})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "备份已恢复，建议重启 Havline"})
 }
 
 // ListArchives 列出留在磁盘上的备份（自动备份 + 手动「立即备份」）。
@@ -150,7 +150,7 @@ func (h *BackupHandler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
 		writeError(r, w, http.StatusBadRequest, err.Error(), err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"message": "备份已恢复，建议重启 Fonu"})
+	writeJSON(w, http.StatusOK, map[string]string{"message": "备份已恢复，建议重启 Havline"})
 }
 
 // DeleteArchive 删除指定备份

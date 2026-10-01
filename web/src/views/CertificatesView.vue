@@ -45,7 +45,7 @@
       </div>
     </div>
 
-    <FonuCard flush class="cert-panel">
+    <HavlineCard flush class="cert-panel">
       <div class="cert-toolbar">
         <n-input
           v-model:value="searchQuery"
@@ -117,7 +117,7 @@
         title="没有匹配的证书"
         description="试试调整搜索关键词或筛选条件。"
       />
-    </FonuCard>
+    </HavlineCard>
 
     <div class="tip-box">
       <n-icon :component="InformationCircleOutline" class="tip-box__icon" />
@@ -402,7 +402,7 @@
         </n-form-item>
         <n-form-item
           label="私钥文件路径"
-          feedback="填写 Fonu 服务可访问的路径，导入后会复制到证书目录"
+          feedback="填写 Havline 服务可访问的路径，导入后会复制到证书目录"
           :show-feedback="true"
         >
           <n-input v-model:value="importForm.key_path" placeholder=".data/certs/example.com/privatekey.pem" />
@@ -459,7 +459,7 @@ import type {
   DDNSConfig,
 } from '../api/types'
 import EmptyState from '../components/EmptyState.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import buypassLogo from '../assets/brand/ca/buypass.png'
@@ -987,7 +987,7 @@ async function load() {
   try {
     records.value = asList(await api.listCertificates())
   } catch (error) {
-    loadError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    loadError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
   } finally {
     loading.value = false
   }
@@ -1190,13 +1190,13 @@ onUnmounted(stopApplyStream)
   min-height: 220px;
   max-height: 320px;
   overflow: auto;
-  padding: var(--fonu-space-4);
-  border-radius: var(--fonu-radius);
-  border: 1px solid var(--fonu-border);
-  font-family: var(--fonu-mono);
+  padding: var(--havline-space-4);
+  border-radius: var(--havline-radius);
+  border: 1px solid var(--havline-border);
+  font-family: var(--havline-mono);
   font-size: 12px;
   line-height: 1.7;
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 html[data-theme='dark'] .apply-log-box,
@@ -1215,11 +1215,11 @@ html.dark .apply-log-box {
 .apply-log-empty {
   text-align: center;
   color: #94a3b8;
-  padding: var(--fonu-space-5) 0;
+  padding: var(--havline-space-5) 0;
 }
 
 .apply-result {
-  margin-top: var(--fonu-space-2);
+  margin-top: var(--havline-space-2);
 }
 
 .apply-result-detail {
@@ -1238,23 +1238,23 @@ html.dark .apply-log-box {
 .apply-result-k {
   display: inline-block;
   min-width: 72px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   margin-right: 8px;
 }
 
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--fonu-space-4);
-  margin-bottom: var(--fonu-space-4);
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .stat-card {
-  background: var(--fonu-surface);
-  border: 1px solid var(--fonu-border);
-  border-radius: var(--fonu-radius);
-  box-shadow: var(--fonu-shadow);
-  padding: var(--fonu-space-4) var(--fonu-space-5);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-4) var(--havline-space-5);
   min-height: 118px;
 }
 
@@ -1269,7 +1269,7 @@ html.dark .apply-log-box {
   font-size: 30px;
   font-weight: 700;
   line-height: 1.1;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   letter-spacing: -0.03em;
 }
 
@@ -1281,20 +1281,20 @@ html.dark .apply-log-box {
   margin-top: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .stat-card__sub {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .cert-panel {
   min-width: 0;
 }
 
-.cert-panel :deep(.fonu-card__body) {
+.cert-panel :deep(.havline-card__body) {
   padding-left: 0;
   padding-right: 0;
   padding-bottom: 0;
@@ -1303,9 +1303,9 @@ html.dark .apply-log-box {
 .cert-toolbar {
   display: flex;
   align-items: center;
-  gap: var(--fonu-space-3);
-  padding: var(--fonu-space-4);
-  border-bottom: 1px solid var(--fonu-border);
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4);
+  border-bottom: 1px solid var(--havline-border);
   flex-wrap: wrap;
 }
 
@@ -1328,7 +1328,7 @@ html.dark .apply-log-box {
 .cert-loading {
   display: flex;
   justify-content: center;
-  padding: var(--fonu-space-6) 0;
+  padding: var(--havline-space-6) 0;
 }
 
 .cert-empty-actions {
@@ -1352,31 +1352,31 @@ html.dark .apply-log-box {
 .cert-table :deep(.cert-name-cell__title) {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .cert-table :deep(.cert-name-cell__sub) {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .cert-pagination {
   display: flex;
   justify-content: flex-end;
-  padding: var(--fonu-space-3) var(--fonu-space-4) var(--fonu-space-4);
+  padding: var(--havline-space-3) var(--havline-space-4) var(--havline-space-4);
 }
 
 .cert-name-cell__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .cert-name-cell__sub {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .cert-table :deep(.issuer-cell) {
@@ -1401,7 +1401,7 @@ html.dark .apply-log-box {
 .cert-table :deep(.issuer-badge--zero) { background: rgba(59, 130, 246, 0.15); color: #2563eb; }
 .cert-table :deep(.issuer-badge--buypass) { background: rgba(37, 99, 235, 0.15); color: #1d4ed8; }
 .cert-table :deep(.issuer-badge--imported) { background: rgba(100, 116, 139, 0.15); color: #64748b; }
-.cert-table :deep(.issuer-badge--default) { background: var(--fonu-bg); color: var(--fonu-text-secondary); }
+.cert-table :deep(.issuer-badge--default) { background: var(--havline-bg); color: var(--havline-text-secondary); }
 
 .cert-table :deep(.issuer-logo) {
   display: inline-flex;
@@ -1427,27 +1427,27 @@ html.dark .apply-log-box {
 
 .cert-table :deep(.issuer-cell__label) {
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   white-space: nowrap;
 }
 
 .expire-cell__date {
   font-size: 13px;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .expire-cell__days {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
-.text-muted { color: var(--fonu-text-muted); }
+.text-muted { color: var(--havline-text-muted); }
 
 .tip-box {
   display: flex;
   gap: 10px;
-  margin-top: var(--fonu-space-4);
+  margin-top: var(--havline-space-4);
   padding: 14px 16px;
   border-radius: 12px;
   background: rgba(59, 130, 246, 0.08);
@@ -1466,7 +1466,7 @@ html.dark .apply-log-box {
 .modal-header__title {
   font-size: 18px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   line-height: 1.3;
 }
 
@@ -1474,7 +1474,7 @@ html.dark .apply-log-box {
   margin-top: 4px;
   font-size: 13px;
   font-weight: 400;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   line-height: 1.5;
 }
 
@@ -1499,7 +1499,7 @@ html.dark .apply-log-box {
 .ca-field {
   display: flex;
   flex-direction: column;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   width: 100%;
 }
 
@@ -1515,7 +1515,7 @@ html.dark .apply-log-box {
 
 .domains-input :deep(textarea),
 .pem-input :deep(textarea) {
-  font-family: var(--fonu-mono);
+  font-family: var(--havline-mono);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -1540,7 +1540,7 @@ html.dark .apply-log-box {
   width: 100%;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .ca-hint--warn {
@@ -1551,7 +1551,7 @@ html.dark .apply-log-box {
   display: flex;
   align-items: center;
   gap: 0;
-  margin-bottom: var(--fonu-space-5);
+  margin-bottom: var(--havline-space-5);
   padding: 0 4px;
 }
 
@@ -1559,13 +1559,13 @@ html.dark .apply-log-box {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   font-size: 13px;
   white-space: nowrap;
 }
 
 .apply-step--active {
-  color: var(--fonu-text);
+  color: var(--havline-text);
   font-weight: 600;
 }
 
@@ -1596,7 +1596,7 @@ html.dark .apply-log-box {
   flex: 1;
   height: 2px;
   margin: 0 12px;
-  background: var(--fonu-border);
+  background: var(--havline-border);
   min-width: 24px;
 }
 
@@ -1618,9 +1618,9 @@ html.dark .apply-log-box {
   align-items: center;
   gap: 10px;
   padding: 10px 10px 12px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 12px;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
   cursor: pointer;
   text-align: center;
   transition: border-color 0.15s, box-shadow 0.15s;
@@ -1688,68 +1688,68 @@ html.dark .apply-log-box {
 .ca-card__fallback {
   font-size: 13px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .ca-card__sub {
   width: 100%;
   font-size: 12px;
   line-height: 1.4;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .apply-auto-renew {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   padding: 14px 16px;
   margin-top: 4px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 12px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .apply-auto-renew__title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .apply-auto-renew__sub {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 
 .verify-step__intro {
-  margin: 0 0 var(--fonu-space-4);
+  margin: 0 0 var(--havline-space-4);
   font-size: 13px;
   line-height: 1.6;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .verify-empty {
-  padding: var(--fonu-space-5);
+  padding: var(--havline-space-5);
   text-align: center;
-  border: 1px dashed var(--fonu-border);
+  border: 1px dashed var(--havline-border);
   border-radius: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
   font-size: 13px;
   line-height: 1.6;
 }
 
 .verify-empty__sub {
   margin-top: 8px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   font-size: 12px;
 }
 
 .verify-options {
   display: flex;
   flex-direction: column;
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .verify-option {
@@ -1758,9 +1758,9 @@ html.dark .apply-log-box {
   gap: 14px;
   width: 100%;
   padding: 14px 16px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 12px;
-  background: var(--fonu-surface);
+  background: var(--havline-surface);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s;
@@ -1783,7 +1783,7 @@ html.dark .apply-log-box {
   height: 40px;
   flex-shrink: 0;
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
   overflow: hidden;
 }
 
@@ -1801,26 +1801,26 @@ html.dark .apply-log-box {
 .verify-option__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .verify-option__sub {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .verify-option__zones {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .verify-option__check {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  border: 2px solid var(--fonu-border);
+  border: 2px solid var(--havline-border);
   flex-shrink: 0;
 }
 
@@ -1831,29 +1831,29 @@ html.dark .apply-log-box {
 }
 
 .apply-done-step__hint {
-  margin: 0 0 var(--fonu-space-3);
+  margin: 0 0 var(--havline-space-3);
   font-size: 13px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .file-btn {
-  margin-top: var(--fonu-space-2);
+  margin-top: var(--havline-space-2);
 }
 
 .domain-preview {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fonu-space-2);
+  gap: var(--havline-space-2);
   min-height: 28px;
-  padding: var(--fonu-space-3);
-  border: 1px dashed var(--fonu-border);
-  border-radius: var(--fonu-radius-sm);
-  background: var(--fonu-bg);
+  padding: var(--havline-space-3);
+  border: 1px dashed var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
 }
 
 .domain-preview__empty {
   font-size: 13px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
 }
 
 .file-input {

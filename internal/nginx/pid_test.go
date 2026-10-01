@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
+	"github.com/havline/havline/internal/config"
 )
 
 func TestReadPIDFile(t *testing.T) {

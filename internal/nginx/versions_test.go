@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/fsutil"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/fsutil"
 )
 
 func newVersionTestManager(t *testing.T) (*Manager, config.Config) {
@@ -18,7 +18,7 @@ func newVersionTestManager(t *testing.T) (*Manager, config.Config) {
 	dir := t.TempDir()
 	cfg := config.Config{
 		DataDir:        dir,
-		NginxBin:       "fonu-nginx-not-installed",
+		NginxBin:       "havline-nginx-not-installed",
 		NginxPIDFile:   filepath.Join(dir, "nginx", "nginx.pid"),
 		NginxMimeTypes: filepath.Join(dir, "mime.types"),
 	}

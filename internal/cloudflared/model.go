@@ -4,7 +4,7 @@ import "time"
 
 // Mode 是隧道的托管模式；不同模式决定启动参数与规则生效侧。
 const (
-	ModeTokenLocal   = "token-local"   // token 解码成本地凭据，规则由 Fonu 生成
+	ModeTokenLocal   = "token-local"   // token 解码成本地凭据，规则由 Havline 生成
 	ModeTokenRemote  = "token-remote"  // 直接用 --token 启动，规则由 Cloudflare 面板管理
 	ModeAccountLocal = "account-local" // cert.pem + credentials，规则本地生成，可云端同步
 )

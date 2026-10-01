@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/logstore"
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/proxy"
+	"github.com/havline/havline/internal/logstore"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/proxy"
 )
 
 const (

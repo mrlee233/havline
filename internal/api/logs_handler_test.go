@@ -9,20 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/backup"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/db"
-	"github.com/fonu/fonu/internal/discovery"
-	"github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/service"
-	"github.com/fonu/fonu/internal/settings"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/backup"
+	"github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/db"
+	"github.com/havline/havline/internal/discovery"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/service"
+	"github.com/havline/havline/internal/settings"
 )
 
 func TestLogsAccessRoute(t *testing.T) {
 	dir := t.TempDir()
-	conn, err := db.Open(filepath.Join(dir, "fonu.db"))
+	conn, err := db.Open(filepath.Join(dir, "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestLogsAccessRoute(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/logs/access?limit=100", nil)
-	req.AddCookie(&http.Cookie{Name: "fonu_session", Value: sessionID})
+	req.AddCookie(&http.Cookie{Name: "havline_session", Value: sessionID})
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 

@@ -6,7 +6,7 @@ import "testing"
 // 单引号必须转义，否则路径里的引号能截断命令。
 func TestShellPathEscapesSingleQuotes(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"/tmp/fonu-agent", "'/tmp/fonu-agent'"},
+		{"/tmp/havline-agent", "'/tmp/havline-agent'"},
 		{"/tmp/it's here", `'/tmp/it'\''s here'`},
 		{"", "''"},
 	}

@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/fonu/fonu/internal/certificate"
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/nginx"
-	"github.com/fonu/fonu/internal/notify"
-	"github.com/fonu/fonu/internal/proxy"
-	"github.com/fonu/fonu/internal/settings"
-	"github.com/fonu/fonu/internal/validate"
+	"github.com/havline/havline/internal/certificate"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/nginx"
+	"github.com/havline/havline/internal/notify"
+	"github.com/havline/havline/internal/proxy"
+	"github.com/havline/havline/internal/settings"
+	"github.com/havline/havline/internal/validate"
 )
 
 type ProxyService struct {

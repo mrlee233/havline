@@ -7,7 +7,7 @@
     <n-tabs v-model:value="settingsTab" type="line" animated class="settings-tabs">
       <n-tab-pane name="general" tab="常规">
         <div class="settings-grid">
-      <FonuCard title="外观" subtitle="界面主题与时区">
+      <HavlineCard title="外观" subtitle="界面主题与时区">
         <div class="settings-block">
           <div class="settings-block__label">主题模式</div>
           <div class="theme-cards">
@@ -36,9 +36,9 @@
           <n-select v-model:value="form.timezone" :options="timezoneOptions" />
           <p class="field-hint">影响日志、证书到期时间等显示</p>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard title="自动任务" subtitle="DDNS 与证书维护策略">
+      <HavlineCard title="自动任务" subtitle="DDNS 与证书维护策略">
         <div class="settings-fields">
           <div class="settings-field">
             <div class="settings-field__row">
@@ -62,9 +62,9 @@
             <p class="field-hint">超过保留天数的日志将被自动清理</p>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard title="ACME 证书" subtitle="申请与续签所需账户信息">
+      <HavlineCard title="ACME 证书" subtitle="申请与续签所需账户信息">
         <div class="settings-fields">
           <div class="settings-field">
             <div class="settings-field__label">ACME 邮箱</div>
@@ -103,9 +103,9 @@
             placeholder="用 LiteSSL 申请证书时填写"
           />
         </div>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard title="数据" subtitle="备份与恢复">
+      <HavlineCard title="数据" subtitle="备份与恢复">
         <div class="data-actions">
           <button type="button" class="data-action-card" :disabled="exporting" @click="exportBackup">
             <n-icon :component="DownloadOutline" class="data-action-card__icon" />
@@ -191,13 +191,13 @@
         </div>
 
         <p class="field-hint data-note">恢复配置将覆盖当前数据，操作前请确保已备份。</p>
-      </FonuCard>
+      </HavlineCard>
         </div>
       </n-tab-pane>
 
       <n-tab-pane name="notify" tab="通知">
         <div class="settings-grid settings-grid--single">
-      <FonuCard title="通知" subtitle="告警通道与事件（仅可启用一种方式）">
+      <HavlineCard title="通知" subtitle="告警通道与事件（仅可启用一种方式）">
         <div class="security-form notify-form">
           <div class="settings-field">
             <div class="settings-field__label">通知方式</div>
@@ -231,7 +231,7 @@
             />
             <div class="settings-field">
               <div class="settings-field__label">发件人</div>
-              <n-input v-model:value="notifyEmail.from" placeholder="fonu@example.com" />
+              <n-input v-model:value="notifyEmail.from" placeholder="havline@example.com" />
             </div>
             <div class="settings-field">
               <div class="settings-field__label">收件人（每行一个）</div>
@@ -273,7 +273,7 @@
               </div>
               <div class="settings-field">
                 <div class="settings-field__label">Topic</div>
-                <n-input v-model:value="notifyWebhook.topic" placeholder="fonu-alerts" />
+                <n-input v-model:value="notifyWebhook.topic" placeholder="havline-alerts" />
               </div>
               <ConfiguredSecretField
                 v-model="notifyWebhookKey"
@@ -319,7 +319,7 @@
                 placeholder="access_token 参数值"
               />
               <p class="field-hint">
-                安全设置选「自定义关键词」并填 <span class="mono">Fonu</span>：消息正文固定以「Fonu · 」开头。加签方式暂不支持。
+                安全设置选「自定义关键词」并填 <span class="mono">Havline</span>：消息正文固定以「Havline · 」开头。加签方式暂不支持。
               </p>
             </template>
             <template v-else-if="notifyWebhook.provider === 'feishu'">
@@ -447,13 +447,13 @@
             <p class="field-hint">使用当前表单配置发送测试消息，无需先保存</p>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
         </div>
       </n-tab-pane>
 
       <n-tab-pane name="security" tab="安全">
         <div class="settings-grid">
-      <FonuCard title="反代安全" subtitle="全局 IP 策略与真实客户端 IP">
+      <HavlineCard title="反代安全" subtitle="全局 IP 策略与真实客户端 IP">
         <div class="security-form proxy-security-form">
           <p class="field-hint proxy-security-form__intro">
             IP 黑白名单、仅中国大陆等策略依赖正确识别客户端 IP。若域名经 CDN/多层反代，请在此配置信任代理。
@@ -546,9 +546,9 @@
             <p class="field-hint">自动检查并更新中国 IP 段库的间隔</p>
           </div>
         </div>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard title="管理员账户" subtitle="修改登录密码" class="settings-card settings-card--security">
+      <HavlineCard title="管理员账户" subtitle="修改登录密码" class="settings-card settings-card--security">
         <div class="security-form">
           <div class="settings-fields">
             <div class="settings-field">
@@ -568,13 +568,13 @@
             修改管理员密码
           </n-button>
         </div>
-      </FonuCard>
+      </HavlineCard>
         </div>
       </n-tab-pane>
 
       <n-tab-pane name="advanced" tab="高级">
         <div class="settings-grid settings-grid--single">
-      <FonuCard title="Nginx 全局配置" subtitle="http 块内自定义片段">
+      <HavlineCard title="Nginx 全局配置" subtitle="http 块内自定义片段">
         <p class="field-hint">
           仅作用于 <code>http {}</code> 内部、各反代 <code>server {}</code> 之前。单条规则的 server 块请在反代详情 → Nginx 中编辑。
         </p>
@@ -697,8 +697,8 @@
         <n-alert type="warning" :bordered="false" class="global-nginx-warn">
           小白勿碰。若保存后 Nginx 启动失败，请点「恢复自动生成」或「回滚」还原配置。
         </n-alert>
-      </FonuCard>
-      <FonuCard title="API Token" subtitle="给脚本、HomeAssistant、手机快捷指令调用">
+      </HavlineCard>
+      <HavlineCard title="API Token" subtitle="给脚本、HomeAssistant、手机快捷指令调用">
         <p class="field-hint">
           浏览器之外的调用方拿不到会话 cookie，可在这里签发令牌，用
           <code>Authorization: Bearer &lt;token&gt;</code> 调用接口。明文只在创建时显示一次。
@@ -759,9 +759,9 @@
           </div>
         </div>
         <p v-else-if="!tokenError" class="field-hint">还没有令牌。</p>
-      </FonuCard>
+      </HavlineCard>
 
-      <FonuCard title="公开状态页" subtitle="给外部看的只读页面（默认关闭）">
+      <HavlineCard title="公开状态页" subtitle="给外部看的只读页面（默认关闭）">
         <p class="field-hint">
           开启后 <code>/status</code> 任何人都能访问，只展示域名与 24 小时可用率——不含内网地址、端口与证书路径。
           建议设一个访问码，它会让页面需要带码才能打开。
@@ -787,7 +787,7 @@
           </n-button>
           <span class="field-hint">访问码只存 SHA-256，忘了只能重设。</span>
         </div>
-      </FonuCard>
+      </HavlineCard>
         </div>
       </n-tab-pane>
     </n-tabs>
@@ -841,7 +841,7 @@ import type {
 } from '../api/types'
 import ConfiguredSecretField from '../components/ConfiguredSecretField.vue'
 import ConfigDiffView from '../components/ConfigDiffView.vue'
-import FonuCard from '../components/FonuCard.vue'
+import HavlineCard from '../components/HavlineCard.vue'
 import NginxCodeEditor from '../components/NginxCodeEditor.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
@@ -1621,7 +1621,7 @@ async function load() {
     applySettingsToForm(await api.getSettings())
     await Promise.all([loadChinaCIDRStatus(), loadGlobalNginx()])
   } catch (error) {
-    pageError.value = error instanceof Error ? error.message : '请检查 Fonu 服务是否正常运行'
+    pageError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
   } finally {
     loading.value = false
   }
@@ -1699,7 +1699,7 @@ async function restoreBackupArchive(archive: BackupArchive) {
   backupBusy.value = `restore:${archive.name}`
   try {
     const result = await api.restoreBackupArchive(archive.name)
-    message.success(result.message || '备份已恢复，建议重启 Fonu')
+    message.success(result.message || '备份已恢复，建议重启 Havline')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '恢复失败')
   } finally { backupBusy.value = null }
@@ -1757,17 +1757,17 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 
 <style scoped>
 .settings-tabs {
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .settings-tabs :deep(.n-tabs-nav) {
-  margin-bottom: var(--fonu-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-5);
+  gap: var(--havline-space-5);
   align-items: stretch;
 }
 
@@ -1775,27 +1775,27 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
   grid-template-columns: minmax(0, 1fr);
 }
 
-.settings-grid :deep(.fonu-card) {
+.settings-grid :deep(.havline-card) {
   height: 100%;
   display: flex;
   flex-direction: column;
 }
 
-.settings-grid :deep(.fonu-card__body) {
+.settings-grid :deep(.havline-card__body) {
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
 .settings-block--spaced {
-  margin-top: var(--fonu-space-5);
+  margin-top: var(--havline-space-5);
 }
 
 .settings-block__label,
 .settings-field__label {
   font-size: 14px;
   font-weight: 500;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .settings-block__label,
@@ -1806,7 +1806,7 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .theme-cards {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
 }
 
 .theme-card {
@@ -1818,25 +1818,25 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
   gap: 8px;
   min-height: 80px;
   padding: 12px 8px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
   cursor: pointer;
   transition: border-color 0.15s;
 }
 
 .theme-card:hover {
-  border-color: color-mix(in srgb, #10b981 40%, var(--fonu-border));
+  border-color: color-mix(in srgb, #10b981 40%, var(--havline-border));
 }
 
 .theme-card--active {
   border-color: #10b981;
-  background: color-mix(in srgb, #10b981 6%, var(--fonu-bg));
+  background: color-mix(in srgb, #10b981 6%, var(--havline-bg));
 }
 
 .theme-card__icon {
   font-size: 20px;
-  color: var(--fonu-text-secondary);
+  color: var(--havline-text-secondary);
 }
 
 .theme-card--active .theme-card__icon {
@@ -1863,7 +1863,7 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .field-hint {
   margin: 6px 0 0;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 
@@ -1876,42 +1876,42 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 }
 
 /* 主配置版本：左侧版本列表 + 右侧当前内容 / 差异 */
-.config-versions { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--fonu-space-4); margin-top: 8px; }
-.config-versions__list { border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); overflow: auto; max-height: 320px; }
+.config-versions { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: var(--havline-space-4); margin-top: 8px; }
+.config-versions__list { border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); overflow: auto; max-height: 320px; }
 .config-versions__item {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 6px var(--fonu-space-3); border-bottom: 1px solid var(--fonu-border);
-  font-size: 12px; color: var(--fonu-text-secondary); cursor: pointer;
+  padding: 6px var(--havline-space-3); border-bottom: 1px solid var(--havline-border);
+  font-size: 12px; color: var(--havline-text-secondary); cursor: pointer;
 }
-.config-versions__item:hover { background: var(--fonu-bg-muted); }
-.config-versions__item--active { background: var(--fonu-info-soft); color: var(--fonu-text); }
-.config-versions__size { flex: none; color: var(--fonu-text-muted); }
-.config-versions__empty { padding: var(--fonu-space-3); font-size: 12px; color: var(--fonu-text-muted); }
-.config-versions__body { min-width: 0; display: grid; gap: var(--fonu-space-3); align-content: start; }
-.config-versions__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3); }
-.config-versions__hint { font-size: 12px; color: var(--fonu-text-muted); line-height: 1.6; }
-.config-versions__error { margin: 8px 0 0; font-size: 12px; color: var(--fonu-error); line-height: 1.6; }
+.config-versions__item:hover { background: var(--havline-bg-muted); }
+.config-versions__item--active { background: var(--havline-info-soft); color: var(--havline-text); }
+.config-versions__size { flex: none; color: var(--havline-text-muted); }
+.config-versions__empty { padding: var(--havline-space-3); font-size: 12px; color: var(--havline-text-muted); }
+.config-versions__body { min-width: 0; display: grid; gap: var(--havline-space-3); align-content: start; }
+.config-versions__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); }
+.config-versions__hint { font-size: 12px; color: var(--havline-text-muted); line-height: 1.6; }
+.config-versions__error { margin: 8px 0 0; font-size: 12px; color: var(--havline-error); line-height: 1.6; }
 
 /* 自动备份：开关 + 保留份数 + 备份列表 */
 .backup-auto {
-  display: grid; gap: var(--fonu-space-3);
-  margin-top: var(--fonu-space-4); padding-top: var(--fonu-space-4);
-  border-top: 1px solid var(--fonu-border);
+  display: grid; gap: var(--havline-space-3);
+  margin-top: var(--havline-space-4); padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
 }
-.backup-auto__actions { display: flex; align-items: end; gap: var(--fonu-space-3); }
+.backup-auto__actions { display: flex; align-items: end; gap: var(--havline-space-3); }
 .backup-auto__keep { max-width: 160px; }
-.backup-list { display: grid; gap: 6px; margin-top: var(--fonu-space-3); }
+.backup-list { display: grid; gap: 6px; margin-top: var(--havline-space-3); }
 .backup-row {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--fonu-space-3);
-  padding: 6px var(--fonu-space-3); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3);
+  padding: 6px var(--havline-space-3); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm);
 }
 .backup-row__main { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.backup-row__size { font-size: 12px; color: var(--fonu-text-muted); }
+.backup-row__size { font-size: 12px; color: var(--havline-text-muted); }
 .backup-row__actions { display: flex; align-items: center; gap: 4px; flex: none; }
 
 /* 公开状态页：访问码 + 打开链接 */
-.status-page-field { margin-top: var(--fonu-space-3); }
-.status-page-actions { display: flex; align-items: center; gap: var(--fonu-space-3); margin-top: var(--fonu-space-3); flex-wrap: wrap; }
+.status-page-field { margin-top: var(--havline-space-3); }
+.status-page-actions { display: flex; align-items: center; gap: var(--havline-space-3); margin-top: var(--havline-space-3); flex-wrap: wrap; }
 
 /* API Token：创建区一行放四项，列表一行一项 */
 /* 必须带上 .settings-fields 提高优先级：那条纵向 flex 规则在样式表里位置更靠后，
@@ -1925,12 +1925,12 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .token-created { margin: 12px 0; }
 .token-created__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
 .token-created__row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.token-created__value { flex: 1; min-width: 0; font-family: var(--fonu-mono); font-size: 12px; overflow-wrap: anywhere; }
+.token-created__value { flex: 1; min-width: 0; font-family: var(--havline-mono); font-size: 12px; overflow-wrap: anywhere; }
 .token-list { display: grid; gap: 8px; margin-top: 12px; }
-.token-row { display: flex; align-items: center; gap: var(--fonu-space-3); padding: 10px var(--fonu-space-3); border: 1px solid var(--fonu-border); border-radius: var(--fonu-radius-sm); }
+.token-row { display: flex; align-items: center; gap: var(--havline-space-3); padding: 10px var(--havline-space-3); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); }
 .token-row__main { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.token-row__name { font-weight: 600; color: var(--fonu-text); }
-.token-row__meta { flex: 1; display: flex; gap: var(--fonu-space-3); flex-wrap: wrap; font-size: 12px; color: var(--fonu-text-muted); }
+.token-row__name { font-weight: 600; color: var(--havline-text); }
+.token-row__meta { flex: 1; display: flex; gap: var(--havline-space-3); flex-wrap: wrap; font-size: 12px; color: var(--havline-text-muted); }
 
 .global-nginx-head {
   margin-top: 12px;
@@ -2062,9 +2062,9 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .china-cidr-panel__head {
@@ -2098,13 +2098,13 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 }
 
 .notify-events {
-  margin-top: var(--fonu-space-4);
+  margin-top: var(--havline-space-4);
 }
 
 .notify-events__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
   margin-bottom: 12px;
 }
 
@@ -2115,7 +2115,7 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .notify-event-group__title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   margin-bottom: 8px;
@@ -2153,7 +2153,7 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 }
 
 .password-btn {
-  margin-top: var(--fonu-space-4);
+  margin-top: var(--havline-space-4);
   align-self: flex-start;
   flex-shrink: 0;
 }
@@ -2162,37 +2162,37 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: var(--fonu-space-4);
+  margin-top: var(--havline-space-4);
 }
 
 .form-switch-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--fonu-space-4);
+  gap: var(--havline-space-4);
   padding: 12px 14px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
 }
 
 .form-switch-row__label {
   font-size: 14px;
   font-weight: 500;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .form-switch-row__hint {
   margin-top: 2px;
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.5;
 }
 
 .data-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--fonu-space-3);
+  gap: var(--havline-space-3);
   align-items: stretch;
 }
 
@@ -2221,9 +2221,9 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
   min-height: 96px;
   height: 100%;
   padding: 14px;
-  border: 1px solid var(--fonu-border);
+  border: 1px solid var(--havline-border);
   border-radius: 10px;
-  background: var(--fonu-bg);
+  background: var(--havline-bg);
   cursor: pointer;
   text-align: left;
   transition: border-color 0.15s;
@@ -2233,7 +2233,7 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 }
 
 .data-action-card:hover:not(:disabled):not(.data-action-card--disabled) {
-  border-color: color-mix(in srgb, #10b981 35%, var(--fonu-border));
+  border-color: color-mix(in srgb, #10b981 35%, var(--havline-border));
 }
 
 .data-action-card:disabled,
@@ -2251,25 +2251,25 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .data-action-card__title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--fonu-text);
+  color: var(--havline-text);
 }
 
 .data-action-card__hint {
   font-size: 12px;
-  color: var(--fonu-text-muted);
+  color: var(--havline-text-muted);
   line-height: 1.45;
 }
 
 .data-note {
   margin-top: auto;
-  padding-top: var(--fonu-space-3);
+  padding-top: var(--havline-space-3);
 }
 
 .save-bar {
   display: flex;
   justify-content: flex-end;
-  margin-top: var(--fonu-space-5);
-  padding-bottom: var(--fonu-space-2);
+  margin-top: var(--havline-space-5);
+  padding-bottom: var(--havline-space-2);
 }
 
 @media (max-width: 960px) {

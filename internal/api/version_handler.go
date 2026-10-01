@@ -3,14 +3,14 @@ package api
 import (
 	"net/http"
 
-	"github.com/fonu/fonu/internal/config"
-	"github.com/fonu/fonu/internal/version"
+	"github.com/havline/havline/internal/config"
+	"github.com/havline/havline/internal/version"
 )
 
 type versionResponse struct {
-	Version           string `json:"version"`
-	NginxHTTPPort     int    `json:"nginx_http_port"`
-	NginxHTTPSPort    int    `json:"nginx_https_port"`
+	Version        string `json:"version"`
+	NginxHTTPPort  int    `json:"nginx_http_port"`
+	NginxHTTPSPort int    `json:"nginx_https_port"`
 }
 
 func Version(cfg config.Config) http.HandlerFunc {

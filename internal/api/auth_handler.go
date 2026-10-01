@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/fonu/fonu/internal/auth"
-	"github.com/fonu/fonu/internal/notify"
+	"github.com/havline/havline/internal/auth"
+	"github.com/havline/havline/internal/notify"
 )
 
 type AuthHandler struct {
@@ -168,7 +168,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, sessionID string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "fonu_session",
+		Name:     "havline_session",
 		Value:    sessionID,
 		Path:     "/",
 		HttpOnly: true,
@@ -197,7 +197,7 @@ func clientIP(r *http.Request) string {
 
 func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "fonu_session",
+		Name:     "havline_session",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,

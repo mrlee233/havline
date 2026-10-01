@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fonu/fonu/internal/db"
+	"github.com/havline/havline/internal/db"
 )
 
 func newTestService(t *testing.T) *Service {
 	t.Helper()
-	conn, err := db.Open(filepath.Join(t.TempDir(), "fonu.db"))
+	conn, err := db.Open(filepath.Join(t.TempDir(), "havline.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

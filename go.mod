@@ -1,4 +1,4 @@
-module github.com/fonu/fonu
+module github.com/havline/havline
 
 go 1.23.0
 
