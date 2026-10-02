@@ -16,7 +16,7 @@
 #   4) 打印「回滚到上一个 tag」的命令
 set -euo pipefail
 
-REPO="${REPO:-http://45.207.223.190:10082/mrlee/Havline.git}"
+REPO="${REPO:-https://jayhub.top/mrlee/Havline.git}"
 BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.hub.yml}"
 APP_CONTAINER="${APP_CONTAINER:-havline}"

@@ -197,7 +197,7 @@ docker compose -f /实际/的/Compose/目录/docker-compose.hub.yml up -d --buil
 检查 sidecar 容器内是否可以访问 Git 仓库：
 
 ```bash
-docker exec -it havline-updater sh -lc 'git ls-remote http://45.207.223.190:10082/mrlee/Havline.git main'
+docker exec -it havline-updater sh -lc 'git ls-remote https://jayhub.top/mrlee/Havline.git main'
 ```
 
 ### 升级卡在 `running`

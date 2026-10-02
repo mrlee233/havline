@@ -20,7 +20,7 @@ name: havline
 services:
   havline:
     build:
-      context: http://45.207.223.190:10082/mrlee/Havline.git#main
+      context: https://jayhub.top/mrlee/Havline.git#main
       args:
         NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
@@ -58,7 +58,7 @@ services:
   # 受限升级 sidecar：只有它持有 Docker Socket，主程序通过共享 Unix Socket 触发
   updater:
     build:
-      context: http://45.207.223.190:10082/mrlee/Havline.git#main
+      context: https://jayhub.top/mrlee/Havline.git#main
       target: updater
       args:
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
@@ -78,7 +78,7 @@ services:
       HAVLINE_UPDATE_COMPOSE_FILE: docker-compose.hub.yml
       HAVLINE_UPDATE_SERVICE: havline
       HAVLINE_UPDATE_MODE: git
-      HAVLINE_UPDATE_REPO: http://45.207.223.190:10082/mrlee/Havline.git
+      HAVLINE_UPDATE_REPO: https://jayhub.top/mrlee/Havline.git
       HAVLINE_UPDATE_BRANCH: main
       HAVLINE_UPDATE_APP_URL: http://havline:6893
       HAVLINE_UPDATE_HOST_DIR: ${HAVLINE_UPDATE_HOST_DIR:-}
