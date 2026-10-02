@@ -22,6 +22,7 @@ scripts/*
 !scripts/havline-install.sh
 !scripts/upgrade.sh
 !scripts/upgrade-hub.sh
+!scripts/push-oci-manual.ps1
 # 本地压缩包与导出产物不入库（如 web/src.rar）
 *.rar
 *.zip
