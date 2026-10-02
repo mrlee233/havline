@@ -12,6 +12,8 @@ import (
 
 type Config struct {
 	ListenAddr            string
+	GatewaySocket         string
+	GatewayPrefix         string
 	DataDir               string
 	SessionSecret         string
 	NginxBin              string
@@ -31,6 +33,8 @@ func Load() Config {
 	}
 	return Config{
 		ListenAddr:            envOr("HAVLINE_LISTEN", ":6893"),
+		GatewaySocket:         envOr("HAVLINE_GATEWAY_SOCKET", ""),
+		GatewayPrefix:         envOr("HAVLINE_GATEWAY_PREFIX", ""),
 		DataDir:               dataDir,
 		SessionSecret:         envOr("HAVLINE_SESSION_SECRET", ""),
 		NginxBin:              envOr("HAVLINE_NGINX_BIN", "nginx"),

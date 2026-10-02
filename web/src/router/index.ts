@@ -17,7 +17,7 @@ import StatusPageView from '../views/StatusPageView.vue'
 import AboutView from '../views/AboutView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     { path: '/setup', redirect: '/login' },
     { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
