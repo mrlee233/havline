@@ -187,6 +187,16 @@ api.example.com
 8. 保存记录。
 9. 点击「立即同步」验证解析是否更新。
 
+![DDNS 添加任务弹窗](screenshots/guide-dialog-ddns-add.png)
+
+弹窗字段说明：
+
+- DNS 服务商：选择阿里云、腾讯云、DNSPod、Cloudflare、火山引擎等。
+- API Token / AccessKey：填写对应服务商的 API 凭证。
+- 测试连接：先验证凭证是否有效，再保存。
+- 保存：保存后弹窗关闭，任务出现在左侧列表。
+- 解析记录：保存服务商后，在右侧点击「添加记录」填写完整域名。
+
 ### 3.2 同步周期
 
 「同步周期」决定 Havline 多久检查一次公网 IP。
@@ -262,6 +272,20 @@ api.example.com
 8. 确认信息后开始申请。
 9. 等待申请完成，成功后证书会出现在列表。
 
+![证书申请弹窗](screenshots/guide-dialog-cert-apply.png)
+
+弹窗操作顺序：
+
+1. 点击「申请证书」打开弹窗。
+2. 填写证书名称。
+3. 填写域名，一行一个。
+4. 选择颁发机构。
+5. 填写 ACME 邮箱。
+6. 选择 DNS 验证任务。
+7. 点击「下一步」。
+8. 确认信息后开始申请。
+9. 申请完成后关闭弹窗。
+
 注意事项：
 
 - 使用 DNS-01 验证时，需要先在 DDNS 页面添加并启用 DNS 任务。
@@ -284,6 +308,14 @@ api.example.com
 
 3. 填写证书和私钥。
 4. 点击「导入」。
+
+![证书导入弹窗](screenshots/guide-dialog-cert-import.png)
+
+导入方式：
+
+- 粘贴 PEM 内容；
+- 从本机文件读取；
+- 填写服务器文件路径。
 
 ### 4.3 下载证书
 
@@ -354,6 +386,18 @@ Cloudflare 隧道
 7. 按需启用规则。
 8. 点击「创建」。
 
+![反向代理新建规则弹窗](screenshots/guide-dialog-proxy-create.png)
+
+弹窗填写顺序：
+
+1. 填写名称。
+2. 填写域名，一行一个。
+3. 填写目标地址，例如 `http://192.168.1.100:5173`。
+4. 选择出口。
+5. 配置 HTTPS。
+6. 配置安全策略。
+7. 点击「创建」。
+
 ### 5.2 发现本机服务
 
 操作：
@@ -362,6 +406,15 @@ Cloudflare 隧道
 2. 在弹窗中查看检测到的服务。
 3. 点击「发布」自动填入目标地址。
 4. 补充域名后保存。
+
+![发现本机服务弹窗](screenshots/guide-dialog-proxy-discovery.png)
+
+弹窗操作：
+
+1. 点击「扫描服务」。
+2. 查看检测到的服务列表。
+3. 点击「发布」。
+4. 弹窗关闭后补充域名并保存规则。
 
 ### 5.3 搜索和筛选
 
@@ -463,6 +516,18 @@ TLS 1.3
 
 也可以删除不再使用的 frpc 版本。
 
+![FRP 应用配置弹窗](screenshots/guide-dialog-frp-runtime.png)
+
+弹窗操作顺序：
+
+1. 点击「应用配置」。
+2. 查看系统架构和当前 frpc。
+3. 选择下载加速代理。
+4. 在 FRP 官方下载列表中选择版本。
+5. 点击「下载」。
+6. 下载完成后点击「启用」。
+7. 关闭弹窗，点击「启动 frpc」。
+
 ### 6.3 启动和停止 frpc
 
 操作：
@@ -535,6 +600,18 @@ xtcp
 3. 填写 FRP 端口和认证 Token。
 4. 可选填写 frps 管理接口。
 5. 保存。
+
+![添加公网服务端弹窗](screenshots/guide-dialog-agent-add.png)
+
+弹窗字段说明：
+
+- 服务端名称：用于识别 VPS。
+- 主机地址：frps 的地址。
+- 端口：frps 的 bindPort。
+- 认证方式：无认证、Token 或 OIDC。
+- Token：与 frps 的 `auth.token` 保持一致。
+- Agent 地址与 SSH 信息：用于安装和管理 Agent。
+- 保存：保存后进入服务端详情。
 
 ### 7.2 安装 Agent
 
@@ -729,6 +806,26 @@ DNS 权限
 3. 未通过的项目点击「去配置」。
 4. 点击「重新检查」。
 
+![Cloudflare 接入向导弹窗](screenshots/guide-dialog-cf-preflight.png)
+
+向导检查项：
+
+```text
+cloudflared 二进制
+Account ID
+API Token
+Zone 权限
+DNS 权限
+```
+
+操作顺序：
+
+1. 点击「接入向导」。
+2. 查看每一项状态。
+3. 未通过的项目点击「去配置」。
+4. 配置完成后点击「重新检查」。
+5. 全部通过后关闭向导。
+
 ### 9.3 应用配置
 
 操作：
@@ -757,6 +854,19 @@ HA 连接数
 
 7. 点击「保存配置」。
 
+![Cloudflare 应用配置弹窗](screenshots/guide-dialog-cf-settings.png)
+
+弹窗操作顺序：
+
+1. 点击「应用配置」。
+2. 选择下载镜像。
+3. 点击「下载并安装」。
+4. 填写 Account ID。
+5. 填写 API Token。
+6. 点击「测试连接」。
+7. 配置传输协议、边缘地址族、HA 连接数和代理模式。
+8. 点击「保存配置」。
+
 API Token 权限建议：
 
 ```text
@@ -782,6 +892,17 @@ Zone: DNS: Edit
 
 5. 选择「随 Havline 自动启动」。
 6. 点击「保存」。
+
+![Cloudflare 新建隧道弹窗](screenshots/guide-dialog-cf-create.png)
+
+弹窗字段说明：
+
+- 名称：隧道名称。
+- 自动托管：开启后由反向代理规则自动生成路由。
+- 子域名：可选，例如 `999`。
+- 域：从 Cloudflare Zone 选择。
+- 服务：回源地址，例如 `192.168.11.30:8001`。
+- 随 Havline 自动启动：Havline 启动时自动拉起隧道。
 
 托管隧道保存后，需要到「反向代理」规则的出口中选择 Cloudflare，并指定该隧道。
 
@@ -1006,6 +1127,17 @@ Telegram
 4. 点击「测试通知」。
 5. 保存设置。
 
+![系统设置通知页](screenshots/guide-settings-notify.png)
+
+通知操作顺序：
+
+1. 选择通知方式。
+2. 填写对应参数。
+3. 勾选需要通知的事件。
+4. 点击「测试通知」。
+5. 确认收到测试消息。
+6. 点击「保存设置」。
+
 ### 11.6 安全
 
 包含：
@@ -1045,6 +1177,21 @@ API Token：
 1. 开启开关。
 2. 设置访问码。
 3. 点击「打开状态页」预览。
+
+![系统设置安全页](screenshots/guide-settings-security.png)
+
+![公开状态页设置](screenshots/guide-settings-status-page.png)
+
+安全页操作顺序：
+
+1. 配置可信代理 CIDR。
+2. 配置 IP 白名单和黑名单。
+3. 修改管理员密码。
+4. 配置 Nginx 全局配置。
+5. 创建 API Token。
+6. 开启公开状态页。
+7. 设置访问码。
+8. 点击「保存设置」。
 
 ## 十二、关于项目
 
@@ -1368,6 +1515,20 @@ guide-cloudflare.png
 guide-logs.png
 guide-settings.png
 guide-about.png
+guide-dialog-ddns-add.png
+guide-dialog-cert-apply.png
+guide-dialog-cert-import.png
+guide-dialog-proxy-create.png
+guide-dialog-proxy-discovery.png
+guide-dialog-frp-runtime.png
+guide-dialog-frp-guide.png
+guide-dialog-agent-add.png
+guide-dialog-cf-settings.png
+guide-dialog-cf-create.png
+guide-dialog-cf-preflight.png
+guide-settings-notify.png
+guide-settings-security.png
+guide-settings-status-page.png
 ```
 
 ### 17.3 相关文档
