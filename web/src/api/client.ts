@@ -51,7 +51,6 @@ import type {
   CfPreflightResult,
   CfRouteTestResult,
 } from './types'
-import { withBase } from './base'
 
 export function asList<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
@@ -80,7 +79,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_
 }
 
 async function requestWithSignal<T>(path: string, init?: RequestInit, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(withBase(path), {
+  const response = await fetch(path, {
     credentials: 'include',
     signal,
     headers: {
@@ -180,7 +179,7 @@ export const api = {
         email: payload.email ?? '',
       }),
     }),
-  certificateApplyStreamURL: (jobId: string) => withBase(`/api/certificates/jobs/${encodeURIComponent(jobId)}/stream`),
+  certificateApplyStreamURL: (jobId: string) => `/api/certificates/jobs/${encodeURIComponent(jobId)}/stream`,
   importCertificate: (payload: {
     certificate?: string
     private_key?: string
@@ -193,7 +192,7 @@ export const api = {
     }),
   async downloadCertificate(domain: string, part: 'zip' | 'cert' | 'key' = 'zip') {
     const response = await fetch(
-      withBase(`/api/certificates/${encodeURIComponent(domain)}/download?part=${part}`),
+      `/api/certificates/${encodeURIComponent(domain)}/download?part=${part}`,
       { credentials: 'include' },
     )
     if (!response.ok) {
@@ -433,7 +432,7 @@ export const api = {
   },
 
   async exportBackup() {
-    const response = await fetch(withBase('/api/backup/export'), { credentials: 'include' })
+    const response = await fetch('/api/backup/export', { credentials: 'include' })
     if (!response.ok) {
       throw new Error('导出备份失败')
     }
@@ -455,7 +454,7 @@ export const api = {
   deleteBackupArchive: (name: string) =>
     request<{ ok: boolean }>(`/api/backup/archives/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   async downloadBackupArchive(name: string) {
-    const response = await fetch(withBase(`/api/backup/archives/${encodeURIComponent(name)}`), { credentials: 'include' })
+    const response = await fetch(`/api/backup/archives/${encodeURIComponent(name)}`, { credentials: 'include' })
     if (!response.ok) {
       throw new Error('下载备份失败')
     }
@@ -471,7 +470,7 @@ export const api = {
   async restoreBackup(file: File) {
     const form = new FormData()
     form.append('file', file)
-    const response = await fetch(withBase('/api/backup/restore'), {
+    const response = await fetch('/api/backup/restore', {
       method: 'POST',
       credentials: 'include',
       body: form,

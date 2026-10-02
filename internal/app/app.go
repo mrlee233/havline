@@ -2,16 +2,13 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/havline/havline/internal/acme"
@@ -147,9 +144,6 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		StaticFS:   staticFS,
 		StartedAt:  startedAt,
 	})
-	if prefix := strings.TrimSpace(cfg.GatewayPrefix); prefix != "" {
-		handler = stripPrefixIfPresent(prefix, handler)
-	}
 	server := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           handler,
@@ -241,33 +235,7 @@ func (a *App) bootstrapNginx(ctx context.Context, proxySvc *service.ProxyService
 }
 
 func (a *App) Run() error {
-	errCh := make(chan error, 2)
-	go func() {
-		errCh <- a.server.ListenAndServe()
-	}()
-
-	if socket := strings.TrimSpace(a.cfg.GatewaySocket); socket != "" {
-		if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		listener, err := net.Listen("unix", socket)
-		if err != nil {
-			return err
-		}
-		if err := os.Chmod(socket, 0o660); err != nil {
-			_ = listener.Close()
-			return err
-		}
-		go func() {
-			errCh <- a.server.Serve(listener)
-		}()
-	}
-
-	err := <-errCh
-	if errors.Is(err, http.ErrServerClosed) {
-		return nil
-	}
-	return err
+	return a.server.ListenAndServe()
 }
 
 func (a *App) Shutdown(ctx context.Context) error {
@@ -277,9 +245,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	if err := a.server.Shutdown(ctx); err != nil {
 		return err
-	}
-	if socket := strings.TrimSpace(a.cfg.GatewaySocket); socket != "" {
-		_ = os.Remove(socket)
 	}
 	if err := a.nginx.Stop(ctx); err != nil {
 		a.logger.Error("nginx stop failed", "module", "NGINX", "error", err.Error())
@@ -293,18 +258,6 @@ func (a *App) Shutdown(ctx context.Context) error {
 		return a.db.Close()
 	}
 	return nil
-}
-
-func stripPrefixIfPresent(prefix string, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, prefix) {
-			r.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
-			if r.URL.Path == "" {
-				r.URL.Path = "/"
-			}
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func ResolveMigrationsDir() (string, error) {
