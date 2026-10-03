@@ -1,0 +1,31 @@
+bin/
+.data/
+web/node_modules/
+web/dist/
+cmd/havline/web/dist/
+dist/
+*.db
+/data/
+# 会话密钥等本地环境变量（.env.example 这类模板可以照常入库）
+.env
+.env.local
+.DS_Store
+.cursor/
+.playwright-cli/
+output/
+web/public/111favicon.png
+web/src/assets/brand/logo00.png
+# scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪
+scripts/*
+!scripts/agent-install.sh
+!scripts/build-linux.ps1
+!scripts/havline-install.sh
+!scripts/upgrade.sh
+!scripts/upgrade-hub.sh
+!scripts/push-oci-manual.ps1
+# 本地压缩包与导出产物不入库（如 web/src.rar）
+*.rar
+*.zip
+*.7z
+*.tar.gz
+*.log

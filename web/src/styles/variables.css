@@ -1,0 +1,65 @@
+:root {
+  --havline-brand: #10b981;
+  --havline-brand-hover: #059669;
+  --havline-brand-soft: rgba(16, 185, 129, 0.12);
+  --havline-brand-text: #047857;
+  --havline-brand-sidebar: #10b981;
+
+  --havline-success: #10b981;
+  --havline-warning: #f59e0b;
+  --havline-error: #ef4444;
+  --havline-disabled: #94a3b8;
+  --havline-info: #3b82f6;
+  --havline-info-soft: rgba(59, 130, 246, 0.1);
+  --havline-error-soft: rgba(239, 68, 68, 0.1);
+
+  --havline-bg: #f8fafc;
+  --havline-bg-muted: #f3f4f6;
+  --havline-banner-bg: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 40%, #a7f3d0 100%);
+  --havline-banner-border: rgba(16, 185, 129, 0.2);
+  --havline-surface: #ffffff;
+  --havline-border: #e5e7eb;
+  --havline-text: #111827;
+  --havline-text-secondary: #6b7280;
+  --havline-text-muted: #9ca3af;
+
+  --havline-radius: 12px;
+  --havline-radius-sm: 8px;
+  --havline-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --havline-shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.06);
+
+  --havline-sidebar-width: 240px;
+  --havline-topbar-height: 56px;
+  --havline-form-max: 720px;
+
+  --havline-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --havline-mono: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+
+  --havline-space-1: 4px;
+  --havline-space-2: 8px;
+  --havline-space-3: 12px;
+  --havline-space-4: 16px;
+  --havline-space-5: 24px;
+  --havline-space-6: 32px;
+}
+
+html.dark,
+[data-theme='dark'] {
+  --havline-brand-soft: rgba(16, 185, 129, 0.18);
+  --havline-brand-text: #6ee7b7;
+  --havline-info-soft: rgba(59, 130, 246, 0.16);
+  --havline-error-soft: rgba(239, 68, 68, 0.16);
+
+  --havline-bg: #0f172a;
+  --havline-bg-muted: #1e293b;
+  --havline-surface: #1e293b;
+  --havline-border: #334155;
+  --havline-text: #f1f5f9;
+  --havline-text-secondary: #94a3b8;
+  --havline-text-muted: #64748b;
+  --havline-banner-bg: linear-gradient(135deg, #064e3b 0%, #065f46 45%, #047857 100%);
+  --havline-banner-border: rgba(52, 211, 153, 0.25);
+
+  --havline-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --havline-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+}

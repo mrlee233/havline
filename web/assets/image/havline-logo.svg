@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Havline logo v2">
+  <defs>
+    <linearGradient id="havline-v2-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f506d"/>
+      <stop offset="1" stop-color="#061827"/>
+    </linearGradient>
+    <linearGradient id="havline-v2-ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6fffd"/>
+      <stop offset="1" stop-color="#c9f5ed"/>
+    </linearGradient>
+    <linearGradient id="havline-v2-line" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#299cff"/>
+      <stop offset="1" stop-color="#68f3d2"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="88" height="88" rx="22" fill="url(#havline-v2-bg)"/>
+  <rect x="4.8" y="4.8" width="86.4" height="86.4" rx="21.2" fill="none" stroke="rgba(242,255,252,.14)" stroke-width="1.6"/>
+  <path d="M17 62C29 52 37 68 47 58C57 48 66 52 79 43" stroke="url(#havline-v2-line)" stroke-width="6.5" fill="none" stroke-linecap="round"/>
+  <rect x="28" y="24" width="11" height="48" rx="5.5" fill="url(#havline-v2-ink)"/>
+  <rect x="57" y="24" width="11" height="48" rx="5.5" fill="url(#havline-v2-ink)"/>
+</svg>

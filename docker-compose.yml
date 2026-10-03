@@ -1,0 +1,76 @@
+# 固定项目名：不改的话，改了目录名/项目名后 compose 会把它当成新项目，
+# havline-data 会变成新空卷（看起来像「数据丢了」）。
+name: havline
+
+# 本地项目：用源码构建镜像（镜像名随 VERSION 变，便于回滚；也便于导出 / 备份）
+# 升级：docker compose up -d --build（或在部署机跑 scripts/upgrade.sh）
+# 回滚：HAVLINE_VERSION=上一个版本号 docker compose up -d（镜像 tag 还在本地）
+services:
+  havline:
+    build:
+      context: .
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
+        UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: havline:${HAVLINE_VERSION:-local}
+    container_name: havline
+    restart: unless-stopped
+    depends_on:
+      - updater
+    ports:
+      - "6893:6893"
+      - "18080:80"
+      - "9443:443"
+    volumes:
+      # 数据目录：默认用命名卷 havline-data（由 Docker 管理，位置随 Docker 数据根）。
+      # 想落到指定目录就在同层 .env 里设 HAVLINE_DATA_PATH=/vol1/docker/havline-data ——
+      # 以 / 或 . 开头的写法会被 compose 当成 bind mount，其余字符串仍是命名卷。
+      - ${HAVLINE_DATA_PATH:-havline-data}:/data
+      - havline-updater-sock:/run/havline-updater
+    environment:
+      HAVLINE_DATA_DIR: /data
+      HAVLINE_LISTEN: :6893
+      HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
+      # 想自己指定就设这个变量；注意它同时是凭据加密密钥，已有数据后不要随意更换
+      HAVLINE_SESSION_SECRET: ${HAVLINE_SESSION_SECRET:-}
+      # 时区：通知消息时间按此显示（默认东八区）
+      TZ: ${TZ:-Asia/Shanghai}
+
+  # 受限升级 sidecar：只有它持有 Docker Socket，主程序通过共享 Unix Socket 触发
+  updater:
+    build:
+      context: .
+      target: updater
+      args:
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
+        UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: havline-updater:${HAVLINE_VERSION:-local}
+    container_name: havline-updater
+    restart: unless-stopped
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${HAVLINE_UPDATE_HOST_DIR:-.}:/workspace
+      - havline-updater-sock:/run/havline-updater
+    environment:
+      HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      HAVLINE_UPDATE_PROJECT_DIR: /workspace
+      HAVLINE_UPDATE_COMPOSE_FILE: docker-compose.yml
+      HAVLINE_UPDATE_SERVICE: havline
+      HAVLINE_UPDATE_MODE: local
+      HAVLINE_UPDATE_APP_URL: http://havline:6893
+      HAVLINE_UPDATE_HOST_DIR: ${HAVLINE_UPDATE_HOST_DIR:-}
+      HAVLINE_UPDATE_PROJECT_NAME: ${HAVLINE_UPDATE_PROJECT_NAME:-havline}
+      HAVLINE_UPDATE_SELF_IMAGE: havline-updater:${HAVLINE_VERSION:-local}
+      HAVLINE_UPDATE_DOCKER_SOCK: ${DOCKER_SOCK:-/var/run/docker.sock}
+      TZ: ${TZ:-Asia/Shanghai}
+
+volumes:
+  havline-data:
+  havline-updater-sock:

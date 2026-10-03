@@ -1,0 +1,3634 @@
+<template>
+  <PageHeader
+    title="反向代理"
+    description="通过 Nginx 反向代理，让内网服务可以通过域名安全访问"
+  >
+    <template #actions>
+      <n-button :loading="scanning" @click="scanServices">
+        <template #icon><n-icon :component="SearchOutline" /></template>
+        扫描服务
+      </n-button>
+      <n-button type="primary" @click="openCreate">
+        <template #icon><n-icon :component="AddOutline" /></template>
+        新建规则
+      </n-button>
+    </template>
+  </PageHeader>
+
+  <LoadError v-if="loadError" :message="loadError" @retry="load" />
+
+  <template v-else>
+    <div class="stats-row">
+      <div class="stat-card">
+        <n-icon :component="LayersOutline" class="stat-card__icon stat-card__icon--blue" />
+        <div class="stat-card__value">{{ rules.length }}</div>
+        <div class="stat-card__label">服务总数</div>
+        <div class="stat-card__sub">{{ enabledCount }} 运行 · {{ disabledCount }} 停止</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="CloudUploadOutline" class="stat-card__icon stat-card__icon--green" />
+        <div class="stat-card__value stat-card__value--sm">{{ formatBytes(trafficTotals.upload) }}</div>
+        <div class="stat-card__label">总上传</div>
+        <div class="stat-card__sub">累计流量</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="CloudDownloadOutline" class="stat-card__icon stat-card__icon--blue" />
+        <div class="stat-card__value stat-card__value--sm">{{ formatBytes(trafficTotals.download) }}</div>
+        <div class="stat-card__label">总下载</div>
+        <div class="stat-card__sub">累计流量</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="ArrowUpOutline" class="stat-card__icon stat-card__icon--amber" />
+        <div class="stat-card__value stat-card__value--sm">{{ formatRate(trafficTotals.uploadRate) }}</div>
+        <div class="stat-card__label">当前上传</div>
+        <div class="stat-card__sub">实时速率</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="ArrowDownOutline" class="stat-card__icon stat-card__icon--green" />
+        <div class="stat-card__value stat-card__value--sm">{{ formatRate(trafficTotals.downloadRate) }}</div>
+        <div class="stat-card__label">当前下载</div>
+        <div class="stat-card__sub">实时速率</div>
+      </div>
+      <div class="stat-card">
+        <n-icon :component="PeopleOutline" class="stat-card__icon stat-card__icon--purple" />
+        <div class="stat-card__value">{{ trafficTotals.connections }}</div>
+        <div class="stat-card__label">当前连接</div>
+        <div class="stat-card__sub">全部规则合计</div>
+      </div>
+    </div>
+
+    <div class="proxy-layout">
+      <HavlineCard flush class="proxy-panel">
+        <div class="proxy-toolbar">
+          <n-input
+            v-model:value="search"
+            clearable
+            size="small"
+            placeholder="搜索名称、域名或目标地址..."
+            class="proxy-toolbar__search"
+          >
+            <template #prefix><n-icon :component="SearchOutline" /></template>
+          </n-input>
+          <n-select
+            v-model:value="statusFilter"
+            size="small"
+            :options="statusOptions"
+            clearable
+            placeholder="全部状态"
+            class="proxy-toolbar__filter"
+          />
+          <n-select
+            v-model:value="httpsFilter"
+            size="small"
+            :options="httpsOptions"
+            clearable
+            placeholder="全部协议"
+            class="proxy-toolbar__filter"
+          />
+          <div class="proxy-toolbar__spacer" />
+          <n-button size="small" quaternary :loading="loading" @click="refreshAll">
+            <template #icon><n-icon :component="RefreshOutline" /></template>
+          </n-button>
+        </div>
+
+        <div v-if="loading && rules.length === 0" class="proxy-loading">
+          <n-spin size="medium" />
+        </div>
+
+        <template v-else-if="tableRules.length > 0">
+          <div ref="tableWrapRef" class="proxy-table-wrap">
+            <n-data-table
+              class="proxy-table"
+              :class="{ 'proxy-table--sortable': canReorder }"
+              :columns="columns"
+              :data="tableRules"
+              :bordered="false"
+              size="small"
+              :scroll-x="canReorder ? 1610 : 1570"
+              :row-key="(r: ProxyRule) => r.id"
+              :row-props="rowProps"
+            />
+          </div>
+        </template>
+
+        <EmptyState
+          v-else-if="rules.length === 0"
+          title="还没有反向代理规则"
+          description="创建第一条规则，让域名访问你的 NAS 服务。"
+        >
+          <template #action>
+            <n-button type="primary" @click="openCreate">新建规则</n-button>
+          </template>
+        </EmptyState>
+
+        <EmptyState
+          v-else
+          title="没有匹配的规则"
+          description="试试调整搜索关键词或筛选条件。"
+        />
+      </HavlineCard>
+    </div>
+  </template>
+
+  <n-modal v-model:show="discoveryVisible" preset="card" :style="{ width: 'min(680px, 96vw)' }" title="发现本机服务">
+    <div class="discovery-list">
+      <div v-for="item in discoveryResults" :key="item.platform + item.port" class="discovery-item">
+        <div class="discovery-item__main">
+          <strong>{{ item.name }}</strong>
+          <span class="mono">{{ item.upstream }}</span>
+          <n-tag size="small" :type="item.detected ? 'success' : 'default'" :bordered="false">
+            {{ item.detected ? '检测到服务' : '端口未开放' }}
+          </n-tag>
+        </div>
+        <n-button size="small" type="primary" :disabled="!item.detected" @click="publishDiscovered(item)">
+          发布
+        </n-button>
+      </div>
+    </div>
+    <template #footer>
+      <div class="cf-modal__footer">
+        <n-button @click="discoveryVisible = false">关闭</n-button>
+      </div>
+    </template>
+  </n-modal>
+
+  <n-modal v-model:show="showDetailPanel" :mask-closable="true" transform-origin="center">
+    <div v-if="selectedRule" class="proxy-detail-modal">
+      <div class="proxy-detail-modal__header">
+        <div class="proxy-detail-modal__intro">
+          <h3 class="proxy-detail-modal__title">{{ ruleName(selectedRule) }}</h3>
+          <StatusBadge
+            :value="selectedRule.enabled ? 'ok' : 'disabled'"
+            :text="selectedRule.enabled ? '运行中' : '已停止'"
+          />
+          <span class="proxy-detail-modal__conn" :class="{ 'is-active': (selectedTraffic?.connections ?? 0) > 0 }">
+            <n-icon :component="PeopleOutline" />
+            {{ selectedTraffic?.connections ?? 0 }} 连接
+          </span>
+        </div>
+        <n-space :size="4" align="center">
+          <n-button size="small" quaternary @click="openDuplicate(selectedRule)">复制</n-button>
+          <n-button size="small" quaternary type="primary" @click="openEdit(selectedRule)">编辑</n-button>
+          <n-button size="small" quaternary type="error" @click="confirmDelete(selectedRule)">删除</n-button>
+          <n-button size="small" quaternary @click="closeDetail">
+            <template #icon><n-icon :component="CloseOutline" /></template>
+          </n-button>
+        </n-space>
+      </div>
+
+      <div class="proxy-detail__tabbar">
+        <button
+          type="button"
+          class="proxy-detail__tab"
+          :class="{ 'proxy-detail__tab--active': detailTab === 'overview' }"
+          @click="switchDetailTab('overview')"
+        >
+          概览
+        </button>
+        <button
+          type="button"
+          class="proxy-detail__tab"
+          :class="{ 'proxy-detail__tab--active': detailTab === 'logs' }"
+          @click="switchDetailTab('logs')"
+        >
+          日志
+        </button>
+        <button
+          type="button"
+          class="proxy-detail__tab"
+          :class="{ 'proxy-detail__tab--active': detailTab === 'nginx' }"
+          @click="switchDetailTab('nginx')"
+        >
+          Nginx
+        </button>
+      </div>
+
+      <div class="proxy-detail__scroll">
+        <div v-show="detailTab === 'overview'" class="proxy-detail__pane proxy-detail__pane--overview">
+            <div class="overview-strip">
+              <div class="overview-strip__item">
+                <span class="overview-strip__label">域名</span>
+                <span class="overview-strip__value" :title="ruleHosts(selectedRule).join('、')">
+                  {{ ruleHosts(selectedRule).join('、') }}
+                </span>
+              </div>
+              <div class="overview-strip__item">
+                <span class="overview-strip__label">监听</span>
+                <span class="overview-strip__value">{{ listenLabel(selectedRule) }}</span>
+              </div>
+              <div class="overview-strip__item overview-strip__item--wide">
+                <span class="overview-strip__label">目标</span>
+                <span class="overview-strip__value mono" :title="selectedRule.upstream">{{ selectedRule.upstream }}</span>
+              </div>
+              <div class="overview-strip__item">
+                <span class="overview-strip__label">协议</span>
+                <span class="overview-strip__value">
+                  <n-tag size="small" :type="selectedRule.https_enabled ? 'success' : 'default'" :bordered="false" round>
+                    {{ selectedRule.https_enabled ? 'HTTPS' : 'HTTP' }}
+                  </n-tag>
+                </span>
+              </div>
+              <div class="overview-strip__item">
+                <span class="overview-strip__label">出口</span>
+                <span class="overview-strip__value">{{ exitLabel(selectedRule) }}</span>
+              </div>
+            </div>
+
+            <div class="overview-security">
+              <span class="overview-security__label">安全策略</span>
+              <div v-if="selectedSecurityFeatures.length" class="overview-security__tags">
+                <n-tag
+                  v-for="tag in selectedSecurityFeatures"
+                  :key="tag"
+                  size="small"
+                  round
+                  :bordered="false"
+                >
+                  {{ tag }}
+                </n-tag>
+              </div>
+              <span v-else class="overview-security__empty">未启用</span>
+            </div>
+
+            <div class="overview-main">
+              <section class="overview-card overview-card--chart">
+                <div class="overview-card__head">
+                  <h4>实时流量 <span class="overview-card__sub">最近 5 分钟</span></h4>
+                  <span class="live-badge"><span class="live-badge__dot" />实时</span>
+                </div>
+                <div class="traffic-live-legend traffic-live-legend--compact">
+                  <span class="traffic-live-legend__item traffic-live-legend__item--up">
+                    <span class="traffic-live-legend__dot" />
+                    上传 {{ formatRate(selectedTraffic?.upload_rate ?? 0) }}
+                  </span>
+                  <span class="traffic-live-legend__item traffic-live-legend__item--down">
+                    <span class="traffic-live-legend__dot" />
+                    下载 {{ formatRate(selectedTraffic?.download_rate ?? 0) }}
+                  </span>
+                </div>
+                <MiniTrafficChart
+                  class="overview-chart"
+                  :labels="trafficChart.labels"
+                  :upload="trafficChart.upload"
+                  :download="trafficChart.download"
+                />
+              </section>
+
+              <aside class="overview-side">
+                <section class="overview-metrics">
+                  <div class="overview-metric">
+                    <div class="overview-metric__label">总上传</div>
+                    <div class="overview-metric__value">{{ formatBytes(selectedTraffic?.upload_total ?? 0) }}</div>
+                  </div>
+                  <div class="overview-metric">
+                    <div class="overview-metric__label">总下载</div>
+                    <div class="overview-metric__value">{{ formatBytes(selectedTraffic?.download_total ?? 0) }}</div>
+                  </div>
+                  <div class="overview-metric">
+                    <div class="overview-metric__label">当前上传</div>
+                    <div class="overview-metric__value">{{ formatRate(selectedTraffic?.upload_rate ?? 0) }}</div>
+                  </div>
+                  <div class="overview-metric">
+                    <div class="overview-metric__label">当前下载</div>
+                    <div class="overview-metric__value">{{ formatRate(selectedTraffic?.download_rate ?? 0) }}</div>
+                  </div>
+                </section>
+
+                <section class="overview-card overview-card--clients">
+                  <div class="overview-card__head">
+                    <h4>
+                      最近访问
+                      <span class="overview-card__sub">65 秒内 · {{ clientRows.length }} 个</span>
+                    </h4>
+                    <n-button size="tiny" quaternary :loading="clientsLoading" @click="loadClients">刷新</n-button>
+                  </div>
+                  <div class="overview-client-list">
+                    <template v-if="clientRows.length > 0">
+                      <div v-for="row in clientRows" :key="row.ip" class="overview-client-row">
+                        <span class="mono">{{ row.ip }}</span>
+                        <span class="overview-client-row__time">{{ formatRelativeTime(row.last_seen) }}</span>
+                      </div>
+                    </template>
+                    <p v-else class="overview-empty">暂无访问记录</p>
+                  </div>
+                </section>
+              </aside>
+            </div>
+        </div>
+
+        <div v-show="detailTab === 'logs'" class="proxy-detail__pane proxy-detail__pane--logs">
+              <div class="log-panel-head">
+                <span class="text-muted">实时访问日志</span>
+                <div class="log-panel-actions">
+                  <n-button size="tiny" quaternary @click="openLogFullscreen">全屏</n-button>
+                  <n-button size="tiny" quaternary @click="clearLogLines">清空</n-button>
+                </div>
+              </div>
+              <ProxyAccessLogBox
+                ref="logBox"
+                :lines="logLines"
+                embedded
+                @scroll="onLogBoxScroll"
+              />
+        </div>
+
+        <div v-show="detailTab === 'nginx'" class="proxy-detail__pane proxy-detail__pane--nginx">
+            <n-alert v-if="!nginxEnabled" type="warning" :bordered="false" class="nginx-pane-alert">
+              规则已停用，以下配置不会写入 Nginx。
+            </n-alert>
+            <n-alert
+              v-if="nginxServerMode === 'custom'"
+              type="info"
+              :bordered="false"
+              class="nginx-pane-alert"
+            >
+              当前为手动编辑配置。如需修改，请使用右上角「编辑」。
+            </n-alert>
+            <n-spin :show="nginxLoading" class="nginx-editor-spin">
+              <NginxCodeEditor
+                :model-value="detailNginxText"
+                embedded
+                readonly
+                placeholder="server { ... }"
+              />
+            </n-spin>
+        </div>
+      </div>
+    </div>
+  </n-modal>
+
+  <Teleport to="body">
+    <div v-if="logFullscreen && selectedRule" class="proxy-log-fullscreen">
+      <div class="log-panel-head proxy-log-fullscreen__head">
+        <div class="proxy-log-fullscreen__title">
+          <span class="text-muted">实时访问日志</span>
+          <span class="proxy-log-fullscreen__rule">{{ ruleName(selectedRule) }}</span>
+        </div>
+        <div class="log-panel-actions">
+          <n-button size="tiny" quaternary @click="clearLogLines">清空</n-button>
+          <n-button size="tiny" quaternary @click="logFullscreen = false">退出全屏</n-button>
+        </div>
+      </div>
+      <ProxyAccessLogBox
+        ref="logBoxFullscreen"
+        :lines="logLines"
+        fullscreen
+        @scroll="onLogBoxScroll"
+      />
+    </div>
+  </Teleport>
+
+  <n-modal v-model:show="showModal" :mask-closable="false" transform-origin="center">
+    <div class="proxy-modal">
+      <div class="proxy-modal__form">
+        <div class="proxy-modal__header">
+          <h3 class="modal-title">{{ editing ? '编辑规则' : '新增规则' }}</h3>
+          <n-button size="small" quaternary @click="closeModal">
+            <template #icon><n-icon :component="CloseOutline" /></template>
+          </n-button>
+        </div>
+
+        <div class="proxy-modal__tabbar">
+          <button
+            type="button"
+            class="proxy-modal__tab"
+            :class="{ 'proxy-modal__tab--active': formTab === 'basic' }"
+            @click="switchFormTab('basic')"
+          >
+            基础配置
+          </button>
+          <button
+            type="button"
+            class="proxy-modal__tab"
+            :class="{ 'proxy-modal__tab--active': formTab === 'security' }"
+            @click="switchFormTab('security')"
+          >
+            <span class="proxy-modal__tab-label">
+              安全设置
+              <n-tag v-if="activeSecurityFeatures.length" size="tiny" round :bordered="false" type="success">
+                {{ activeSecurityFeatures.length }}
+              </n-tag>
+            </span>
+          </button>
+          <button
+            type="button"
+            class="proxy-modal__tab"
+            :class="{ 'proxy-modal__tab--active': formTab === 'nginx' }"
+            @click="switchFormTab('nginx')"
+          >
+            Nginx
+          </button>
+        </div>
+
+        <div class="proxy-modal__scroll">
+          <n-form v-show="formTab === 'basic'" label-placement="top" class="proxy-modal__pane">
+              <n-form-item label="名称">
+                <n-input
+                  v-model:value="form.name"
+                  maxlength="100"
+                  show-count
+                  placeholder="选填，用于在列表中识别该规则"
+                />
+              </n-form-item>
+
+              <n-form-item required>
+                <template #label>
+                  <span class="form-label">
+                    前端域名
+                    <n-tooltip trigger="hover">
+                      <template #trigger>
+                        <n-icon :component="HelpCircleOutline" class="form-label__help" />
+                      </template>
+                      每行一个域名；如需单独端口可写 example.com:6893
+                    </n-tooltip>
+                  </span>
+                </template>
+                <div class="field-stack">
+                  <n-input
+                    v-model:value="form.hostsText"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="s.example.com&#10;api.example.com&#10;example.com:6893"
+                  />
+                  <p class="field-hint">支持多个域名，每行一个，可包含端口</p>
+                </div>
+              </n-form-item>
+
+              <div class="listen-row">
+                <div class="listen-col listen-col--port">
+                  <div class="listen-col__label">监听端口 <span class="required-mark">*</span></div>
+                  <div class="listen-col__control">
+                    <n-input-number v-model:value="form.listen_port" :min="1" :max="65535" class="port-input" />
+                  </div>
+                </div>
+                <div class="listen-col listen-col--protocol">
+                  <div class="listen-col__label">监听协议</div>
+                  <div class="listen-col__control">
+                    <div class="listen-types">
+                      <n-checkbox v-model:checked="form.listen_ipv4">IPv4</n-checkbox>
+                      <n-checkbox v-model:checked="form.listen_ipv6">IPv6</n-checkbox>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <n-form-item label="目标地址" required>
+                <div class="field-stack">
+                  <n-input v-model:value="form.upstream" placeholder="例如：http://192.168.1.100:5173" />
+                  <p class="field-hint">支持 http://、https://，也可以是 IP 地址或内网域名</p>
+                </div>
+              </n-form-item>
+
+              <n-form-item label="出口">
+                <div class="field-stack">
+                  <div class="exit-options">
+                    <n-checkbox v-model:checked="form.exit_local">本机 Nginx</n-checkbox>
+                    <n-checkbox v-model:checked="form.exit_cloudflare">Cloudflare 隧道</n-checkbox>
+                  </div>
+                  <p class="field-hint">可多选；关闭本机出口后，该规则只通过 Cloudflare 隧道访问。</p>
+                </div>
+              </n-form-item>
+
+              <n-form-item v-if="form.exit_cloudflare" label="Cloudflare 隧道">
+                <div class="field-stack">
+                  <n-select
+                    v-model:value="form.cf_tunnel_id"
+                    :options="cfTunnelOptions"
+                    placeholder="选择自动托管隧道"
+                  />
+                  <p v-if="cfTunnelOptions.length === 0" class="field-hint field-hint--warning">
+                    还没有自动托管隧道，请先到
+                    <router-link to="/cloudflare">Cloudflare 隧道</router-link>
+                    新建并开启「自动托管」。
+                  </p>
+                  <p class="field-hint">域名的根 Zone 必须已加入当前 Cloudflare 账号，且 API Token 的 Zone Resources 包含该域名。</p>
+                  <p v-if="!form.exit_local" class="field-hint">仅走 Cloudflare 出口时，HTTPS 由 Cloudflare 边缘提供，不需要在 Havline 申请本机证书。</p>
+                </div>
+              </n-form-item>
+
+              <div class="form-switch-list form-switch-list--compact">
+                <div class="form-switch-row">
+                  <div class="form-switch-row__text">
+                    <div class="form-switch-row__label">启用 HTTPS</div>
+                    <div class="form-switch-row__hint">为前端域名启用 HTTPS 访问</div>
+                  </div>
+                  <n-switch v-model:value="form.https_enabled" />
+                </div>
+                <div class="form-switch-row">
+                  <div class="form-switch-row__text">
+                    <div class="form-switch-row__label">HTTP 跳转 HTTPS</div>
+                    <div class="form-switch-row__hint">将 HTTP 请求自动跳转为 HTTPS</div>
+                  </div>
+                  <n-switch v-model:value="form.http_redirect" :disabled="!form.https_enabled" />
+                </div>
+                <div class="form-switch-row">
+                  <div class="form-switch-row__text">
+                    <div class="form-switch-row__label">启用规则</div>
+                    <div class="form-switch-row__hint">保存后立即开始转发请求</div>
+                  </div>
+                  <n-switch v-model:value="form.enabled" />
+                </div>
+              </div>
+            </n-form>
+
+          <div v-show="formTab === 'security'" class="proxy-modal__pane proxy-modal__pane--security">
+              <div class="security-section">
+              <div class="security-header">
+                <div class="security-header__row">
+                  <div class="security-header__status">
+                    <span class="security-header__status-label">已启用</span>
+                    <div v-if="activeSecurityFeatures.length" class="security-header__tags">
+                      <n-tag
+                        v-for="tag in activeSecurityFeatures"
+                        :key="tag"
+                        size="small"
+                        round
+                        :bordered="false"
+                      >
+                        {{ tag }}
+                      </n-tag>
+                    </div>
+                    <span v-else class="security-header__empty">暂无</span>
+                  </div>
+                  <n-button type="primary" size="tiny" class="security-header__preset" @click="applySecurityPreset">
+                    <template #icon><n-icon :component="FlashOutline" :size="14" /></template>
+                    一键推荐
+                  </n-button>
+                </div>
+                <p class="security-header__note">
+                  IP 策略依赖「设置 → 信任代理」；白名单 IP 可豁免「仅中国大陆」限制。
+                </p>
+              </div>
+
+              <n-collapse v-model:expanded-names="securityExpanded" class="security-collapse">
+                <n-collapse-item title="IP 访问控制" name="ip">
+                  <div class="security-panel">
+                    <div class="security-option">
+                      <div class="security-option__text">
+                        <div class="security-option__label">仅中国大陆 IP</div>
+                        <div class="security-option__hint">
+                          需先在设置页更新中国 IP 段；内网（10/8、172.16/12、192.168/16 等）默认放行
+                        </div>
+                      </div>
+                      <n-switch v-model:value="form.china_only" size="small" />
+                    </div>
+
+                    <div class="security-option">
+                      <div class="security-option__text">
+                        <div class="security-option__label">黑名单模式</div>
+                        <div class="security-option__hint">启用后拒绝列表中的 IP 访问</div>
+                      </div>
+                      <n-switch v-model:value="form.ip_blacklist_mode" size="small" />
+                    </div>
+                    <div v-if="form.ip_blacklist_mode" class="security-panel__fields">
+                      <n-form-item label="IP 黑名单">
+                        <n-input
+                          v-model:value="form.ip_blacklist_text"
+                          type="textarea"
+                          :rows="2"
+                          placeholder="每行一个 IP 或 CIDR"
+                        />
+                      </n-form-item>
+                    </div>
+
+                    <div class="security-option">
+                      <div class="security-option__text">
+                        <div class="security-option__label">白名单模式</div>
+                        <div class="security-option__hint">启用后仅允许白名单 IP 访问</div>
+                      </div>
+                      <n-switch v-model:value="form.ip_whitelist_mode" size="small" />
+                    </div>
+                    <div v-if="form.ip_whitelist_mode" class="security-panel__fields">
+                      <n-form-item label="IP 白名单">
+                        <n-input
+                          v-model:value="form.ip_whitelist_text"
+                          type="textarea"
+                          :rows="2"
+                          placeholder="每行一个 IP 或 CIDR"
+                        />
+                      </n-form-item>
+                    </div>
+                  </div>
+                </n-collapse-item>
+
+                <n-collapse-item title="认证" name="auth">
+                  <div class="security-panel">
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">Basic Auth</div>
+                      <div class="security-option__hint">浏览器弹窗认证</div>
+                    </div>
+                    <n-switch v-model:value="form.basic_auth_enabled" size="small" />
+                  </div>
+                  <div v-if="form.basic_auth_enabled" class="security-fields-grid">
+                    <n-form-item label="用户名">
+                      <n-input v-model:value="form.basic_auth_username" placeholder="用户名" />
+                    </n-form-item>
+                    <n-form-item>
+                      <template #label>
+                        <span class="proxy-secret-label">
+                          密码
+                          <n-tag
+                            v-if="editing?.security?.basic_auth?.has_password"
+                            size="small"
+                            type="success"
+                            :bordered="false"
+                          >
+                            {{ CONFIGURED_SECRET_TAG }}
+                          </n-tag>
+                        </span>
+                      </template>
+                      <n-input
+                        v-model:value="form.basic_auth_password"
+                        type="password"
+                        show-password-on="click"
+                        :placeholder="
+                          editing?.security?.basic_auth?.has_password
+                            ? CONFIGURED_SECRET_PLACEHOLDER
+                            : '至少 8 位'
+                        "
+                      />
+                    </n-form-item>
+                  </div>
+                  </div>
+                </n-collapse-item>
+
+                <n-collapse-item title="流量控制" name="traffic">
+                  <div class="security-panel">
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">请求限流</div>
+                      <div class="security-option__hint">超出速率返回 429</div>
+                    </div>
+                    <n-switch v-model:value="form.rate_limit_enabled" size="small" />
+                  </div>
+                  <div v-if="form.rate_limit_enabled" class="security-fields-grid">
+                    <n-form-item label="每秒请求数">
+                      <n-input-number v-model:value="form.rate_limit_rate" :min="1" :max="10000" class="w-full" />
+                    </n-form-item>
+                    <n-form-item label="突发上限">
+                      <n-input-number v-model:value="form.rate_limit_burst" :min="1" :max="100000" class="w-full" />
+                    </n-form-item>
+                  </div>
+
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">连接数限制</div>
+                      <div class="security-option__hint">每 IP 最大并发连接</div>
+                    </div>
+                    <n-switch v-model:value="form.conn_limit_enabled" size="small" />
+                  </div>
+                  <div v-if="form.conn_limit_enabled" class="security-panel__fields">
+                    <n-form-item label="最大连接数">
+                      <n-input-number v-model:value="form.conn_limit_max" :min="1" :max="10000" class="conn-limit-input" />
+                    </n-form-item>
+                  </div>
+                  </div>
+                </n-collapse-item>
+
+                <n-collapse-item title="高级" name="advanced">
+                  <div class="security-panel">
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">忽略后端 TLS 证书</div>
+                      <div class="security-option__hint">上游为自签 https:// 时使用</div>
+                    </div>
+                    <n-switch v-model:value="form.proxy_ssl_verify_off" size="small" />
+                  </div>
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">使用目标 Host 头</div>
+                      <div class="security-option__hint">转发时使用上游地址作为 Host</div>
+                    </div>
+                    <n-switch v-model:value="form.proxy_host_upstream" size="small" />
+                  </div>
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">仅 TLS 1.3</div>
+                    </div>
+                    <n-switch v-model:value="form.tls_min_13_only" size="small" :disabled="!form.https_enabled" />
+                  </div>
+                  <div class="security-option">
+                    <div class="security-option__text">
+                      <div class="security-option__label">安全响应头</div>
+                      <div class="security-option__hint">HSTS、X-Frame-Options 等</div>
+                    </div>
+                    <n-switch v-model:value="form.security_headers" size="small" :disabled="!form.https_enabled" />
+                  </div>
+                  </div>
+                </n-collapse-item>
+              </n-collapse>
+              </div>
+          </div>
+
+          <div v-show="formTab === 'nginx'" class="proxy-modal__pane proxy-modal__pane--nginx">
+            <template v-if="!editing">
+              <n-empty description="请先保存规则后再配置 Nginx">
+                <template #extra>
+                  <n-button type="primary" @click="switchFormTab('basic')">去填写基础配置</n-button>
+                </template>
+              </n-empty>
+            </template>
+            <template v-else>
+              <n-alert v-if="nginxEditMode === 'custom'" type="info" :bordered="false" class="nginx-pane-alert">
+                手动模式下，修改基础/安全设置后需先保存规则，再在此处同步 Nginx 文本。
+              </n-alert>
+              <div class="log-panel-head">
+                <div class="nginx-mode-toggle">
+                  <n-button
+                    size="tiny"
+                    quaternary
+                    :type="nginxEditMode === 'auto' ? 'primary' : 'default'"
+                    @click="setNginxEditMode('auto')"
+                  >
+                    自动生成
+                  </n-button>
+                  <n-button
+                    size="tiny"
+                    quaternary
+                    :type="nginxEditMode === 'custom' ? 'primary' : 'default'"
+                    @click="setNginxEditMode('custom')"
+                  >
+                    手动编辑
+                  </n-button>
+                </div>
+                <div class="log-panel-actions">
+                  <n-button
+                    v-if="nginxEditMode === 'custom'"
+                    size="tiny"
+                    quaternary
+                    type="primary"
+                    :loading="nginxSaving"
+                    :disabled="!nginxDirty"
+                    @click="saveRuleNginx"
+                  >
+                    保存 Nginx
+                  </n-button>
+                  <n-button
+                    v-if="nginxEditMode === 'custom' && nginxBackups.length > 0"
+                    size="tiny"
+                    quaternary
+                    :loading="nginxSaving"
+                    @click="rollbackRuleNginx()"
+                  >
+                    回滚
+                  </n-button>
+                  <n-button
+                    v-if="nginxEditMode === 'custom' && nginxServerMode === 'custom'"
+                    size="tiny"
+                    quaternary
+                    :loading="nginxSaving"
+                    @click="resetRuleNginxAuto"
+                  >
+                    恢复自动生成
+                  </n-button>
+                </div>
+              </div>
+              <n-spin :show="nginxLoading" class="nginx-editor-spin nginx-editor-spin--modal">
+                <NginxCodeEditor
+                  v-model="nginxDraft"
+                  embedded
+                  :readonly="nginxEditMode === 'auto'"
+                  placeholder="server { ... }"
+                  @update:model-value="onNginxDraftInput"
+                />
+              </n-spin>
+            </template>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <n-button @click="closeModal">取消</n-button>
+          <n-button v-if="formTab !== 'nginx'" type="primary" :loading="saving" @click="save">
+            {{ editing ? '保存' : '创建' }}
+          </n-button>
+        </div>
+      </div>
+
+      <div class="proxy-modal__help">
+        <template v-if="formTab === 'basic'">
+          <h4>配置说明</h4>
+          <ol>
+            <li>
+              <strong>前端域名</strong>：支持多个域名，每行一个；单独端口可写
+              <code>example.com:6893</code>。
+            </li>
+            <li>
+              <strong>目标地址</strong>：内网服务地址，支持 <code>http://</code>、<code>https://</code> 或 IP。
+            </li>
+            <li>
+              <strong>HTTPS</strong>：需在「证书」页为域名申请或上传证书。
+            </li>
+          </ol>
+          <div class="proxy-modal__tip">
+            <n-icon :component="InformationCircleOutline" class="proxy-modal__tip-icon" />
+            <span>请确保域名已解析到本机，且内网服务可访问。</span>
+          </div>
+        </template>
+        <template v-else-if="formTab === 'nginx'">
+          <h4>Nginx 说明</h4>
+          <ol>
+            <li><strong>自动生成</strong>：根据基础配置与安全设置生成，并附带中文注释。</li>
+            <li><strong>手动编辑</strong>：保存前会自动备份，支持回滚。</li>
+            <li>修改基础/安全项后请先点「保存」，再回到此页刷新预览。</li>
+          </ol>
+          <div class="proxy-modal__tip">
+            <n-icon :component="InformationCircleOutline" class="proxy-modal__tip-icon" />
+            <span>详情页的 Nginx 页签仅展示当前生效配置。</span>
+          </div>
+          <div class="proxy-modal__tip proxy-modal__tip--warn">
+            <n-icon :component="WarningOutline" class="proxy-modal__tip-icon" />
+            <span>小白勿碰。若保存后 Nginx 启动失败，请点「恢复自动生成」或「回滚」还原配置。</span>
+          </div>
+        </template>
+        <template v-else>
+          <h4>安全说明</h4>
+          <ol>
+            <li>
+              <strong>IP 策略</strong>：经 CDN 访问时，请在「设置」配置信任代理，否则限流与 IP 规则可能不准。
+            </li>
+            <li>
+              <strong>仅中国大陆</strong>：需先在设置页更新中国 IP 段；内网 IP 默认放行，额外豁免 IP 可写在白名单里（无需开启白名单模式）。
+            </li>
+            <li>
+              <strong>一键推荐</strong>：HTTPS + 限流 + 安全响应头，适合公网暴露场景。
+            </li>
+          </ol>
+          <div class="proxy-modal__tip">
+            <n-icon :component="InformationCircleOutline" class="proxy-modal__tip-icon" />
+            <span>安全策略保存后会自动重载 Nginx 配置。</span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </n-modal>
+</template>
+
+<script setup lang="ts">
+import { computed, h, nextTick, onMounted, onUnmounted, reactive, ref, watch, type Component, type VNode } from 'vue'
+import Sortable from 'sortablejs'
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NCollapse,
+  NCollapseItem,
+  NDataTable,
+  NEmpty,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NInputNumber,
+  NModal,
+  NPopover,
+  NSelect,
+  NSpace,
+  NSpin,
+  NSwitch,
+  NTag,
+  NTooltip,
+  useDialog,
+  useMessage,
+  type DataTableColumns,
+} from 'naive-ui'
+import {
+  AddOutline,
+  ArrowDownOutline,
+  ArrowUpOutline,
+  CloseOutline,
+  CopyOutline,
+  OpenOutline,
+  ReorderThreeOutline,
+  CloudDownloadOutline,
+  CloudUploadOutline,
+  FlashOutline,
+  HelpCircleOutline,
+  InformationCircleOutline,
+  LayersOutline,
+  PeopleOutline,
+  RefreshOutline,
+  SearchOutline,
+  WarningOutline,
+} from '@vicons/ionicons5'
+import { api, asList } from '../api/client'
+import type { CfTunnel, DiscoveredService, ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
+import { useVisibilityPolling } from '../composables/useVisibilityPolling'
+import EmptyState from '../components/EmptyState.vue'
+import HavlineCard from '../components/HavlineCard.vue'
+import ProxyAccessLogBox from '../components/ProxyAccessLogBox.vue'
+import NginxCodeEditor from '../components/NginxCodeEditor.vue'
+import LoadError from '../components/LoadError.vue'
+import MiniTrafficChart from '../components/MiniTrafficChart.vue'
+import PageHeader from '../components/PageHeader.vue'
+import StatusBadge from '../components/StatusBadge.vue'
+import { CONFIGURED_SECRET_PLACEHOLDER, CONFIGURED_SECRET_TAG } from '../constants/secretField'
+import { formatBytes, formatRate, formatRelativeTime } from '../utils/format'
+import { renderTableRowActions } from '../utils/tableActions'
+
+const message = useMessage()
+const dialog = useDialog()
+const rules = ref<ProxyRule[]>([])
+const cfTunnels = ref<CfTunnel[]>([])
+const discoveryVisible = ref(false)
+const discoveryResults = ref<DiscoveredService[]>([])
+const loading = ref(false)
+const saving = ref(false)
+const loadError = ref('')
+const showModal = ref(false)
+const formTab = ref<'basic' | 'security' | 'nginx'>('basic')
+const securityExpanded = ref<string[]>(['ip'])
+const editing = ref<ProxyRule | null>(null)
+const search = ref('')
+const statusFilter = ref<string | null>(null)
+const httpsFilter = ref<string | null>(null)
+const scanning = ref(false)
+const selectedRuleId = ref<number | null>(null)
+const showDetailPanel = ref(false)
+const detailTab = ref<'overview' | 'logs' | 'nginx'>('overview')
+const nginxLoading = ref(false)
+const nginxSaving = ref(false)
+const nginxEditMode = ref<'auto' | 'custom'>('auto')
+const nginxServerMode = ref<'auto' | 'custom'>('auto')
+const nginxGenerated = ref('')
+const nginxDraft = ref('')
+const nginxDirty = ref(false)
+const nginxEnabled = ref(true)
+const nginxBackups = ref<{ name: string; created_at: string }[]>([])
+let nginxRefreshTimer: ReturnType<typeof setTimeout> | null = null
+const logLines = ref<string[]>([])
+const logBox = ref<InstanceType<typeof ProxyAccessLogBox> | null>(null)
+const logBoxFullscreen = ref<InstanceType<typeof ProxyAccessLogBox> | null>(null)
+const logFullscreen = ref(false)
+const logStickToBottom = ref(true)
+const LOG_SCROLL_BOTTOM_THRESHOLD = 24
+let logEventSource: EventSource | null = null
+const trafficByRule = ref<Record<number, ProxyTraffic>>({})
+const clientRows = ref<ProxyClientConn[]>([])
+const clientsLoading = ref(false)
+type RatePoint = { at: number; upload: number; download: number }
+const rateHistory = ref<RatePoint[]>([])
+const RATE_HISTORY_MS = 5 * 60 * 1000
+
+const nginxHttpPort = ref(80)
+const nginxHttpsPort = ref(443)
+
+function defaultListenPort(httpsEnabled: boolean) {
+  return httpsEnabled ? nginxHttpsPort.value : nginxHttpPort.value
+}
+
+const statusOptions = [
+  { label: '运行中', value: 'enabled' },
+  { label: '已停止', value: 'disabled' },
+]
+const httpsOptions = [
+  { label: 'HTTPS', value: 'on' },
+  { label: 'HTTP', value: 'off' },
+]
+
+const cfTunnelOptions = computed(() =>
+  cfTunnels.value
+    .filter((tunnel) => tunnel.managed)
+    .map((tunnel) => ({
+      label: `${tunnel.name}${tunnel.status === 'connected' ? '（已连接）' : ''}`,
+      value: tunnel.id,
+    })),
+)
+
+const defaultSecurityForm = () => ({
+  ip_blacklist_text: '',
+  ip_blacklist_mode: false,
+  ip_whitelist_text: '',
+  ip_whitelist_mode: false,
+  china_only: false,
+  basic_auth_enabled: false,
+  basic_auth_username: '',
+  basic_auth_password: '',
+  rate_limit_enabled: false,
+  rate_limit_rate: 10,
+  rate_limit_burst: 20,
+  conn_limit_enabled: false,
+  conn_limit_max: 20,
+  proxy_ssl_verify_off: false,
+  proxy_host_upstream: false,
+  tls_min_13_only: false,
+  security_headers: false,
+})
+
+const form = reactive({
+  listen_port: 80,
+  listen_ipv4: true,
+  listen_ipv6: false,
+  hostsText: '',
+  upstream: '',
+  https_enabled: true,
+  http_redirect: true,
+  enabled: true,
+  name: '',
+  exit_local: true,
+  exit_cloudflare: false,
+  cf_tunnel_id: null as number | null,
+  ...defaultSecurityForm(),
+})
+
+const tableWrapRef = ref<HTMLElement | null>(null)
+let rowSortable: Sortable | null = null
+const reordering = ref(false)
+const togglingRuleId = ref<number | null>(null)
+
+const enabledCount = computed(() => rules.value.filter((r) => r.enabled).length)
+const disabledCount = computed(() => rules.value.length - enabledCount.value)
+
+const trafficTotals = computed(() => {
+  let upload = 0
+  let download = 0
+  let uploadRate = 0
+  let downloadRate = 0
+  let connections = 0
+  for (const stats of Object.values(trafficByRule.value)) {
+    upload += stats.upload_total
+    download += stats.download_total
+    uploadRate += stats.upload_rate
+    downloadRate += stats.download_rate
+    connections += stats.connections
+  }
+  return { upload, download, uploadRate, downloadRate, connections }
+})
+
+const canReorder = computed(
+  () => !search.value.trim() && !statusFilter.value && !httpsFilter.value && rules.value.length > 1,
+)
+
+const filteredRules = computed(() =>
+  rules.value.filter((rule) => {
+    const q = search.value.toLowerCase()
+    const hostText = ruleHosts(rule).join(' ').toLowerCase()
+    const name = (rule.name ?? '').toLowerCase()
+    if (q && !hostText.includes(q) && !rule.upstream.toLowerCase().includes(q) && !name.includes(q)) return false
+    if (statusFilter.value === 'enabled' && !rule.enabled) return false
+    if (statusFilter.value === 'disabled' && rule.enabled) return false
+    if (httpsFilter.value === 'on' && !rule.https_enabled) return false
+    if (httpsFilter.value === 'off' && rule.https_enabled) return false
+    return true
+  }),
+)
+
+const tableRules = computed(() => (canReorder.value ? rules.value : filteredRules.value))
+
+const activeSecurityFeatures = computed(() => {
+  const tags: string[] = []
+  if (form.ip_blacklist_mode) tags.push('黑名单')
+  if (form.ip_whitelist_mode) tags.push('白名单')
+  if (form.china_only) tags.push('大陆 IP')
+  if (form.basic_auth_enabled) tags.push('Auth')
+  if (form.rate_limit_enabled) tags.push('限流')
+  if (form.conn_limit_enabled) tags.push('连接限制')
+  if (form.proxy_ssl_verify_off) tags.push('跳过 TLS 校验')
+  if (form.proxy_host_upstream) tags.push('目标 Host')
+  if (form.tls_min_13_only) tags.push('TLS 1.3')
+  if (form.security_headers) tags.push('响应头')
+  return tags
+})
+
+function syncSecurityExpanded() {
+  const expanded = new Set<string>()
+  if (
+    form.ip_blacklist_mode ||
+    form.ip_whitelist_mode ||
+    form.china_only
+  ) {
+    expanded.add('ip')
+  }
+  if (form.basic_auth_enabled) expanded.add('auth')
+  if (form.rate_limit_enabled || form.conn_limit_enabled) expanded.add('traffic')
+  if (
+    form.proxy_ssl_verify_off ||
+    form.proxy_host_upstream ||
+    form.tls_min_13_only ||
+    form.security_headers
+  ) {
+    expanded.add('advanced')
+  }
+  securityExpanded.value = expanded.size > 0 ? [...expanded] : ['ip']
+}
+
+const selectedRule = computed(() => rules.value.find((r) => r.id === selectedRuleId.value) ?? null)
+const selectedTraffic = computed(() =>
+  selectedRule.value ? trafficByRule.value[selectedRule.value.id] : undefined,
+)
+const detailNginxText = computed(() =>
+  nginxServerMode.value === 'custom' ? nginxDraft.value : nginxGenerated.value,
+)
+
+function securityFeatureLabels(rule: ProxyRule): string[] {
+  const sec = rule.security ?? {}
+  const tags: string[] = []
+  if ((sec.ip_blacklist?.length ?? 0) > 0) tags.push('黑名单')
+  if (sec.ip_whitelist_mode) tags.push('白名单')
+  if (sec.china_only) tags.push('大陆 IP')
+  if (sec.basic_auth?.enabled) tags.push('Auth')
+  if (sec.rate_limit?.enabled) tags.push('限流')
+  if (sec.conn_limit?.enabled) tags.push('连接限制')
+  if (sec.proxy_ssl_verify_off) tags.push('跳过 TLS 校验')
+  if (sec.proxy_host_upstream) tags.push('目标 Host')
+  if (sec.tls_min_13_only) tags.push('TLS 1.3')
+  if (sec.security_headers) tags.push('响应头')
+  return tags
+}
+
+const selectedSecurityFeatures = computed(() =>
+  selectedRule.value ? securityFeatureLabels(selectedRule.value) : [],
+)
+
+const trafficChart = computed(() => {
+  const now = Date.now()
+  const labels: string[] = []
+  const upload: number[] = []
+  const download: number[] = []
+  for (let i = 5; i >= 0; i--) {
+    const bucketEnd = now - i * 60 * 1000
+    const bucketStart = bucketEnd - 60 * 1000
+    const points = rateHistory.value.filter((p) => p.at > bucketStart && p.at <= bucketEnd)
+    const avg = (key: 'upload' | 'download') =>
+      points.length ? points.reduce((sum, p) => sum + p[key], 0) / points.length : 0
+    upload.push(avg('upload'))
+    download.push(avg('download'))
+    const d = new Date(bucketEnd)
+    labels.push(
+      `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
+    )
+  }
+  return { labels, upload, download }
+})
+
+function clearRateHistory() {
+  rateHistory.value = []
+}
+
+function recordRateSample(ruleId: number) {
+  const stats = trafficByRule.value[ruleId]
+  if (!stats) return
+  const now = Date.now()
+  rateHistory.value.push({
+    at: now,
+    upload: stats.upload_rate,
+    download: stats.download_rate,
+  })
+  const cutoff = now - RATE_HISTORY_MS
+  rateHistory.value = rateHistory.value.filter((p) => p.at >= cutoff)
+}
+
+watch(filteredRules, (list) => {
+  if (list.length === 0) {
+    selectedRuleId.value = null
+    showDetailPanel.value = false
+    return
+  }
+  if (selectedRuleId.value && !list.some((r) => r.id === selectedRuleId.value)) {
+    selectedRuleId.value = null
+    showDetailPanel.value = false
+  }
+})
+
+function openDetail(rule: ProxyRule, tab: 'overview' | 'logs' | 'nginx' = 'overview') {
+  selectedRuleId.value = rule.id
+  detailTab.value = tab
+  showDetailPanel.value = true
+  clearRateHistory()
+  recordRateSample(rule.id)
+  if (tab === 'nginx') {
+    void loadRuleNginxPreview()
+  }
+}
+
+function confirmDiscardNginxDraft(): Promise<boolean> {
+  if (!nginxDirty.value || nginxEditMode.value !== 'custom') {
+    return Promise.resolve(true)
+  }
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: '未保存的 Nginx 配置',
+      content: '当前手动编辑尚未保存，确定放弃更改吗？',
+      positiveText: '放弃更改',
+      negativeText: '继续编辑',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
+}
+
+async function switchDetailTab(tab: 'overview' | 'logs' | 'nginx') {
+  if (tab === detailTab.value) return
+  detailTab.value = tab
+  if (tab === 'nginx') {
+    await loadRuleNginxPreview()
+  }
+}
+
+async function switchFormTab(tab: 'basic' | 'security' | 'nginx') {
+  if (tab === formTab.value) return
+  if (formTab.value === 'nginx') {
+    const ok = await confirmDiscardNginxDraft()
+    if (!ok) return
+  }
+  formTab.value = tab
+  if (tab === 'nginx' && editing.value) {
+    nginxDirty.value = false
+    await loadRuleNginxForEdit(editing.value.id)
+  }
+}
+
+function closeModal() {
+  if (formTab.value === 'nginx' && nginxDirty.value && nginxEditMode.value === 'custom') {
+    void confirmDiscardNginxDraft().then((ok) => {
+      if (ok) showModal.value = false
+    })
+    return
+  }
+  showModal.value = false
+}
+
+async function loadRuleNginxPreview() {
+  const rule = selectedRule.value
+  if (!rule) return
+  nginxLoading.value = true
+  try {
+    const view = await api.getProxyNginx(rule.id)
+    nginxServerMode.value = view.mode
+    nginxGenerated.value = view.generated
+    nginxEnabled.value = view.enabled
+    nginxDraft.value = view.mode === 'custom' ? view.content : view.generated
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载 Nginx 配置失败')
+  } finally {
+    nginxLoading.value = false
+  }
+}
+
+async function loadRuleNginxForEdit(ruleId: number) {
+  nginxLoading.value = true
+  try {
+    const view = await api.getProxyNginx(ruleId)
+    nginxServerMode.value = view.mode
+    nginxEditMode.value = view.mode
+    nginxGenerated.value = view.generated
+    nginxEnabled.value = view.enabled
+    nginxBackups.value = view.backups ?? []
+    if (view.mode === 'auto') {
+      nginxDraft.value = view.generated
+      nginxDirty.value = false
+    } else if (!nginxDirty.value) {
+      nginxDraft.value = view.content
+    }
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '加载 Nginx 配置失败')
+  } finally {
+    nginxLoading.value = false
+  }
+}
+
+function scheduleNginxRefresh() {
+  if (detailTab.value !== 'nginx' || showDetailPanel.value === false) return
+  if (nginxRefreshTimer) clearTimeout(nginxRefreshTimer)
+  nginxRefreshTimer = setTimeout(() => {
+    void loadRuleNginxPreview()
+  }, 300)
+}
+
+function setNginxEditMode(mode: 'auto' | 'custom') {
+  if (mode === nginxEditMode.value) return
+  if (mode === 'custom' && nginxEditMode.value === 'auto') {
+    nginxDraft.value = nginxGenerated.value
+    nginxDirty.value = nginxServerMode.value !== 'custom'
+  }
+  if (mode === 'auto') {
+    nginxDraft.value = nginxGenerated.value
+    nginxDirty.value = false
+  }
+  nginxEditMode.value = mode
+}
+
+function onNginxDraftInput() {
+  if (nginxEditMode.value === 'custom') {
+    nginxDirty.value = true
+  }
+}
+
+async function saveRuleNginx() {
+  const ruleId = editing.value?.id
+  if (!ruleId) return
+  nginxSaving.value = true
+  try {
+    const view = await api.saveProxyNginx(ruleId, {
+      mode: 'custom',
+      content: nginxDraft.value,
+    })
+    nginxServerMode.value = view.mode
+    nginxEditMode.value = view.mode
+    nginxGenerated.value = view.generated
+    nginxDraft.value = view.content
+    nginxBackups.value = view.backups ?? []
+    nginxDirty.value = false
+    message.success('Nginx 配置已保存')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '保存失败')
+  } finally {
+    nginxSaving.value = false
+  }
+}
+
+async function rollbackRuleNginx(backup?: string) {
+  const ruleId = editing.value?.id
+  if (!ruleId) return
+  nginxSaving.value = true
+  try {
+    const view = await api.rollbackProxyNginx(ruleId, backup)
+    nginxServerMode.value = view.mode
+    nginxEditMode.value = view.mode
+    nginxGenerated.value = view.generated
+    nginxDraft.value = view.content
+    nginxBackups.value = view.backups ?? []
+    nginxDirty.value = false
+    message.success('已回滚到上一版本')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '回滚失败')
+  } finally {
+    nginxSaving.value = false
+  }
+}
+
+function resetRuleNginxAuto() {
+  dialog.warning({
+    title: '恢复自动生成',
+    content: '将切回自动生成模式，手动保存的配置文件仍保留在备份中。',
+    positiveText: '确认',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const ruleId = editing.value?.id
+      if (!ruleId) return
+      nginxSaving.value = true
+      try {
+        const view = await api.saveProxyNginx(ruleId, { mode: 'auto' })
+        nginxServerMode.value = view.mode
+        nginxEditMode.value = view.mode
+        nginxGenerated.value = view.generated
+        nginxDraft.value = view.generated
+        nginxBackups.value = view.backups ?? []
+        nginxDirty.value = false
+        message.success('已恢复自动生成')
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '操作失败')
+      } finally {
+        nginxSaving.value = false
+      }
+    },
+  })
+}
+
+function closeDetail() {
+  logFullscreen.value = false
+  showDetailPanel.value = false
+  detailTab.value = 'overview'
+  clearRateHistory()
+}
+
+watch(selectedRule, () => scheduleNginxRefresh(), { deep: true })
+
+watch([showDetailPanel, selectedRuleId, detailTab], async ([visible, id, tab], [, , prevTab]) => {
+  if (visible && id && tab === 'nginx' && prevTab !== 'nginx') {
+    await loadRuleNginxPreview()
+  }
+})
+
+watch(selectedRuleId, (id, prev) => {
+  if (id !== prev) clearRateHistory()
+})
+
+function ruleHosts(rule: ProxyRule): string[] {
+  const hosts = asList(rule.hosts)
+  if (hosts.length > 0) {
+    return hosts.map((host) => {
+      if (host.listen_port && host.listen_port !== rule.listen_port) {
+        return `${host.hostname}:${host.listen_port}`
+      }
+      return host.hostname
+    })
+  }
+  return rule.domain ? [rule.domain] : []
+}
+
+function primaryHost(rule: ProxyRule): string {
+  const hosts = ruleHosts(rule)
+  return hosts[0] ?? `规则 #${rule.id}`
+}
+
+function ruleName(rule: ProxyRule): string {
+  const name = rule.name?.trim()
+  return name || primaryHost(rule)
+}
+
+// 复制：保留原名称与域名，由用户在表单里确认修改（不再自动追加「-复制」后缀，避免误建同名规则）
+function duplicateName(rule: ProxyRule): string {
+  const base = rule.name?.trim() || primaryHost(rule)
+  return base.length > 100 ? base.slice(0, 100) : base
+}
+
+function hostsToText(rule: ProxyRule): string {
+  return ruleHosts(rule).join('\n')
+}
+
+function ruleTitle(rule: ProxyRule): string {
+  return ruleName(rule)
+}
+
+function ruleExits(rule: ProxyRule): string[] {
+  return rule.exits?.length ? rule.exits : ['local']
+}
+
+function exitLabel(rule: ProxyRule): string {
+  const labels: string[] = []
+  if (ruleExits(rule).includes('local')) labels.push('本机 Nginx')
+  if (ruleExits(rule).includes('cloudflare')) labels.push('Cloudflare')
+  return labels.join(' + ') || '未设置'
+}
+
+function listenLabel(rule: ProxyRule): string {
+  const stacks = []
+  if (rule.listen_ipv4) stacks.push('IPv4')
+  if (rule.listen_ipv6) stacks.push('IPv6')
+  const stack = stacks.length > 0 ? stacks.join('/') : '-'
+  return `${rule.listen_port} (${stack})`
+}
+
+function hostAccessUrl(rule: ProxyRule, hostPart: string): string {
+  const scheme = rule.https_enabled ? 'https' : 'http'
+  const hasExplicitPort = hostPart.startsWith('[')
+    ? /]:\d+$/.test(hostPart)
+    : /^[^:[\]]+:\d+$/.test(hostPart)
+  if (hasExplicitPort) {
+    return `${scheme}://${hostPart}`
+  }
+
+  const defaultPort = rule.https_enabled ? nginxHttpsPort.value : nginxHttpPort.value
+  if (rule.listen_port !== defaultPort) {
+    return `${scheme}://${hostPart}:${rule.listen_port}`
+  }
+  return `${scheme}://${hostPart}`
+}
+
+function ruleAccessUrls(rule: ProxyRule): string[] {
+  const exits = ruleExits(rule)
+  if (exits.includes('local')) {
+    return ruleHosts(rule).map((host) => hostAccessUrl(rule, host))
+  }
+  if (exits.includes('cloudflare')) {
+    return ruleHosts(rule).map((host) => `https://${host.replace(/:\d+$/, '')}`)
+  }
+  return []
+}
+
+import { copyText } from '../utils/clipboard'
+
+async function copyAccessUrl(url: string) {
+  if (await copyText(url)) message.success('链接已复制')
+  else message.error('复制失败')
+}
+
+function renderLinkAction(icon: Component, title: string, onClick: () => void): VNode {
+  return h(
+    'button',
+    {
+      type: 'button',
+      class: 'domain-cell__link-action',
+      title,
+      onClick: (e: Event) => {
+        e.stopPropagation()
+        onClick()
+      },
+    },
+    [h(NIcon, { component: icon, size: 14 })],
+  )
+}
+
+function renderAccessLinkRow(url: string): VNode {
+  return h(
+    'div',
+    { class: 'domain-cell__link-row', onClick: (e: Event) => e.stopPropagation() },
+    [
+      h(
+        'a',
+        {
+          class: 'domain-cell__link',
+          href: url,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: url,
+          onClick: (e: Event) => e.stopPropagation(),
+        },
+        url,
+      ),
+      renderLinkAction(CopyOutline, '复制链接', () => copyAccessUrl(url)),
+      renderLinkAction(OpenOutline, '新窗口打开', () => window.open(url, '_blank', 'noopener,noreferrer')),
+    ],
+  )
+}
+
+function renderDomainAccessLinks(rule: ProxyRule): VNode | null {
+  const hosts = ruleHosts(rule)
+  if (hosts.length === 0) return null
+
+  const showLinks = hosts.length > 1 || !!rule.name?.trim()
+  if (!showLinks) return null
+
+  const urls = ruleAccessUrls(rule)
+  const maxInline = 2
+  const inline = urls.slice(0, maxInline)
+  const rest = urls.slice(maxInline)
+
+  const children: VNode[] = inline.map((url) => renderAccessLinkRow(url))
+  if (rest.length > 0) {
+    children.push(
+      h(
+        NPopover,
+        { trigger: 'click', placement: 'bottom-start', showArrow: false },
+        {
+          trigger: () =>
+            h(
+              'button',
+              {
+                type: 'button',
+                class: 'domain-cell__more',
+                onClick: (e: Event) => e.stopPropagation(),
+              },
+              `还有 ${rest.length} 个域名`,
+            ),
+          default: () =>
+            h('div', { class: 'domain-cell__popover-links' }, rest.map((url) => renderAccessLinkRow(url))),
+        },
+      ),
+    )
+  }
+
+  return h('div', { class: 'domain-cell__links' }, children)
+}
+
+function parseHostsText(text: string): string[] {
+  return text
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+function parseHostname(line: string): string {
+  const raw = line.trim()
+  if (!raw) return ''
+  if (raw.includes(':') && !raw.includes(']') && raw.split(':').length === 2) {
+    return raw.split(':')[0].toLowerCase()
+  }
+  return raw.toLowerCase()
+}
+
+function effectiveListenPort(line: string, ruleListenPort: number): number {
+  const raw = line.trim()
+  if (raw.includes(':') && !raw.includes(']') && raw.split(':').length === 2) {
+    const port = Number.parseInt(raw.split(':')[1], 10)
+    if (port > 0) return port
+  }
+  return ruleListenPort
+}
+
+function hostBindingKey(hostname: string, port: number): string {
+  return `${hostname.toLowerCase()}:${port}`
+}
+
+function findHostConflict(
+  hosts: string[],
+  ruleListenPort: number,
+  excludeRuleId?: number,
+): { host: string; port: number; rule: ProxyRule } | null {
+  const wanted = new Set(
+    hosts.map((line) => hostBindingKey(parseHostname(line), effectiveListenPort(line, ruleListenPort))).filter((k) => !k.startsWith(':')),
+  )
+  if (wanted.size === 0) return null
+  for (const rule of rules.value) {
+    if (excludeRuleId && rule.id === excludeRuleId) continue
+    for (const host of asList(rule.hosts)) {
+      const hostname = host.hostname.toLowerCase()
+      const port = host.listen_port ?? rule.listen_port
+      if (wanted.has(hostBindingKey(hostname, port))) {
+        return { host: hostname, port, rule }
+      }
+    }
+  }
+  return null
+}
+
+function renderProtocol(row: ProxyRule): VNode {
+  const tags: VNode[] = []
+  if (row.https_enabled) {
+    tags.push(h(NTag, { size: 'small', type: 'info', bordered: false, round: true }, () => 'HTTPS'))
+  } else {
+    tags.push(h(NTag, { size: 'small', type: 'success', bordered: false, round: true }, () => 'HTTP'))
+  }
+  return h('div', { class: 'proto-tags' }, tags)
+}
+
+function renderExits(row: ProxyRule): VNode {
+  const exits = ruleExits(row)
+  return h(
+    'div',
+    { class: 'proto-tags' },
+    exits.map((exit) =>
+      h(
+        NTag,
+        {
+          size: 'small',
+          type: exit === 'cloudflare' ? 'info' : 'default',
+          bordered: false,
+          round: true,
+        },
+        () => (exit === 'cloudflare' ? 'Cloudflare' : '本机'),
+      ),
+    ),
+  )
+}
+
+function rowProps(row: ProxyRule) {
+  return {
+    class: showDetailPanel.value && selectedRuleId.value === row.id ? 'proxy-row--active' : '',
+  }
+}
+
+const columns = computed<DataTableColumns<ProxyRule>>(() => {
+  const cols: DataTableColumns<ProxyRule> = []
+
+  if (canReorder.value) {
+    cols.push({
+      title: '',
+      key: 'sort',
+      width: 40,
+      render: () =>
+        h('span', { class: 'proxy-drag-handle', title: '拖动排序' }, [
+          h(NIcon, { component: ReorderThreeOutline, size: 16 }),
+        ]),
+    })
+  }
+
+  cols.push({
+    title: '名称',
+    key: 'name',
+    minWidth: 260,
+    render: (row) =>
+      h('div', { class: 'domain-cell' }, [
+        h('div', { class: 'domain-cell__main' }, ruleName(row)),
+        renderDomainAccessLinks(row),
+      ]),
+  })
+
+  cols.push(
+  {
+    title: '监听端口',
+    key: 'listen_port',
+    width: 128,
+    render: (row) => h('span', { class: 'mono text-secondary' }, listenLabel(row)),
+  },
+  {
+    title: '目标地址',
+    key: 'upstream',
+    minWidth: 180,
+    render: (row) => h('span', { class: 'mono text-secondary' }, row.upstream),
+  },
+  {
+    title: '协议',
+    key: 'https_enabled',
+    width: 88,
+    render: (row) => renderProtocol(row),
+  },
+  {
+    title: '出口',
+    key: 'exits',
+    width: 150,
+    render: (row) => renderExits(row),
+  },
+  {
+    title: '安全',
+    key: 'security',
+    width: 120,
+    render: (row) => {
+      const tags = securityTags(row)
+      if (tags.length === 0) return h('span', { class: 'text-muted' }, '—')
+      return h(
+        'div',
+        { class: 'proxy-security-tags' },
+        tags.map((tag) => h(NTag, { size: 'small', bordered: false, round: true }, { default: () => tag })),
+      )
+    },
+  },
+  {
+    title: '状态',
+    key: 'enabled',
+    width: 108,
+    render: (row) =>
+      h(
+        'div',
+        {
+          class: 'proxy-enable-cell',
+          onClick: (e: Event) => e.stopPropagation(),
+        },
+        [
+          h(
+            NSwitch,
+            {
+              value: row.enabled,
+              size: 'small',
+              loading: togglingRuleId.value === row.id,
+              onUpdateValue: (enabled: boolean) => toggleRuleEnabled(row, enabled),
+            },
+            {
+              checked: () => '启用',
+              unchecked: () => '停用',
+            },
+          ),
+        ],
+      ),
+  },
+  {
+    title: '当前连接',
+    key: 'connections',
+    width: 88,
+    render: (row) => h('span', { class: 'mono' }, String(trafficByRule.value[row.id]?.connections ?? 0)),
+  },
+  {
+    title: '当前上传',
+    key: 'upload_rate',
+    width: 96,
+    render: (row) => h('span', { class: 'mono text-secondary' }, formatRate(trafficByRule.value[row.id]?.upload_rate ?? 0)),
+  },
+  {
+    title: '当前下载',
+    key: 'download_rate',
+    width: 96,
+    render: (row) => h('span', { class: 'mono text-secondary' }, formatRate(trafficByRule.value[row.id]?.download_rate ?? 0)),
+  },
+  {
+    title: '总上传',
+    key: 'upload_total',
+    width: 96,
+    render: (row) => h('span', { class: 'mono' }, formatBytes(trafficByRule.value[row.id]?.upload_total ?? 0)),
+  },
+  {
+    title: '总下载',
+    key: 'download_total',
+    width: 96,
+    render: (row) => h('span', { class: 'mono' }, formatBytes(trafficByRule.value[row.id]?.download_total ?? 0)),
+  },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 208,
+      fixed: 'right',
+      render: (row) =>
+        renderTableRowActions([
+          { label: '复制', onClick: () => openDuplicate(row) },
+          { label: '详情', onClick: () => openDetail(row) },
+          { label: '编辑', type: 'primary', onClick: () => openEdit(row) },
+          { label: '删除', type: 'error', onClick: () => confirmDelete(row) },
+        ]),
+    },
+  )
+
+  return cols
+})
+
+function isLogAtBottom(el: HTMLElement): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= LOG_SCROLL_BOTTOM_THRESHOLD
+}
+
+function onLogBoxScroll(el: HTMLElement) {
+  logStickToBottom.value = isLogAtBottom(el)
+}
+
+function scrollLogToBottom(force = false) {
+  if (!force && !logStickToBottom.value) return
+  requestAnimationFrame(() => {
+    logBox.value?.scrollToBottom()
+    if (logFullscreen.value) logBoxFullscreen.value?.scrollToBottom()
+  })
+}
+
+async function openLogFullscreen() {
+  logFullscreen.value = true
+  await nextTick()
+  scrollLogToBottom(true)
+}
+
+function onLogFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') logFullscreen.value = false
+}
+
+function stopLogStream() {
+  logEventSource?.close()
+  logEventSource = null
+}
+
+function startLogStream() {
+  const rule = selectedRule.value
+  if (!rule || logEventSource) return
+  logEventSource = new EventSource(`/api/proxies/${rule.id}/logs/stream?tail=100`, {
+    withCredentials: true,
+  })
+  logEventSource.addEventListener('log', (event) => {
+    logLines.value.push(event.data)
+    if (logLines.value.length > 500) logLines.value = logLines.value.slice(-400)
+    scrollLogToBottom()
+  })
+  logEventSource.onerror = () => {
+    message.warning('日志连接中断')
+    stopLogStream()
+  }
+}
+
+function clearLogLines() {
+  logLines.value = []
+  logStickToBottom.value = true
+}
+
+watch([showDetailPanel, selectedRuleId, detailTab], async ([visible, id, tab], [wasVisible, wasId]) => {
+  stopLogStream()
+  if (!visible || !id || tab !== 'logs') return
+  if (!wasVisible || id !== wasId) {
+    logLines.value = []
+    logStickToBottom.value = true
+  }
+  startLogStream()
+  await nextTick()
+  scrollLogToBottom(true)
+})
+
+watch(
+  () => logLines.value.length,
+  async () => {
+    if (detailTab.value !== 'logs' || !logStickToBottom.value) return
+    await nextTick()
+    scrollLogToBottom()
+  },
+)
+
+watch(logFullscreen, (open) => {
+  if (open) {
+    document.addEventListener('keydown', onLogFullscreenKeydown)
+    document.body.style.overflow = 'hidden'
+    return
+  }
+  document.removeEventListener('keydown', onLogFullscreenKeydown)
+  document.body.style.overflow = ''
+})
+
+async function refreshTraffic() {
+  try {
+    const rows = asList(await api.getProxyTraffic())
+    const next: Record<number, ProxyTraffic> = {}
+    for (const row of rows) {
+      next[row.rule_id] = row
+    }
+    trafficByRule.value = next
+    if (showDetailPanel.value && selectedRuleId.value && detailTab.value === 'overview') {
+      recordRateSample(selectedRuleId.value)
+    }
+  } catch {
+    // ignore polling errors
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([load(), refreshTraffic()])
+}
+
+async function loadClients() {
+  const rule = selectedRule.value
+  if (!rule) return
+  clientsLoading.value = true
+  try {
+    clientRows.value = asList(await api.getProxyClients(rule.id))
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '读取连接失败')
+  } finally {
+    clientsLoading.value = false
+  }
+}
+
+watch([showDetailPanel, selectedRuleId, detailTab], ([visible, id, tab]) => {
+  if (visible && id && tab === 'overview') void loadClients()
+})
+
+async function loadDefaults() {
+  try {
+    const { nginx_http_port, nginx_https_port } = await api.getVersion()
+    if (nginx_http_port > 0) nginxHttpPort.value = nginx_http_port
+    if (nginx_https_port > 0) nginxHttpsPort.value = nginx_https_port
+  } catch {
+    // keep local fallbacks
+  }
+}
+
+async function load() {
+  loading.value = true
+  loadError.value = ''
+  try {
+    rules.value = asList(await api.listProxies())
+    try {
+      cfTunnels.value = asList(await api.listCfTunnels())
+    } catch {
+      cfTunnels.value = []
+    }
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '请检查 Havline 服务是否正常运行'
+  } finally {
+    loading.value = false
+  }
+}
+
+function resetForm() {
+  form.listen_port = defaultListenPort(form.https_enabled)
+  form.listen_ipv4 = true
+  form.listen_ipv6 = false
+  form.hostsText = ''
+  form.upstream = ''
+  form.https_enabled = true
+  form.http_redirect = true
+  form.enabled = true
+  form.name = ''
+  form.exit_local = true
+  form.exit_cloudflare = false
+  form.cf_tunnel_id = null
+  Object.assign(form, defaultSecurityForm())
+}
+
+function loadExitsToForm(rule?: ProxyRule | null) {
+  const exits = rule?.exits?.length ? rule.exits : ['local']
+  form.exit_local = exits.includes('local')
+  form.exit_cloudflare = exits.includes('cloudflare')
+  form.cf_tunnel_id = rule?.cf_tunnel_id || null
+}
+
+function loadSecurityToForm(rule?: ProxyRule | null) {
+  const sec = rule?.security ?? {}
+  form.ip_blacklist_text = (sec.ip_blacklist ?? []).join('\n')
+  form.ip_blacklist_mode = (sec.ip_blacklist?.length ?? 0) > 0
+  form.ip_whitelist_text = (sec.ip_whitelist ?? []).join('\n')
+  form.ip_whitelist_mode = sec.ip_whitelist_mode ?? false
+  form.china_only = sec.china_only ?? false
+  form.basic_auth_enabled = sec.basic_auth?.enabled ?? false
+  form.basic_auth_username = sec.basic_auth?.username ?? ''
+  form.basic_auth_password = ''
+  form.rate_limit_enabled = sec.rate_limit?.enabled ?? false
+  form.rate_limit_rate = sec.rate_limit?.rate ?? 10
+  form.rate_limit_burst = sec.rate_limit?.burst ?? 20
+  form.conn_limit_enabled = sec.conn_limit?.enabled ?? false
+  form.conn_limit_max = sec.conn_limit?.max ?? 20
+  form.proxy_ssl_verify_off = sec.proxy_ssl_verify_off ?? false
+  form.proxy_host_upstream = sec.proxy_host_upstream ?? false
+  form.tls_min_13_only = sec.tls_min_13_only ?? false
+  form.security_headers = sec.security_headers ?? false
+}
+
+function buildSecurityPayload() {
+  const payload: ProxySavePayload['security'] = {
+    ip_blacklist_text: form.ip_blacklist_mode ? form.ip_blacklist_text : '',
+    ip_whitelist_text: form.ip_whitelist_text,
+    ip_whitelist_mode: form.ip_whitelist_mode,
+    china_only: form.china_only,
+    proxy_ssl_verify_off: form.proxy_ssl_verify_off,
+    proxy_host_upstream: form.proxy_host_upstream,
+    tls_min_13_only: form.tls_min_13_only,
+    security_headers: form.security_headers,
+    basic_auth: {
+      enabled: form.basic_auth_enabled,
+      username: form.basic_auth_username.trim(),
+    },
+    rate_limit: form.rate_limit_enabled
+      ? { enabled: true, rate: form.rate_limit_rate, burst: form.rate_limit_burst }
+      : { enabled: false },
+    conn_limit: form.conn_limit_enabled
+      ? { enabled: true, max: form.conn_limit_max }
+      : { enabled: false },
+  }
+  if (form.basic_auth_password.trim()) {
+    payload.basic_auth!.password = form.basic_auth_password
+  }
+  return payload
+}
+
+function applySecurityPreset() {
+  form.https_enabled = true
+  form.http_redirect = true
+  form.rate_limit_enabled = true
+  form.rate_limit_rate = 10
+  form.rate_limit_burst = 20
+  form.security_headers = true
+  formTab.value = 'security'
+  securityExpanded.value = ['traffic', 'advanced']
+  message.success('已填入推荐配置：HTTPS、限流与安全响应头')
+}
+
+function securityTags(rule: ProxyRule): string[] {
+  const sec = rule.security ?? {}
+  const tags: string[] = []
+  if (sec.basic_auth?.enabled) tags.push('Auth')
+  if ((sec.ip_blacklist?.length ?? 0) > 0 || sec.ip_whitelist_mode) tags.push('IP')
+  if (sec.china_only) tags.push('CN')
+  if (sec.rate_limit?.enabled || sec.conn_limit?.enabled) tags.push('Limit')
+  return tags
+}
+
+function buildPayload(): ProxySavePayload {
+  const hosts = parseHostsText(form.hostsText)
+  if (hosts.length === 0) {
+    throw new Error('至少需要一个前端域名')
+  }
+  if (!form.listen_ipv4 && !form.listen_ipv6) {
+    throw new Error('至少需要启用 IPv4 或 IPv6 监听')
+  }
+  if (!form.exit_local && !form.exit_cloudflare) {
+    throw new Error('至少需要选择一个出口')
+  }
+  if (form.exit_cloudflare && !form.cf_tunnel_id) {
+    throw new Error('请选择 Cloudflare 隧道')
+  }
+  const exits = [
+    ...(form.exit_local ? ['local'] : []),
+    ...(form.exit_cloudflare ? ['cloudflare'] : []),
+  ]
+  return {
+    upstream: form.upstream,
+    listen_port: form.listen_port,
+    listen_ipv4: form.listen_ipv4,
+    listen_ipv6: form.listen_ipv6,
+    hosts,
+    https_enabled: form.https_enabled,
+    http_redirect: form.http_redirect,
+    enabled: form.enabled,
+    name: form.name.trim(),
+    security: buildSecurityPayload(),
+    exits,
+    cf_tunnel_id: form.exit_cloudflare ? form.cf_tunnel_id! : 0,
+  }
+}
+
+async function scanServices() {
+  scanning.value = true
+  try {
+    const items = await api.scanDiscovery('127.0.0.1')
+    discoveryResults.value = asList(items)
+    discoveryVisible.value = true
+    if (!items.some((item) => item.detected)) message.info('未检测到常见服务，可检查端口或手动填写目标地址')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '扫描失败')
+  } finally {
+    scanning.value = false
+  }
+}
+
+function publishDiscovered(item: DiscoveredService) {
+  discoveryVisible.value = false
+  openCreate()
+  form.name = item.name
+  form.upstream = item.upstream
+  if (cfTunnelOptions.value.length > 0) {
+    form.exit_cloudflare = true
+    form.cf_tunnel_id = Number(cfTunnelOptions.value[0].value)
+  }
+  message.info('已填入服务信息，请填写域名后保存')
+}
+
+function openCreate() {
+  editing.value = null
+  formTab.value = 'basic'
+  resetForm()
+  securityExpanded.value = ['ip']
+  showModal.value = true
+}
+
+async function toggleRuleEnabled(row: ProxyRule, enabled: boolean) {
+  if (togglingRuleId.value === row.id || row.enabled === enabled) return
+  togglingRuleId.value = row.id
+  const prev = row.enabled
+  rules.value = rules.value.map((rule) => (rule.id === row.id ? { ...rule, enabled } : rule))
+  try {
+    const updated = await api.updateProxy(row.id, { enabled })
+    rules.value = rules.value.map((rule) => (rule.id === updated.id ? updated : rule))
+    if (updated.sync_warning) {
+      message.warning(updated.sync_warning)
+    } else {
+      message.success(enabled ? '已启用' : '已停用')
+    }
+  } catch (error) {
+    rules.value = rules.value.map((rule) => (rule.id === row.id ? { ...rule, enabled: prev } : rule))
+    const msg = error instanceof Error ? error.message : '更新失败'
+    if (msg.startsWith('规则已保存')) {
+      message.warning(msg)
+      await load()
+    } else {
+      message.error(msg)
+    }
+  } finally {
+    togglingRuleId.value = null
+  }
+}
+
+function openDuplicate(rule: ProxyRule) {
+  closeDetail()
+  editing.value = null
+  Object.assign(form, {
+    listen_port: rule.listen_port || defaultListenPort(rule.https_enabled),
+    listen_ipv4: rule.listen_ipv4 ?? true,
+    listen_ipv6: rule.listen_ipv6 ?? false,
+    hostsText: hostsToText(rule),
+    upstream: rule.upstream,
+    https_enabled: rule.https_enabled,
+    http_redirect: rule.http_redirect,
+    enabled: rule.enabled,
+    name: duplicateName(rule),
+  })
+  loadExitsToForm(rule)
+  loadSecurityToForm(rule)
+  syncSecurityExpanded()
+  formTab.value = 'basic'
+  showModal.value = true
+  message.info('已填入复制内容，请确认名称与域名后保存')
+}
+
+function openEdit(rule: ProxyRule, tab: 'basic' | 'security' | 'nginx' = 'basic') {
+  closeDetail()
+  editing.value = rule
+  selectedRuleId.value = rule.id
+  Object.assign(form, {
+    listen_port: rule.listen_port || defaultListenPort(rule.https_enabled),
+    listen_ipv4: rule.listen_ipv4 ?? true,
+    listen_ipv6: rule.listen_ipv6 ?? false,
+    hostsText: hostsToText(rule),
+    upstream: rule.upstream,
+    https_enabled: rule.https_enabled,
+    http_redirect: rule.http_redirect,
+    enabled: rule.enabled,
+    name: rule.name ?? '',
+  })
+  loadExitsToForm(rule)
+  loadSecurityToForm(rule)
+  syncSecurityExpanded()
+  if (tab === 'nginx') {
+    formTab.value = 'nginx'
+  } else if (tab === 'security' || activeSecurityFeatures.value.length > 0) {
+    formTab.value = 'security'
+  } else {
+    formTab.value = 'basic'
+  }
+  showModal.value = true
+  if (tab === 'nginx') {
+    nginxDirty.value = false
+    void loadRuleNginxForEdit(rule.id)
+  }
+}
+
+function destroyRowSortable() {
+  rowSortable?.destroy()
+  rowSortable = null
+}
+
+async function setupRowSortable() {
+  destroyRowSortable()
+  if (!canReorder.value) return
+  await nextTick()
+  const tbody = tableWrapRef.value?.querySelector('.n-data-table-tbody') as HTMLElement | null
+  if (!tbody) return
+  rowSortable = Sortable.create(tbody, {
+    handle: '.proxy-drag-handle',
+    animation: 150,
+    draggable: '.n-data-table-tr',
+    onEnd: async (evt) => {
+      if (evt.oldIndex == null || evt.newIndex == null || evt.oldIndex === evt.newIndex || reordering.value) {
+        return
+      }
+      const next = [...rules.value]
+      const [moved] = next.splice(evt.oldIndex, 1)
+      next.splice(evt.newIndex, 0, moved)
+      rules.value = next
+      reordering.value = true
+      try {
+        await api.reorderProxies(next.map((rule) => rule.id))
+        message.success('排序已保存')
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '排序保存失败')
+        await load()
+      } finally {
+        reordering.value = false
+      }
+    },
+  })
+}
+
+watch([canReorder, () => rules.value.length, tableRules], () => {
+  void setupRowSortable()
+})
+
+watch(showModal, (open) => {
+  if (!open) editing.value = null
+})
+
+async function save() {
+  saving.value = true
+  try {
+    const payload = buildPayload()
+    const listenPort = payload.listen_port ?? form.listen_port
+    const conflict = findHostConflict(payload.hosts, listenPort, editing.value?.id)
+    if (conflict) {
+      const owner = primaryHost(conflict.rule)
+      message.error(`域名 ${conflict.host}:${conflict.port} 已被规则「${owner}」使用，请编辑现有规则或更换域名/端口`)
+      return
+    }
+    if (editing.value) {
+      const result = await api.updateProxy(editing.value.id, payload)
+      if (result.sync_warning) message.warning(result.sync_warning)
+      else message.success('规则已保存')
+    } else {
+      const result = await api.createProxy(payload)
+      if (result.sync_warning) message.warning(result.sync_warning)
+      else message.success('规则已创建')
+    }
+    showModal.value = false
+    await load()
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : '保存失败'
+    if (msg.startsWith('规则已保存')) {
+      message.warning(msg)
+      showModal.value = false
+      await load()
+    } else {
+      message.error(msg)
+    }
+  } finally {
+    saving.value = false
+  }
+}
+
+function confirmDelete(rule: ProxyRule) {
+  dialog.warning({
+    title: `确定删除 ${ruleTitle(rule)}？`,
+    content: '删除后相关域名将停止反向代理。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () =>
+      api
+        .deleteProxy(rule.id)
+        .then(async () => {
+          if (selectedRuleId.value === rule.id) {
+            selectedRuleId.value = null
+            showDetailPanel.value = false
+          }
+          rules.value = rules.value.filter((r) => r.id !== rule.id)
+          message.success('规则已删除')
+          await load()
+        })
+        .catch(async (error: unknown) => {
+          const msg = error instanceof Error ? error.message : '删除失败'
+          if (msg.startsWith('规则已删除')) {
+            message.warning(msg)
+            await load()
+          } else {
+            message.error(msg)
+            return false
+          }
+        }),
+  })
+}
+
+watch(
+  () => form.https_enabled,
+  (httpsEnabled) => {
+    if (!showModal.value || editing.value) return
+    form.listen_port = defaultListenPort(httpsEnabled)
+  },
+)
+
+onMounted(async () => {
+  await loadDefaults()
+  await load()
+})
+onUnmounted(() => {
+  destroyRowSortable()
+  stopLogStream()
+  document.removeEventListener('keydown', onLogFullscreenKeydown)
+  document.body.style.overflow = ''
+})
+
+const clientsPolling = computed(() => showDetailPanel.value && !!selectedRuleId.value && detailTab.value === 'overview')
+useVisibilityPolling(refreshTraffic, 2000, { immediate: true })
+useVisibilityPolling(loadClients, 5000, { enabled: clientsPolling })
+</script>
+
+<style scoped>
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
+}
+
+.stat-card {
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+  padding: var(--havline-space-4);
+  min-height: 118px;
+}
+
+.stat-card__icon { font-size: 18px; margin-bottom: 4px; }
+.stat-card__icon--blue { color: #3b82f6; }
+.stat-card__icon--green { color: #10b981; }
+.stat-card__icon--amber { color: #f59e0b; }
+.stat-card__icon--purple { color: #8b5cf6; }
+
+.stat-card__value {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--havline-text);
+}
+
+.stat-card__value--sm { font-size: 22px; }
+
+.stat-card__label {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stat-card__sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--havline-text-muted);
+}
+
+.proxy-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--havline-space-4);
+  align-items: start;
+}
+
+.proxy-panel {
+  min-width: 0;
+}
+
+.proxy-panel :deep(.havline-card__body) {
+  padding-left: 0;
+  padding-right: 0;
+  padding-bottom: 0;
+}
+
+.proxy-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4);
+  border-bottom: 1px solid var(--havline-border);
+  flex-wrap: wrap;
+}
+
+.proxy-toolbar__search {
+  width: 240px;
+  max-width: 100%;
+  flex-shrink: 0;
+}
+
+.proxy-toolbar__filter {
+  width: 132px;
+  flex-shrink: 0;
+}
+
+.proxy-toolbar__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-loading {
+  display: flex;
+  justify-content: center;
+  padding: var(--havline-space-6) 0;
+}
+
+.proxy-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--havline-text-secondary);
+  cursor: grab;
+}
+
+.proxy-table--sortable :deep(.proxy-drag-handle:active) {
+  cursor: grabbing;
+}
+
+.proxy-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.proxy-table { width: 100%; }
+
+.proxy-table :deep(.proxy-row--active td) {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.proxy-enable-cell {
+  display: inline-flex;
+  align-items: center;
+}
+
+.proxy-table :deep(.domain-cell__main) {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--havline-text);
+}
+
+.proxy-table :deep(.domain-cell__links) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.proxy-table :deep(.domain-cell__link-row) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proxy-table :deep(.domain-cell__link) {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: var(--havline-mono);
+  color: #2563eb;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proxy-table :deep(.domain-cell__link:hover) {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+}
+
+.proxy-table :deep(.domain-cell__link-action) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.proxy-table :deep(.domain-cell__link-action:hover) {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.proxy-table :deep(.domain-cell__more) {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.proxy-table :deep(.domain-cell__more:hover) {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+}
+
+.domain-cell__popover-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 240px;
+  max-width: min(420px, 80vw);
+  padding: 4px 0;
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link-row) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 6px;
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link-row:hover) {
+  background: var(--havline-bg);
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link) {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-family: var(--havline-mono);
+  color: #2563eb;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link:hover) {
+  color: #1d4ed8;
+  text-decoration: underline;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link-action) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.domain-cell__popover-links :deep(.domain-cell__link-action:hover) {
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.proxy-table :deep(.proto-tags) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.proxy-detail-modal {
+  width: min(920px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--havline-surface);
+  border-radius: var(--havline-radius);
+  overflow: hidden;
+  box-shadow: var(--havline-shadow-md);
+}
+
+.proxy-detail-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-4);
+  padding: var(--havline-space-5) var(--havline-space-5) 0;
+  flex-shrink: 0;
+}
+
+.proxy-detail-modal__intro {
+  display: flex;
+  align-items: center;
+  gap: var(--havline-space-3);
+  min-width: 0;
+}
+
+.proxy-detail-modal__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.proxy-detail-modal__conn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--havline-text-muted);
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+}
+
+.proxy-detail-modal__conn.is-active {
+  color: var(--havline-brand-text);
+  background: var(--havline-brand-soft);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.proxy-detail__tabbar {
+  display: flex;
+  gap: var(--havline-space-5);
+  padding: var(--havline-space-3) var(--havline-space-5) 0;
+  border-bottom: 1px solid var(--havline-border);
+  flex-shrink: 0;
+}
+
+.proxy-detail__tab {
+  margin: 0;
+  padding: 8px 2px 10px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--havline-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.proxy-detail__tab:hover {
+  color: var(--havline-text);
+}
+
+.proxy-detail__tab--active {
+  color: var(--havline-brand-text);
+  font-weight: 600;
+  border-bottom-color: var(--havline-brand);
+}
+
+.proxy-detail__scroll {
+  flex: 1;
+  min-height: min(480px, 60vh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.proxy-detail__pane {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5);
+}
+
+.proxy-detail__pane--overview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--havline-space-4);
+}
+
+.overview-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 1.4fr) auto;
+  gap: 12px 16px;
+  padding: 12px 14px;
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.overview-security {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 14px;
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.overview-security__label {
+  font-size: 11px;
+  color: var(--havline-text-muted);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.overview-security__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.overview-security__empty {
+  font-size: 13px;
+  color: var(--havline-text-muted);
+}
+
+.overview-strip__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.overview-strip__label {
+  font-size: 11px;
+  color: var(--havline-text-muted);
+  letter-spacing: 0.02em;
+}
+
+.overview-strip__value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--havline-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  gap: var(--havline-space-4);
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.overview-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.overview-card {
+  border: 1px solid var(--havline-border);
+  border-radius: 10px;
+  background: var(--havline-surface);
+  padding: 14px 16px;
+}
+
+.overview-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  margin-bottom: 10px;
+}
+
+.overview-card__head h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.overview-card__sub {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--havline-text-muted);
+}
+
+.overview-card--chart {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.overview-chart {
+  flex: 1;
+  min-height: 180px;
+}
+
+.overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 1fr 1fr;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.overview-metric {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+}
+
+.overview-metric__label {
+  font-size: 12px;
+  color: var(--havline-text-muted);
+}
+
+.overview-metric__value {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--havline-text);
+}
+
+.overview-card--clients {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding-bottom: 12px;
+}
+
+.overview-client-list {
+  flex: 1 1 0;
+  min-height: 72px;
+  overflow-y: auto;
+  margin: 0 -2px;
+  padding: 0 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.overview-client-list:hover {
+  scrollbar-color: rgba(148, 163, 184, 0.55) var(--havline-bg-muted);
+}
+
+.overview-client-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overview-client-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+}
+
+.overview-client-list:hover::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.5);
+}
+
+.overview-client-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.overview-client-row + .overview-client-row {
+  margin-top: 2px;
+}
+
+.overview-client-row:hover {
+  background: var(--havline-bg);
+}
+
+.overview-client-row__time {
+  flex-shrink: 0;
+  color: var(--havline-text-muted);
+  font-size: 11px;
+}
+
+.overview-empty {
+  margin: 0;
+  height: 100%;
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--havline-text-muted);
+}
+
+.traffic-live-legend--compact {
+  margin-bottom: 6px;
+}
+
+.proxy-detail__pane--logs,
+.proxy-detail__pane--nginx {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: var(--havline-space-3);
+}
+
+.nginx-pane-alert {
+  margin-bottom: var(--havline-space-2);
+  flex-shrink: 0;
+}
+
+.nginx-mode-toggle {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.nginx-editor-spin--modal {
+  min-height: min(420px, 50vh);
+}
+
+.nginx-editor-spin {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nginx-editor-spin :deep(.n-spin-container),
+.nginx-editor-spin :deep(.n-spin-content) {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #10b981;
+  font-weight: 500;
+}
+
+.live-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.traffic-live-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--havline-text-secondary);
+}
+
+.traffic-live-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.traffic-live-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.traffic-live-legend__item--up .traffic-live-legend__dot {
+  background: #10b981;
+}
+
+.traffic-live-legend__item--down .traffic-live-legend__dot {
+  background: #3b82f6;
+}
+
+.log-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.log-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.log-panel-actions :deep(.n-button) {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.proxy-log-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+  background: #0b1220;
+}
+
+.proxy-log-fullscreen__head {
+  margin-bottom: 8px;
+}
+
+.proxy-log-fullscreen__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.proxy-log-fullscreen__rule {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listen-types {
+  display: flex;
+  align-items: center;
+  gap: var(--havline-space-5);
+}
+
+.proxy-modal {
+  display: flex;
+  width: 900px;
+  max-width: 95vw;
+  max-height: 90vh;
+  background: var(--havline-surface);
+  border-radius: var(--havline-radius);
+  overflow: hidden;
+  box-shadow: var(--havline-shadow-md);
+}
+
+.proxy-modal__form {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+}
+
+.proxy-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-5) var(--havline-space-5) 0;
+}
+
+.proxy-modal__tabbar {
+  display: flex;
+  gap: var(--havline-space-5);
+  padding: var(--havline-space-3) var(--havline-space-5) 0;
+  border-bottom: 1px solid var(--havline-border);
+  flex-shrink: 0;
+}
+
+.proxy-modal__tab {
+  margin: 0;
+  padding: 8px 2px 10px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--havline-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.proxy-modal__tab:hover {
+  color: var(--havline-text);
+}
+
+.proxy-modal__tab--active {
+  color: var(--havline-brand-text);
+  font-weight: 600;
+  border-bottom-color: var(--havline-brand);
+}
+
+.proxy-modal__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proxy-modal__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.proxy-modal__pane {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--havline-space-4) var(--havline-space-5) 0;
+}
+
+.proxy-modal__pane--nginx {
+  display: flex;
+  flex-direction: column;
+  min-height: min(480px, 55vh);
+}
+
+.proxy-modal__pane--nginx .nginx-editor-spin {
+  flex: 1;
+  min-height: 0;
+}
+
+.proxy-modal__pane :deep(.n-form) {
+  width: 100%;
+}
+
+.security-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.security-header {
+  padding: 14px 16px 16px;
+  border-radius: 10px;
+  background: var(--havline-bg);
+  border: 1px solid var(--havline-border);
+}
+
+.security-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+}
+
+.security-header__preset {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.security-header__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.security-header__status-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--havline-text-secondary);
+  flex-shrink: 0;
+}
+
+.security-header__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-header__empty {
+  font-size: 13px;
+  color: var(--havline-text-muted);
+}
+
+.security-header__note {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--havline-border);
+  font-size: 12px;
+  color: var(--havline-text-muted);
+  line-height: 1.6;
+}
+
+.security-collapse {
+  width: 100%;
+  border: 1px solid var(--havline-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--havline-surface);
+}
+
+.security-collapse :deep(.n-collapse-item) {
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.security-collapse :deep(.n-collapse-item + .n-collapse-item) {
+  border-top: 1px solid var(--havline-border) !important;
+}
+
+/* naive-ui 首个 collapse-item 默认 padding-top: 0，导致首项偏矮 */
+.security-collapse :deep(.n-collapse-item__header) {
+  padding: 12px 14px !important;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-weight: 600;
+  background: var(--havline-bg);
+}
+
+.security-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header) {
+  padding-top: 12px !important;
+}
+
+.security-collapse :deep(.n-collapse-item__content-inner) {
+  padding: 0 14px 14px;
+}
+
+.security-panel {
+  padding-top: 2px;
+}
+
+.security-panel__fields {
+  padding: 8px 0 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--havline-border);
+}
+
+.security-panel__fields :deep(.n-form-item) {
+  margin-bottom: 0;
+}
+
+.security-panel__fields :deep(.n-form-item-label) {
+  padding-bottom: 6px;
+}
+
+.security-panel__fields:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 6px;
+}
+
+.security-panel .security-fields-grid {
+  padding: 8px 0 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--havline-border);
+}
+
+.security-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  padding: 12px 0;
+}
+
+.security-panel .security-option + .security-option,
+.security-panel__fields + .security-option,
+.security-fields-grid + .security-option {
+  border-top: 1px solid var(--havline-border);
+}
+
+.security-option__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--havline-text);
+}
+
+.security-option__hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--havline-text-muted);
+  line-height: 1.45;
+}
+
+.security-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--havline-space-3);
+  padding: 4px 0 8px;
+}
+
+.conn-limit-input {
+  width: 160px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.form-switch-list--compact {
+  margin-bottom: 0;
+}
+
+.proxy-security-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.proxy-modal__help {
+  width: 300px;
+  flex-shrink: 0;
+  padding: var(--havline-space-5);
+  background: #f8fafc;
+  border-left: 1px solid var(--havline-border);
+  font-size: 13px;
+  color: var(--havline-text-secondary);
+  overflow: auto;
+}
+
+.proxy-modal__help h4 {
+  margin: 0 0 var(--havline-space-3);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--havline-text);
+}
+
+.proxy-modal__help ol {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.75;
+}
+
+.proxy-modal__help ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.proxy-modal__help li + li {
+  margin-top: 10px;
+}
+
+.proxy-modal__help code {
+  font-size: 12px;
+  background: var(--havline-surface);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.proxy-modal__tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: var(--havline-space-5);
+  padding: 12px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.proxy-modal__tip-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-size: 16px;
+}
+
+.proxy-modal__tip--warn {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.form-label__help {
+  font-size: 14px;
+  color: var(--havline-text-muted);
+  cursor: help;
+}
+
+.field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.proxy-secret-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--havline-text-muted);
+  line-height: 1.5;
+}
+
+.field-hint--warning { color: var(--havline-warning); }
+
+.exit-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.discovery-list {
+  display: grid;
+  gap: 8px;
+}
+
+.discovery-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+}
+
+.discovery-item__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.proxy-modal__pane :deep(.n-form-item .n-form-item-blank) {
+  display: block;
+  width: 100%;
+}
+
+.listen-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: var(--havline-space-5);
+}
+
+.listen-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listen-col--port {
+  width: 168px;
+  flex-shrink: 0;
+}
+
+.listen-col--protocol {
+  flex-shrink: 0;
+}
+
+.listen-col__label {
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--havline-text);
+}
+
+.required-mark {
+  color: #d03050;
+}
+
+.listen-col__control {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+}
+
+.port-input {
+  width: 100%;
+}
+
+.form-switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: var(--havline-space-4);
+}
+
+.form-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-4);
+  padding: 12px 14px;
+  border: 1px solid var(--havline-border);
+  border-radius: 10px;
+  background: var(--havline-bg);
+}
+
+.form-switch-row__label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--havline-text);
+}
+
+.form-switch-row__hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--havline-text-muted);
+  line-height: 1.5;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5);
+  border-top: 1px solid var(--havline-border);
+  margin-top: var(--havline-space-2);
+}
+
+.clients-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.clients-list--compact .clients-row {
+  padding: 6px 8px;
+}
+
+.clients-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--havline-bg);
+}
+
+.mono { font-family: var(--havline-mono); }
+.text-muted { color: var(--havline-text-muted); }
+.text-secondary { color: var(--havline-text-secondary); }
+
+@media (max-width: 1199px) {
+  .stats-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 767px) {
+  .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .proxy-toolbar__filter { width: 100%; }
+  .proxy-detail-modal__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .overview-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+  .overview-main {
+    grid-template-columns: 1fr;
+  }
+  .overview-card--clients {
+    min-height: 100px;
+  }
+}
+
+@media (max-width: 640px) {
+  .proxy-modal {
+    flex-direction: column;
+    width: 100%;
+  }
+  .proxy-modal__help {
+    width: 100%;
+    border-left: none;
+    border-top: 1px solid var(--havline-border);
+  }
+  .listen-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--havline-space-4);
+  }
+
+  .listen-col--port {
+    width: 100%;
+  }
+}
+</style>

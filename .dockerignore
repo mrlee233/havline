@@ -1,0 +1,16 @@
+.git
+web/node_modules
+web/dist
+bin
+*.db
+/data
+# 本地运行数据与归档，不进镜像（防止把真实数据库/证书/日志带入构建上下文）
+.data
+# 文档与本地杂项
+docs
+# 本地导出/打包产物与日志（预防性：不进入构建上下文）
+*.log
+*.rar
+*.zip
+*.tar.gz
+.breezell

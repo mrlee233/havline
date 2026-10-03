@@ -1,0 +1,94 @@
+# 从仓库拉源码构建并启动（适合干净机器：只要这一个文件）
+#
+# 用法：
+#   mkdir -p /opt/havline && cd /opt/havline
+#   # 取本文件（按你仓库页面上的「原始文件」链接下载，或 git clone 后复制过来）：
+#   #   curl -fsSLo docker-compose.hub.yml <仓库里这个文件的原始地址>
+#   docker compose up -d --build        # 会话密钥由应用首次启动自动生成并持久化在数据卷里
+#
+# 想自己指定会话密钥（可选项）：在 compose 文件同层建 .env 写入
+#   HAVLINE_SESSION_SECRET=<一串随机字符，openssl rand -hex 32 可生成>
+# 注意：它同时是凭据加密密钥，数据卷里已经有数据后不要随意更换，否则已存的凭据无法解密。
+#
+# 构建上下文用的是 Git 地址：BuildKit 会自己把仓库克隆下来，不需要先 git clone 到本地；
+# 仓库匿名可读时无需凭据。需要认证时改用 https://<用户名>:<令牌>@<主机>/<路径>.git，
+# 或先 git clone 后用 docker-compose.yml（本地上下文那份）。
+#
+# 首次构建要拉前端与 Go 依赖，比较慢；之后靠 Dockerfile 里的 cache mount 复用缓存。
+# 80/443 已被占用（如飞牛 NAS）请改用 docker-compose.host.yml。
+name: havline
+services:
+  havline:
+    build:
+      context: https://jayhub.top/mrlee/Havline.git#main
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
+        UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: havline:${HAVLINE_VERSION:-local}
+    # 有 build 段时 compose 默认会先尝试拉同名镜像（日志里那条 "havline Pulling" 就是），
+    # 国内直连 Docker Hub 会超时报警；强制走构建，跳过这一步。
+    pull_policy: build
+    container_name: havline
+    restart: unless-stopped
+    depends_on:
+      - updater
+    ports:
+      - "6893:6893"
+      - "18080:80"
+      - "9443:443"
+    volumes:
+      # 数据目录：默认用命名卷 havline-data（由 Docker 管理，位置随 Docker 数据根）。
+      # 想落到指定目录就在同层 .env 里设 HAVLINE_DATA_PATH=/vol1/docker/havline-data ——
+      # 以 / 或 . 开头的写法会被 compose 当成 bind mount，其余字符串仍是命名卷。
+      - ${HAVLINE_DATA_PATH:-havline-data}:/data
+      - havline-updater-sock:/run/havline-updater
+    environment:
+      HAVLINE_DATA_DIR: /data
+      HAVLINE_LISTEN: :6893
+      HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
+      # 想自己指定就在同层 .env 里设这个变量；注意它同时是凭据加密密钥，已有数据后不要更换
+      HAVLINE_SESSION_SECRET: ${HAVLINE_SESSION_SECRET:-}
+      # 时区：通知消息时间按此显示（默认东八区）
+      TZ: ${TZ:-Asia/Shanghai}
+
+  # 受限升级 sidecar：只有它持有 Docker Socket，主程序通过共享 Unix Socket 触发
+  updater:
+    build:
+      context: https://jayhub.top/mrlee/Havline.git#main
+      target: updater
+      args:
+        GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
+        UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+    image: havline-updater:${HAVLINE_VERSION:-local}
+    pull_policy: build
+    container_name: havline-updater
+    restart: unless-stopped
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      - ${HAVLINE_UPDATE_HOST_DIR:-.}:/workspace
+      - havline-updater-sock:/run/havline-updater
+    environment:
+      HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      HAVLINE_UPDATE_PROJECT_DIR: /workspace
+      HAVLINE_UPDATE_COMPOSE_FILE: docker-compose.hub.yml
+      HAVLINE_UPDATE_SERVICE: havline
+      HAVLINE_UPDATE_MODE: git
+      HAVLINE_UPDATE_REPO: https://jayhub.top/mrlee/Havline.git
+      HAVLINE_UPDATE_BRANCH: main
+      HAVLINE_UPDATE_APP_URL: http://havline:6893
+      HAVLINE_UPDATE_HOST_DIR: ${HAVLINE_UPDATE_HOST_DIR:-}
+      HAVLINE_UPDATE_PROJECT_NAME: ${HAVLINE_UPDATE_PROJECT_NAME:-havline}
+      HAVLINE_UPDATE_SELF_IMAGE: havline-updater:${HAVLINE_VERSION:-local}
+      HAVLINE_UPDATE_DOCKER_SOCK: ${DOCKER_SOCK:-/var/run/docker.sock}
+      TZ: ${TZ:-Asia/Shanghai}
+
+volumes:
+  havline-data:
+  havline-updater-sock:

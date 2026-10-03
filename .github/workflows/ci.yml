@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 顺序不能颠倒：cmd/havline/main.go 用 //go:embed all:web/dist 嵌入前端，
+      # 干净检出时该目录不存在，go vet / go build 会直接失败。
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Type-check and build web
+        working-directory: web
+        run: npm run build
+
+      - name: Run web unit tests
+        working-directory: web
+        run: npm test
+
+      - name: Sync web dist into embed directory
+        run: |
+          rm -rf cmd/havline/web/dist
+          cp -r web/dist cmd/havline/web/dist
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test ./... -count=1
+
+      - name: go build
+        run: go build ./...
+
+      # 说明：gofmt 卡口暂未开启——仓库里还有 25 个历史未格式化文件（见 docs/project-audit-2026-09-24.md §八），
+      # 全仓 `gofmt -w` 之后再补一步 `gofmt -l internal cmd` 作为门禁。

@@ -1,0 +1,2 @@
+# shell 脚本一律以 LF 入库与检出，避免在 Windows 上被 CRLF 破坏（Linux 端会报 bad interpreter）
+*.sh text eol=lf
