@@ -3,7 +3,7 @@
 # 用法：
 #   mkdir -p /opt/havline && cd /opt/havline
 #   # 取本文件（按你仓库页面上的「原始文件」链接下载，或 git clone 后复制过来）：
-#   #   curl -fsSLo docker-compose.hub.yml <仓库里这个文件的原始地址>
+#   #   curl -fsSLo docker-compose.hub.yml https://raw.githubusercontent.com/mrlee233/havline/main/docker-compose.hub.yml
 #   docker compose up -d --build        # 会话密钥由应用首次启动自动生成并持久化在数据卷里
 #
 # 想自己指定会话密钥（可选项）：在 compose 文件同层建 .env 写入
@@ -20,7 +20,7 @@ name: havline
 services:
   havline:
     build:
-      context: https://jayhub.top/mrlee/Havline.git#main
+      context: https://github.com/mrlee233/havline.git#main
       args:
         NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:22-alpine}
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
@@ -59,7 +59,7 @@ services:
   # 受限升级 sidecar：只有它持有 Docker Socket，主程序通过共享 Unix Socket 触发
   updater:
     build:
-      context: https://jayhub.top/mrlee/Havline.git#main
+      context: https://github.com/mrlee233/havline.git#main
       target: updater
       args:
         GO_IMAGE: ${GO_IMAGE:-docker.m.daocloud.io/library/golang:1.23-bookworm}
@@ -80,7 +80,7 @@ services:
       HAVLINE_UPDATE_COMPOSE_FILE: docker-compose.hub.yml
       HAVLINE_UPDATE_SERVICE: havline
       HAVLINE_UPDATE_MODE: git
-      HAVLINE_UPDATE_REPO: https://jayhub.top/mrlee/Havline.git
+      HAVLINE_UPDATE_REPO: https://github.com/mrlee233/havline.git
       HAVLINE_UPDATE_BRANCH: main
       HAVLINE_UPDATE_APP_URL: http://havline:6893
       HAVLINE_UPDATE_HOST_DIR: ${HAVLINE_UPDATE_HOST_DIR:-}

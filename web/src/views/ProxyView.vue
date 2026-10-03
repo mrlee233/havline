@@ -912,6 +912,7 @@ import {
   WarningOutline,
 } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
+import { withBase } from '../api/base'
 import type { CfTunnel, DiscoveredService, ProxyClientConn, ProxyRule, ProxySavePayload, ProxyTraffic } from '../api/types'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import EmptyState from '../components/EmptyState.vue'
@@ -1835,7 +1836,7 @@ function stopLogStream() {
 function startLogStream() {
   const rule = selectedRule.value
   if (!rule || logEventSource) return
-  logEventSource = new EventSource(`/api/proxies/${rule.id}/logs/stream?tail=100`, {
+  logEventSource = new EventSource(withBase(`/api/proxies/${rule.id}/logs/stream?tail=100`), {
     withCredentials: true,
   })
   logEventSource.addEventListener('log', (event) => {

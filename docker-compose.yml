@@ -1,3 +1,4 @@
+# 源码仓库：https://github.com/mrlee233/havline.git（main 分支）
 # 固定项目名：不改的话，改了目录名/项目名后 compose 会把它当成新项目，
 # havline-data 会变成新空卷（看起来像「数据丢了」）。
 name: havline

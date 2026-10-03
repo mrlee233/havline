@@ -12,6 +12,8 @@ import (
 
 type Config struct {
 	ListenAddr            string
+	GatewaySocket         string
+	GatewayPrefix         string
 	DataDir               string
 	SessionSecret         string
 	NginxBin              string
@@ -32,6 +34,8 @@ func Load() Config {
 	}
 	return Config{
 		ListenAddr:            envOr("HAVLINE_LISTEN", ":6893"),
+		GatewaySocket:         envOr("HAVLINE_GATEWAY_SOCKET", ""),
+		GatewayPrefix:         envOr("HAVLINE_GATEWAY_PREFIX", ""),
 		DataDir:               dataDir,
 		SessionSecret:         envOr("HAVLINE_SESSION_SECRET", ""),
 		NginxBin:              envOr("HAVLINE_NGINX_BIN", "nginx"),
@@ -41,7 +45,7 @@ func Load() Config {
 		NginxDefaultHTTPSPort: envIntOr("HAVLINE_NGINX_HTTPS_PORT", 443),
 		FrpcBin:               envOr("HAVLINE_FRPC_BIN", "frpc"),
 		FrpPIDFile:            envOr("HAVLINE_FRP_PID", dataDir+"/frp/frpc.pid"),
-		UpdaterSocket:         envOr("HAVLINE_UPDATER_SOCKET", "/run/havline-updater/updater.sock"),
+		UpdaterSocket:         updaterSocket(),
 		UpdaterToken:          envOr("HAVLINE_UPDATER_TOKEN", ""),
 	}
 }
@@ -233,4 +237,12 @@ func envIntOr(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// 原生应用显式传空值以禁用 Docker 升级；未配置时保留容器默认值。
+func updaterSocket() string {
+	if value, ok := os.LookupEnv("HAVLINE_UPDATER_SOCKET"); ok {
+		return value
+	}
+	return "/run/havline-updater/updater.sock"
 }
