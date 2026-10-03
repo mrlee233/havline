@@ -44,15 +44,6 @@ NAS 的价值不只在存储，更在于把文件、媒体、自动化工具和�
 当前开发与测试环境以 **飞牛 fnOS** 为主。群晖、威联通、自建 Linux 等其他环境尚未充分测试，
 部署前请自行验证端口、权限和数据目录。
 
-## 界面预览
-
-| 仪表盘 | 反向代理 |
-| --- | --- |
-| ![仪表盘](docs/screenshots/dashboard.png) | ![反向代理](docs/screenshots/proxy.png) |
-
-| DDNS | 证书管理 |
-| --- | --- |
-| ![DDNS](docs/screenshots/ddns.png) | ![证书管理](docs/screenshots/certificates.png) |
 
 ## 功能总览
 
