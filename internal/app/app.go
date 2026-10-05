@@ -70,6 +70,14 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 	logger.Info("会话密钥已就绪", "module", "SYSTEM", "source", secretSource)
 
+	updaterToken, updaterTokenSource, err := updater.EnsureToken(cfg.UpdaterToken, cfg.UpdaterTokenFile)
+	if err != nil {
+		return nil, err
+	}
+	if updaterToken != "" {
+		logger.Info("updater Token 已就绪", "module", "SYSTEM", "source", updaterTokenSource)
+	}
+
 	conn, err := db.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err
@@ -124,7 +132,7 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	proxySvc.SetExitSync(cloudflareSvc)
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
-	updaterClient := updater.NewClient(cfg.UpdaterSocket, cfg.UpdaterToken)
+	updaterClient := updater.NewClient(cfg.UpdaterSocket, updaterToken)
 
 	handler := api.NewRouter(api.Deps{
 		Config:     cfg,

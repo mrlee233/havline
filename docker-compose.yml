@@ -35,7 +35,9 @@ services:
       HAVLINE_DATA_DIR: /data
       HAVLINE_LISTEN: :6893
       HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
-      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      # 主程序首次启动时生成共享 Token；旧部署仍可用环境变量覆盖
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:-}
+      HAVLINE_UPDATER_TOKEN_FILE: /run/havline-updater/updater.token
       # 留空即自动：应用会在数据目录里生成并持久化 <DataDir>/session_secret（0600）
       # 想自己指定就设这个变量；注意它同时是凭据加密密钥，已有数据后不要随意更换
       HAVLINE_SESSION_SECRET: ${HAVLINE_SESSION_SECRET:-}
@@ -60,7 +62,8 @@ services:
       - havline-updater-sock:/run/havline-updater
     environment:
       HAVLINE_UPDATER_SOCKET: /run/havline-updater/updater.sock
-      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:?请在 .env 中设置随机 updater Token}
+      HAVLINE_UPDATER_TOKEN: ${HAVLINE_UPDATER_TOKEN:-}
+      HAVLINE_UPDATER_TOKEN_FILE: /run/havline-updater/updater.token
       HAVLINE_UPDATE_PROJECT_DIR: /workspace
       HAVLINE_UPDATE_COMPOSE_FILE: docker-compose.yml
       HAVLINE_UPDATE_SERVICE: havline

@@ -25,6 +25,7 @@ type Config struct {
 	FrpPIDFile            string
 	UpdaterSocket         string
 	UpdaterToken          string
+	UpdaterTokenFile      string
 }
 
 func Load() Config {
@@ -47,6 +48,7 @@ func Load() Config {
 		FrpPIDFile:            envOr("HAVLINE_FRP_PID", dataDir+"/frp/frpc.pid"),
 		UpdaterSocket:         updaterSocket(),
 		UpdaterToken:          envOr("HAVLINE_UPDATER_TOKEN", ""),
+		UpdaterTokenFile:      envOr("HAVLINE_UPDATER_TOKEN_FILE", defaultUpdaterTokenFile()),
 	}
 }
 
@@ -245,4 +247,8 @@ func updaterSocket() string {
 		return value
 	}
 	return "/run/havline-updater/updater.sock"
+}
+
+func defaultUpdaterTokenFile() string {
+	return "/run/havline-updater/updater.token"
 }

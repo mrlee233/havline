@@ -190,15 +190,10 @@ docker compose -f docker-compose.host.yml up -d --build
 在已克隆的源码目录中执行：
 
 ```bash
-umask 077
-# 只在尚未配置时追加，保留已有环境变量和密钥
-if ! test -f .env || ! grep -q "^HAVLINE_UPDATER_TOKEN=" .env; then
-  token=$(openssl rand -hex 32) && printf "\nHAVLINE_UPDATER_TOKEN=%s\n" "$token" >> .env
-fi
 docker compose -f docker-compose.yml up -d --build
 ```
 
-默认映射 `6893:6893`、`18080:80`、`9443:443`。主服务与 updater 共享 Token，只有 updater 挂载 Docker Socket。
+默认映射 `6893:6893`、`18080:80`、`9443:443`。主程序首次启动时会在共享卷中自动生成 updater Token，updater 等待并读取同一文件，不会创建额外的初始化容器；只有 updater 挂载 Docker Socket。
 
 </details>
 
@@ -209,15 +204,10 @@ docker compose -f docker-compose.yml up -d --build
 mkdir -p /opt/havline && cd /opt/havline
 curl -fsSLo docker-compose.hub.yml \
   https://github.com/mrlee233/havline/raw/branch/main/docker-compose.hub.yml
-umask 077
-# 只在尚未配置时追加，保留已有环境变量和密钥
-if ! test -f .env || ! grep -q "^HAVLINE_UPDATER_TOKEN=" .env; then
-  token=$(openssl rand -hex 32) && printf "\nHAVLINE_UPDATER_TOKEN=%s\n" "$token" >> .env
-fi
 docker compose -f docker-compose.hub.yml up -d --build
 ```
 
-BuildKit 从当前仓库 `main` 分支构建，默认使用 Bridge 端口映射。`HAVLINE_VERSION` 只控制镜像标签，不锁定源码提交。
+BuildKit 从当前仓库 `main` 分支构建，默认使用 Bridge 端口映射。Token 由主程序自动生成，`HAVLINE_VERSION` 只控制镜像标签，不锁定源码提交。
 
 </details>
 
@@ -312,7 +302,8 @@ Havline 提供两种飞牛应用形态，均支持统一网关入口 `/app/havli
 | `HAVLINE_DATA_DIR`         | `/data`                   | 数据目录（数据库、Nginx 配置、证书、日志） |
 | `HAVLINE_SESSION_SECRET` | 空，自动生成 | 会话与凭据加密密钥，保存在数据目录；已有数据后不要更换 |
 | `HAVLINE_INITIAL_ADMIN_PASSWORD` | 空，自动生成 | 首次初始化管理员时使用的密码；不设置时会生成随机密码并输出到首次启动日志 |
-| `HAVLINE_UPDATER_TOKEN` | 无 | 含 updater 的 Compose 部署必填随机共享鉴权值 |
+| `HAVLINE_UPDATER_TOKEN` | 空，自动生成 | 可选覆盖值；未设置时读取共享 Token 文件 |
+| `HAVLINE_UPDATER_TOKEN_FILE` | `/run/havline-updater/updater.token` | 主程序与 updater sidecar 共享的 Token 文件 |
 | `HAVLINE_UPDATER_SOCKET` | `/run/havline-updater/updater.sock` | 主程序与 updater sidecar 通信的 Unix Socket |
 | `HAVLINE_DATA_PATH` | `havline-data` | Compose 挂载来源，可配置宿主机目录 |
 | `HAVLINE_NGINX_HTTP_PORT`  | `80`                      | 新建 HTTP 反代规则的默认监听端口           |
@@ -344,7 +335,7 @@ Havline 提供两种飞牛应用形态，均支持统一网关入口 `/app/havli
 
 ## 注意事项
 
-1. **密钥持久化**：会话密钥未显式配置时自动生成并写入数据目录；已有数据不要更换密钥。含 updater 的编排必须另行配置 `HAVLINE_UPDATER_TOKEN`。
+1. **密钥持久化**：会话密钥未显式配置时自动生成并写入数据目录；已有数据不要更换密钥。含 updater 的编排会由主程序在共享卷中自动生成 Token，旧部署仍可用 `HAVLINE_UPDATER_TOKEN` 覆盖。
 2. **端口冲突**：宿主机已有 Nginx（如飞牛系统）占用 80/443 时，不要让 Havline 反代规则监听 80/443；使用 `18080/9443` 或 host 模式 + 环境变量。
 3. **已有反代规则**：修改 `HAVLINE_NGINX_HTTP_PORT` / `HAVLINE_NGINX_HTTPS_PORT` 后，**不会自动更新**数据库中已有规则的端口，需在反代页手动修改并保存。
 4. **访问日志**：仅统计经 Havline Nginx 反代的域名流量，不包含管理后台 `:6893` 的请求。

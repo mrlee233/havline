@@ -6,11 +6,25 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/havline/havline/internal/updater"
 )
 
 func main() {
+	token, tokenSource, err := updater.WaitForToken(
+		envOr("HAVLINE_UPDATER_TOKEN", ""),
+		envOr("HAVLINE_UPDATER_TOKEN_FILE", updater.DefaultTokenPath),
+		2*time.Minute,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if token == "" {
+		log.Fatal("HAVLINE_UPDATER_TOKEN 或 HAVLINE_UPDATER_TOKEN_FILE 未配置")
+	}
+	log.Printf("updater Token 已就绪：%s", tokenSource)
+
 	server, err := updater.NewServer(updater.Config{
 		SocketPath:     envOr("HAVLINE_UPDATER_SOCKET", "/run/havline-updater/updater.sock"),
 		ProjectDir:     envOr("HAVLINE_UPDATE_PROJECT_DIR", "/workspace"),
@@ -24,7 +38,7 @@ func main() {
 		ProjectName:    envOr("HAVLINE_UPDATE_PROJECT_NAME", ""),
 		SelfImage:      envOr("HAVLINE_UPDATE_SELF_IMAGE", ""),
 		DockerSocket:   envOr("HAVLINE_UPDATE_DOCKER_SOCK", "/var/run/docker.sock"),
-		Token:          envOr("HAVLINE_UPDATER_TOKEN", ""),
+		Token:          token,
 	}, nil)
 	if err != nil {
 		log.Fatal(err)

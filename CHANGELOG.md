@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 新增
+
+- **updater Token 零配置且无额外容器**：主程序首次启动时在共享卷中自动生成 `/run/havline-updater/updater.token`，sidecar 等待并读取同一文件；主服务与 sidecar 支持 `HAVLINE_UPDATER_TOKEN_FILE`，旧部署仍可用 `HAVLINE_UPDATER_TOKEN` 覆盖
+
 ### 修复
 
 - **frps 启动失败不再误报成功**：主程序现在保留 Agent 返回的 `ok=false` 与错误内容，`systemctl start` 后 frps 未进入运行状态时会如实返回失败，不再固定提示「启动成功」
@@ -15,6 +19,7 @@ All notable changes to this project will be documented in this file.
 ### 测试
 
 - 新增 Agent 操作结果解析、Agent 版本解析、frps vhost 端口冲突校验和隧道提示文案测试
+- 新增 updater Token 环境变量优先级、共享文件生成与解析、等待超时、缺失文件和空文件测试
 - `go test ./...`、`npm run typecheck` 通过
 
 ### 变更
