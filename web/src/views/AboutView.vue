@@ -1,5 +1,5 @@
 <template>
-  <PageHeader title="关于项目" description="了解 Havline 的项目定位、来源、能力与开源信息">
+  <PageHeader title="关于项目" description="查看版本、项目仓库、发布记录与开源信息">
     <template #actions>
       <n-button :loading="refreshing" @click="refreshVersion">
         <template #icon><n-icon :component="RefreshOutline" /></template>
@@ -15,18 +15,18 @@
         <p class="about-kicker">ABOUT HAVLINE</p>
         <h2>让每一台 NAS，都能安全地连接世界。</h2>
         <p>
-          Havline 是一款面向飞牛 fnOS 等 NAS 环境的轻量公网访问管理工具。
-          它把反向代理、DDNS、HTTPS 证书、内网穿透、公网 Agent 与 Cloudflare Tunnel
-          收进一个 Web 控制台，让家庭与小型办公环境中的服务访问更简单、更可控。
+          Havline 面向家庭 NAS 与自托管环境，集中管理服务的公网访问入口。
+          从域名解析、HTTPS 证书到反向代理、FRP 和 Cloudflare 隧道，
+          将分散的配置与日常运维集中到一处，支持容器化与本地化部署。
         </p>
         <div class="about-actions">
           <a :href="GITHUB_REPO_URL" target="_blank" rel="noopener noreferrer">
             <n-icon :component="LogoGithub" />
-            查看源项目
+            查看项目源码
           </a>
           <a :href="GITHUB_RELEASES_URL" target="_blank" rel="noopener noreferrer">
             <n-icon :component="CloudDownloadOutline" />
-            Release
+            发布版本
           </a>
           <a :href="GPL_URL" target="_blank" rel="noopener noreferrer">
             <n-icon :component="DocumentTextOutline" />
@@ -42,7 +42,7 @@
         <strong class="mono">v{{ version }}</strong>
       </div>
       <div class="about-meta-item">
-        <span>源项目</span>
+        <span>项目仓库</span>
         <strong>{{ GITHUB_REPO }}</strong>
       </div>
       <div class="about-meta-item">
@@ -56,6 +56,7 @@
     </div>
   </section>
 
+  <div class="about-sections">
   <HavlineCard title="项目定位" subtitle="Havline 解决什么问题">
     <div class="about-lead">
       <p>
@@ -75,7 +76,7 @@
       </article>
       <article class="about-point">
         <h3>保留可控性</h3>
-        <p>所有配置、凭据和运行数据都保存在自己的数据目录中，不依赖外部托管平台。</p>
+        <p>本地配置与运行数据由自己管理，支持配置回滚和备份恢复；DNS、证书与隧道按所选服务接入。</p>
       </article>
     </div>
   </HavlineCard>
@@ -85,13 +86,13 @@
       <blockquote>开源不是重新发明轮子，而是站在巨人的肩膀上，把一件事继续做得更好。</blockquote>
       <p>
         Havline 是基于开源项目
-        <a :href="GITHUB_REPO_URL" target="_blank" rel="noopener noreferrer">{{ GITHUB_REPO }}</a>
+        <a :href="UPSTREAM_REPO_URL" target="_blank" rel="noopener noreferrer">{{ UPSTREAM_REPO }}</a>
         <strong>1.0.2 版本</strong>进行二次开发的项目。原始项目已经完成了反向代理、DDNS、证书、
         内网穿透等核心能力，为 Havline 提供了坚实的工程基础。
       </p>
       <p>
-        我们在原项目的基础上进行了品牌重塑、界面调整、功能迭代、部署流程整理和文档重构。
-        无论项目名称如何变化，Havline 都保留对源项目和其贡献者的明确致谢，并继续遵循
+        Havline 在此基础上持续完善多服务端管理、公网 Agent、Cloudflare 隧道和部署兼容性。
+        当前源码与版本发布由 {{ GITHUB_REPO }} 维护，保留上游来源与贡献者致谢，并继续遵循
         <a :href="GPL_URL" target="_blank" rel="noopener noreferrer">GPL-3.0</a>
         开源协议。
       </p>
@@ -108,6 +109,85 @@
           <h3>{{ feature.title }}</h3>
           <p>{{ feature.description }}</p>
         </div>
+      </article>
+    </div>
+  </HavlineCard>
+
+  <HavlineCard title="适用场景" subtitle="根据网络条件选择服务入口">
+    <div class="about-points">
+      <article class="about-point">
+        <h3>有公网访问条件的 NAS</h3>
+        <p>通过 DDNS 跟随公网 IP，使用 Nginx 反向代理和 HTTPS 证书发布服务。实际访问仍取决于路由器转发、防火墙、运营商限制与 IPv4 / IPv6 连通性。</p>
+      </article>
+      <article class="about-point">
+        <h3>通过公网服务器接入</h3>
+        <p>使用 FRP 连接自有 VPS，并通过公网 Agent 管理服务器上的 Nginx、frps 和服务路由。VPS、域名与服务器权限由使用者自行准备和管理。</p>
+      </article>
+      <article class="about-point">
+        <h3>不开放本机入站端口</h3>
+        <p>通过 Cloudflare Tunnel 发布内网 Web 服务，管理隧道、域名路由与 DNS。此方式依赖 Cloudflare 账户、授权和网络连接，适用范围受其服务规则约束。</p>
+      </article>
+    </div>
+  </HavlineCard>
+
+  <HavlineCard title="部署与运行" subtitle="一份业务源码，多种交付方式">
+    <div class="about-detail-grid">
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">Docker</span>
+        <h3>Compose 管理容器与数据</h3>
+        <p>适合通用 Linux、NAS 和已有 Docker 环境。数据通过命名卷或绑定目录持久化，配有 updater 的 Compose 部署支持受控升级。</p>
+      </article>
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">自托管部署</span>
+        <h3>按环境选择运行方式</h3>
+        <p>可根据设备与运维习惯选择容器化或本地化部署，数据结构保持一致，便于迁移、备份和恢复。</p>
+      </article>
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">按需组件</span>
+        <h3>首次使用时下载</h3>
+        <p>FRP 客户端和 cloudflared 不预置在基础运行环境中，启用对应功能时需要联网下载并保存到数据目录。</p>
+      </article>
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">外部依赖</span>
+        <h3>域名、证书与服务器由用户准备</h3>
+        <p>DNS、ACME 证书、公网 VPS 和 Cloudflare Tunnel 需要相应账户、凭据或服务器，应用不会自动获得公网 IP 或第三方授权。</p>
+      </article>
+    </div>
+  </HavlineCard>
+
+  <HavlineCard title="数据与安全" subtitle="本地管理不等于无需防护">
+    <div class="about-points about-points--security">
+      <article class="about-point">
+        <h3>完整备份，而非只备份数据库</h3>
+        <p>数据库、会话与凭据加密密钥、证书私钥和运行配置共同组成实例数据。迁移或升级前应备份完整数据目录；使用环境变量提供密钥时，还需安全保留原值。</p>
+      </article>
+      <article class="about-point">
+        <h3>管理入口与服务入口分离</h3>
+        <p>对外发布业务服务时，不应顺带开放管理后台、Docker Socket 或 Agent 管理端口。按需配置认证、HTTPS、防火墙和访问限制，并定期检查授权范围。</p>
+      </article>
+      <article class="about-point">
+        <h3>保护凭据与备份归档</h3>
+        <p>DNS Token、服务器凭据和证书私钥属于敏感数据。凭据加密不能替代文件权限与备份保护；已有数据后不要随意更换加密主密钥，以免失去解密能力。</p>
+      </article>
+    </div>
+  </HavlineCard>
+
+  <HavlineCard title="项目维护与反馈" subtitle="以当前源码和发布记录为准">
+    <div class="about-detail-grid about-detail-grid--feedback">
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">源码与版本</span>
+        <h3>跟随项目仓库发布</h3>
+        <p>当前源码由 <a :href="GITHUB_REPO_URL" target="_blank" rel="noopener noreferrer">{{ GITHUB_REPO }}</a> 维护，已发布版本与更新说明见 <a :href="GITHUB_RELEASES_URL" target="_blank" rel="noopener noreferrer">发布记录</a>。生产环境请固定版本并保留备份。</p>
+      </article>
+      <article class="about-detail-item">
+        <span class="about-detail-item__eyebrow">问题反馈</span>
+        <h3>提供可复现的信息</h3>
+        <p>通过 <a :href="`${GITHUB_REPO_URL}/issues`" target="_blank" rel="noopener noreferrer">GitHub Issues</a> 反馈时，请附版本、部署方式、设备架构、复现步骤和脱敏日志。</p>
+      </article>
+      <article class="about-detail-item about-detail-item--wide">
+        <span class="about-detail-item__eyebrow">开源协作</span>
+        <h3>保留来源，持续改进</h3>
+        <p>欢迎提交问题复现、兼容性反馈和代码改进。Havline 保留上游贡献者的版权与来源说明，持续按 GPL-3.0 发布；请勿上传密码、Token、私钥、完整数据库或包含敏感配置的备份归档。</p>
       </article>
     </div>
   </HavlineCard>
@@ -135,8 +215,8 @@
       <div class="about-license__item">
         <n-icon :component="LogoGithub" />
         <div>
-          <h3>源项目保留</h3>
-          <p>源项目地址固定为 {{ GITHUB_REPO }}，用于追溯上游来源和许可证义务。</p>
+          <h3>上游来源</h3>
+          <p>基于 {{ UPSTREAM_REPO }} 继续开发，保留原作者版权、来源说明与许可证。</p>
         </div>
       </div>
       <div class="about-license__item">
@@ -148,6 +228,7 @@
       </div>
     </div>
   </HavlineCard>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -174,6 +255,8 @@ import {
   GITHUB_RELEASES_URL,
   GITHUB_REPO,
   GITHUB_REPO_URL,
+  UPSTREAM_REPO,
+  UPSTREAM_REPO_URL,
 } from '../constants/app'
 import { formatDate } from '../utils/format'
 
@@ -376,6 +459,16 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.about-sections {
+  display: grid;
+  gap: var(--havline-space-5);
+  min-width: 0;
+}
+
+.about-sections > :deep(.havline-card) {
+  min-width: 0;
+}
+
 .about-lead {
   max-width: 860px;
   color: var(--havline-text-secondary);
@@ -392,6 +485,56 @@ onMounted(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--havline-space-4);
   margin-top: var(--havline-space-5);
+}
+
+.about-points--security {
+  margin-top: 0;
+}
+
+.about-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--havline-space-4);
+}
+
+.about-detail-item {
+  min-width: 0;
+  padding: var(--havline-space-4);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
+}
+
+.about-detail-item--wide {
+  grid-column: 1 / -1;
+}
+
+.about-detail-item__eyebrow {
+  display: block;
+  margin-bottom: var(--havline-space-2);
+  color: var(--havline-brand-text);
+  font-family: var(--havline-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.about-detail-item h3 {
+  margin: 0 0 var(--havline-space-2);
+  color: var(--havline-text);
+  font-size: 15px;
+}
+
+.about-detail-item p {
+  margin: 0;
+  color: var(--havline-text-secondary);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+.about-detail-item a {
+  color: var(--havline-brand-text);
+  text-decoration: none;
 }
 
 .about-point {
@@ -556,8 +699,13 @@ onMounted(() => {
 
   .about-points,
   .about-features,
-  .about-license {
+  .about-license,
+  .about-detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .about-detail-item--wide {
+    grid-column: auto;
   }
 
   .about-tech__group {
