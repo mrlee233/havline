@@ -2,6 +2,7 @@ package updater
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ type Config struct {
 	ProjectName    string
 	SelfImage      string
 	DockerSocket   string
+	Token          string
 	BuildTimeout   time.Duration
 	HealthTimeout  time.Duration
 }
@@ -87,6 +89,10 @@ func NewServer(cfg Config, logger *slog.Logger) (*Server, error) {
 	cfg.HostProjectDir = strings.TrimSpace(cfg.HostProjectDir)
 	cfg.ProjectName = strings.TrimSpace(cfg.ProjectName)
 	cfg.SelfImage = strings.TrimSpace(cfg.SelfImage)
+	cfg.Token = strings.TrimSpace(cfg.Token)
+	if cfg.Token == "" {
+		return nil, fmt.Errorf("HAVLINE_UPDATER_TOKEN 未设置，拒绝启动未鉴权的升级服务")
+	}
 	if cfg.BuildTimeout <= 0 {
 		cfg.BuildTimeout = 30 * time.Minute
 	}
@@ -126,7 +132,14 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /status", s.handleStatus)
 	mux.HandleFunc("POST /apply", s.handleApply)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		provided := strings.TrimSpace(r.Header.Get(tokenHeader))
+		if len(provided) != len(s.cfg.Token) || subtle.ConstantTimeCompare([]byte(provided), []byte(s.cfg.Token)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "updater 鉴权失败"})
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
 // Serve 在共享 Unix Socket 上提供服务。

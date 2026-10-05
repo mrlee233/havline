@@ -22,6 +22,8 @@ type Config struct {
 	FrpcBin               string
 	FrpPIDFile            string
 	UpdaterSocket         string
+	UpdaterToken          string
+	UpdaterTokenFile      string
 }
 
 func Load() Config {
@@ -40,7 +42,9 @@ func Load() Config {
 		NginxDefaultHTTPSPort: envIntOr("HAVLINE_NGINX_HTTPS_PORT", 443),
 		FrpcBin:               envOr("HAVLINE_FRPC_BIN", "frpc"),
 		FrpPIDFile:            envOr("HAVLINE_FRP_PID", dataDir+"/frp/frpc.pid"),
-		UpdaterSocket:         envOr("HAVLINE_UPDATER_SOCKET", "/run/havline-updater/updater.sock"),
+		UpdaterSocket:         updaterSocket(),
+		UpdaterToken:          envOr("HAVLINE_UPDATER_TOKEN", ""),
+		UpdaterTokenFile:      envOr("HAVLINE_UPDATER_TOKEN_FILE", defaultUpdaterTokenFile()),
 	}
 }
 
@@ -231,4 +235,16 @@ func envIntOr(key string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// 原生应用显式传空值以禁用 Docker 升级；未配置时保留容器默认值。
+func updaterSocket() string {
+	if value, ok := os.LookupEnv("HAVLINE_UPDATER_SOCKET"); ok {
+		return value
+	}
+	return "/run/havline-updater/updater.sock"
+}
+
+func defaultUpdaterTokenFile() string {
+	return "/run/havline-updater/updater.token"
 }

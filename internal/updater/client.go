@@ -14,12 +14,15 @@ import (
 )
 
 // Client 通过共享 Unix Socket 调用 havline-updater sidecar。
+const tokenHeader = "X-Havline-Updater-Token"
+
 type Client struct {
 	socketPath string
+	token      string
 	http       *http.Client
 }
 
-func NewClient(socketPath string) *Client {
+func NewClient(socketPath, token string) *Client {
 	socketPath = strings.TrimSpace(socketPath)
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -29,6 +32,7 @@ func NewClient(socketPath string) *Client {
 	}
 	return &Client{
 		socketPath: socketPath,
+		token:      strings.TrimSpace(token),
 		http:       &http.Client{Transport: transport, Timeout: 15 * time.Second},
 	}
 }
@@ -75,6 +79,9 @@ func (c *Client) request(ctx context.Context, method, path string, payload any, 
 	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.token != "" {
+		req.Header.Set(tokenHeader, c.token)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {

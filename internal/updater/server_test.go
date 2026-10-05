@@ -2,6 +2,8 @@ package updater
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,6 +31,7 @@ func TestNewServerDefaultsAndValidation(t *testing.T) {
 	server, err := NewServer(Config{
 		ProjectDir:  t.TempDir(),
 		ComposeFile: "docker-compose.yml",
+		Token:       "test-token",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -36,17 +39,17 @@ func TestNewServerDefaultsAndValidation(t *testing.T) {
 	if !server.state.Enabled || server.cfg.Mode != "local" {
 		t.Fatalf("默认状态不正确: %#v", server.state)
 	}
-	if _, err := NewServer(Config{ProjectDir: t.TempDir(), Mode: "invalid"}, nil); err == nil {
+	if _, err := NewServer(Config{ProjectDir: t.TempDir(), Mode: "invalid", Token: "test-token"}, nil); err == nil {
 		t.Fatal("非法 mode 应被拒绝")
 	}
-	if _, err := NewServer(Config{ProjectDir: t.TempDir(), Mode: "git"}, nil); err == nil {
+	if _, err := NewServer(Config{ProjectDir: t.TempDir(), Mode: "git", Token: "test-token"}, nil); err == nil {
 		t.Fatal("git 模式缺少 RepoURL 应被拒绝")
 	}
 }
 
 func TestEnsureComposeFile(t *testing.T) {
 	dir := t.TempDir()
-	server, err := NewServer(Config{ProjectDir: dir, ComposeFile: "docker-compose.yml", ProjectName: "havline"}, nil)
+	server, err := NewServer(Config{ProjectDir: dir, ComposeFile: "docker-compose.yml", ProjectName: "havline", Token: "test-token"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +73,7 @@ func TestResolveComposePlanUsesHostProjectDir(t *testing.T) {
 		ComposeFile:    "docker-compose.hub.yml",
 		HostProjectDir: hostDir,
 		ProjectName:    "havline",
+		Token:          "test-token",
 	}, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +87,39 @@ func TestResolveComposePlanUsesHostProjectDir(t *testing.T) {
 	}
 	if plan.helperComposePath != filepath.Join("/workspace", "docker-compose.hub.yml") {
 		t.Fatalf("helper compose 路径不正确: %s", plan.helperComposePath)
+	}
+}
+
+func TestNewServerRequiresToken(t *testing.T) {
+	if _, err := NewServer(Config{ProjectDir: t.TempDir()}, nil); err == nil {
+		t.Fatal("缺少 Token 时应拒绝启动")
+	}
+}
+
+func TestHandlerRequiresToken(t *testing.T) {
+	server, err := NewServer(Config{ProjectDir: t.TempDir(), Token: "test-token"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, token := range []string{"", "wrong-token"} {
+		req := httptest.NewRequest(http.MethodGet, "http://unix/status", nil)
+		if token != "" {
+			req.Header.Set(tokenHeader, token)
+		}
+		res := httptest.NewRecorder()
+		server.Handler().ServeHTTP(res, req)
+		if res.Code != http.StatusUnauthorized {
+			t.Fatalf("Token %q 应返回 401，实际为 %d", token, res.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "http://unix/status", nil)
+	req.Header.Set(tokenHeader, "test-token")
+	res := httptest.NewRecorder()
+	server.Handler().ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("正确 Token 应返回 200，实际为 %d", res.Code)
 	}
 }
 

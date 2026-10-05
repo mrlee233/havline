@@ -33,3 +33,12 @@ func TestLoadNginxDefaultPortsFallback(t *testing.T) {
 		t.Fatalf("ports %d %d", cfg.NginxDefaultHTTPPort, cfg.NginxDefaultHTTPSPort)
 	}
 }
+
+func TestLoadUpdaterTokenFile(t *testing.T) {
+	t.Setenv("HAVLINE_UPDATER_TOKEN_FILE", "/tmp/havline-updater.token")
+
+	cfg := Load()
+	if cfg.UpdaterTokenFile != "/tmp/havline-updater.token" {
+		t.Fatalf("updater token file %q", cfg.UpdaterTokenFile)
+	}
+}
