@@ -41,3 +41,37 @@ func TestValidateProxyInput(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateServerInputVhostPorts(t *testing.T) {
+	base := ServerInput{
+		Name:       "web",
+		ServerAddr: "203.0.113.10",
+		ServerPort: 7000,
+		Options: ServerOptions{
+			AuthMethod: "token",
+			LogLevel:   "info",
+			Protocol:   "tcp",
+		},
+	}
+	cases := []struct {
+		name    string
+		http    int
+		https   int
+		wantErr bool
+	}{
+		{name: "默认端口", http: 8080, https: 8443},
+		{name: "HTTP 80 与 Nginx 冲突", http: 80, https: 8443, wantErr: true},
+		{name: "HTTPS 443 与 Nginx 冲突", http: 8080, https: 443, wantErr: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			input := normalizeServerInput(base)
+			input.Options.VhostHTTPPort = testCase.http
+			input.Options.VhostHTTPSPort = testCase.https
+			err := validateServerInput(input)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("validateServerInput() error = %v, wantErr %v", err, testCase.wantErr)
+			}
+		})
+	}
+}

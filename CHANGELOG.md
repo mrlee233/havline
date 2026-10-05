@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### 修复
+
+- **frps 启动失败不再误报成功**：主程序现在保留 Agent 返回的 `ok=false` 与错误内容，`systemctl start` 后 frps 未进入运行状态时会如实返回失败，不再固定提示「启动成功」
+- **frps 启动诊断增强**：Agent 版本提升到 `0.15.1`，启动失败时汇总 systemd 状态、`systemctl status`、journal、`/var/log/frps-systemd.log`，并在 journald 不可用时直接运行 `frps -c /etc/frp/frps.toml` 2 秒捕获真实错误；两个内嵌 Agent 二进制已重编
+- **frps 与 Nginx 端口冲突防呆**：frps `vhostHTTPPort` / `vhostHTTPSPort` 禁止使用 `80/443`，服务端保存和 `frps.toml` 生成阶段都会提示改用 `8080/8443`，避免 VPS 上 Nginx 已占用 80/443 时 frps 启动即退出
+- **frps 启动前清理旧进程**：systemd 服务未运行但检测到 systemd 之外的手工 `frps` 进程时，启动/重启前先停止旧进程，避免端口占用导致 systemd 反复 auto-restart
+- **公网反代隧道提示修正**：frps 管理接口可访问但没有任何注册代理时，不再显示 `frps 已注册代理: ；`，改为提示 frpc 未登录或尚未注册该域名
+
+### 测试
+
+- 新增 Agent 操作结果解析、Agent 版本解析、frps vhost 端口冲突校验和隧道提示文案测试
+- `go test ./...`、`npm run typecheck` 通过
+
 ### 变更
 
 - **品牌全量切换为 Havline**：项目显示名、Go module、命令目录、二进制、环境变量、数据库、Cookie、Docker/Compose、Agent、Updater、脚本和当前文档统一切换到 `Havline / havline / HAVLINE_`

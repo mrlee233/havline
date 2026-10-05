@@ -465,6 +465,14 @@
       <section class="form-section">
         <h3><n-icon :component="SwapHorizontalOutline" /> frps vhost 反代端口</h3>
         <p class="form-hint">frps 的 vhostHTTPPort / vhostHTTPSPort，即 Nginx 反代的回源端口（proxy_pass http://127.0.0.1:端口）。修改后需「下发 frps 配置」并重启 frps，且重新部署各规则的反代。留空用默认 8080 / 8443。</p>
+        <n-alert
+          v-if="serverForm.options.vhost_http_port === 80 || serverForm.options.vhost_https_port === 443"
+          type="warning"
+          :show-icon="false"
+          style="margin-bottom: 12px"
+        >
+          80/443 通常由 VPS 上的 Nginx 占用，frps 不能再次监听；请改为 8080/8443，否则 frps 会因端口冲突启动失败。
+        </n-alert>
         <div class="form-grid">
           <n-form-item label="HTTP 回源端口"><n-input-number v-model:value="serverForm.options.vhost_http_port" :min="1" :max="65535" placeholder="默认 8080" /></n-form-item>
           <n-form-item label="HTTPS 回源端口"><n-input-number v-model:value="serverForm.options.vhost_https_port" :min="1" :max="65535" placeholder="默认 8443" /></n-form-item>

@@ -33,3 +33,17 @@ func TestSummarizeRouteHealthEmpty(t *testing.T) {
 		t.Fatalf("expected no failed servers, got %+v", summary.FailedServers)
 	}
 }
+
+func TestTunnelMismatchDetail(t *testing.T) {
+	empty := tunnelMismatchDetail(nil, "5211.36800.cc")
+	wantEmpty := "frps 当前没有注册任何代理；请确认 frpc 已启动并成功登录，域名 5211.36800.cc 尚未绑定"
+	if empty != wantEmpty {
+		t.Fatalf("空代理列表提示不正确，got %q", empty)
+	}
+
+	bound := tunnelMismatchDetail([]string{"nas-web"}, "5211.36800.cc")
+	wantBound := "frps 已注册代理: nas-web；但均未绑定域名 5211.36800.cc"
+	if bound != wantBound {
+		t.Fatalf("代理未绑定域名提示不正确，got %q", bound)
+	}
+}
