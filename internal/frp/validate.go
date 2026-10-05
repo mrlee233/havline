@@ -23,6 +23,15 @@ func validateServerInput(in ServerInput) error {
 	if in.Options.DashboardPort != 0 && !validPort(in.Options.DashboardPort) {
 		return fmt.Errorf("frps 管理接口端口无效")
 	}
+	if in.Options.VhostHTTPPort != 0 && !validPort(in.Options.VhostHTTPPort) {
+		return fmt.Errorf("frps HTTP 回源端口无效")
+	}
+	if in.Options.VhostHTTPSPort != 0 && !validPort(in.Options.VhostHTTPSPort) {
+		return fmt.Errorf("frps HTTPS 回源端口无效")
+	}
+	if in.Options.VhostHTTPPort == 80 || in.Options.VhostHTTPSPort == 443 {
+		return fmt.Errorf("frps vhost 回源端口不能使用 80/443（通常由 VPS 上的 Nginx 占用）；请使用 8080/8443")
+	}
 	if !validDashboardAddr(in.Options.DashboardAddr) {
 		return fmt.Errorf("frps 管理接口地址无效")
 	}

@@ -65,6 +65,9 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 		if httpsPort <= 0 {
 			httpsPort = 8443
 		}
+		if httpPort == 80 || httpsPort == 443 {
+			return "", fmt.Errorf("frps vhost 回源端口不能使用 80/443（通常由 VPS 上的 Nginx 占用）；请在服务端表单改为 8080/8443 后重新生成配置")
+		}
 		b.WriteString(fmt.Sprintf("vhostHTTPPort = %d\n", httpPort))
 		b.WriteString(fmt.Sprintf("vhostHTTPSPort = %d\n", httpsPort))
 	}

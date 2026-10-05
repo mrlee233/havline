@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	agentruntime "github.com/havline/havline/internal/agent"
 	"github.com/havline/havline/internal/frp/agentbin"
 )
 
@@ -71,6 +72,13 @@ func (i AgentInstaller) Install(ctx context.Context) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("安装完成但未取回 Token: %s", strings.TrimSpace(output))
 	}
+	version := extractAgentVersion(output)
+	if version == "" {
+		return "", fmt.Errorf("安装完成但未识别 Agent 版本，无法确认升级结果: %s", strings.TrimSpace(output))
+	}
+	if version != agentruntime.AgentVersion {
+		return "", fmt.Errorf("VPS 上安装的 Agent 版本 %s 与主程序内嵌版本 %s 不一致；请重新构建主程序镜像后再执行「升级 Agent」", version, agentruntime.AgentVersion)
+	}
 	return token, nil
 }
 
@@ -100,6 +108,15 @@ func extractToken(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		if token, found := strings.CutPrefix(strings.TrimSpace(line), "Token: "); found {
 			return strings.TrimSpace(token)
+		}
+	}
+	return ""
+}
+
+func extractAgentVersion(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if version, found := strings.CutPrefix(strings.TrimSpace(line), "agent version: "); found {
+			return strings.TrimSpace(version)
 		}
 	}
 	return ""

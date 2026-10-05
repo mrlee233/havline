@@ -378,8 +378,31 @@ func (c *AgentClient) DeleteRoute(ctx context.Context, domain string) error {
 	return c.request(ctx, http.MethodDelete, "/api/v1/routes/"+domain, nil, nil)
 }
 
-func (c *AgentClient) FRPSAction(ctx context.Context, action string) error {
-	return c.request(ctx, http.MethodPost, "/api/v1/frps/action", map[string]string{"action": action}, nil)
+func (c *AgentClient) FRPSAction(ctx context.Context, action string) (map[string]any, error) {
+	var result map[string]any
+	if err := c.request(ctx, http.MethodPost, "/api/v1/frps/action", map[string]string{"action": action}, &result); err != nil {
+		return nil, err
+	}
+	return normalizeFRPSActionResult(result)
+}
+
+// normalizeFRPSActionResult 保留 agent 的 ok=false 与日志，避免后端把它误判为成功。
+func normalizeFRPSActionResult(result map[string]any) (map[string]any, error) {
+	if result == nil {
+		return nil, errors.New("agent 未返回 frps 操作结果")
+	}
+	ok, exists := result["ok"].(bool)
+	if !exists {
+		return nil, errors.New("agent 未返回 frps 操作结果")
+	}
+	if ok {
+		return result, nil
+	}
+	if msg, _ := result["error"].(string); strings.TrimSpace(msg) != "" {
+		return result, nil
+	}
+	result["error"] = "frps 未进入运行状态，请查看 frps 日志"
+	return result, nil
 }
 
 func (c *AgentClient) InstallFRPS(ctx context.Context, version, proxy string) (map[string]any, error) {

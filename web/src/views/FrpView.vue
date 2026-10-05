@@ -469,7 +469,7 @@
      → frps（vhostHTTPPort，按 Host 分流）
      → FRP HTTP 隧道 → NAS 内网应用</pre>
           <ol class="guide-steps">
-            <li>存在 http/https 规则时，本页生成的 frps.toml 已自动带 vhostHTTPPort / vhostHTTPSPort（80/443）；用非标准端口请自行调整并放行防火墙；</li>
+            <li>存在 http/https 规则时，frps.toml 会自动带 vhostHTTPPort / vhostHTTPSPort；VPS 上运行 Nginx 时请使用 8080/8443，80/443 留给 Nginx 对外监听；</li>
             <li>DDNS「自定义 IP」把 app.example.com 解析到 VPS IP；</li>
             <li>FRP 规则：类型 http（或 https），自定义域名 app.example.com，内网目标为应用地址；</li>
             <li>应用配置后验证。</li>

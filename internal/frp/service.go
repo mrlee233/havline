@@ -1354,10 +1354,10 @@ func (s *Service) InstallFRPSOnAgent(ctx context.Context, serverID int64, versio
 	return result, nil
 }
 
-func (s *Service) AgentFRPSAction(ctx context.Context, serverID int64, action string) error {
+func (s *Service) AgentFRPSAction(ctx context.Context, serverID int64, action string) (map[string]any, error) {
 	client, ok := s.agentClient(ctx, serverID)
 	if !ok {
-		return fmt.Errorf("公网 agent 未配置或 Token 未保存")
+		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
 	}
 	return client.FRPSAction(ctx, action)
 }
@@ -1645,12 +1645,13 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 				} else { // 诊断透出：dashboard 实际返回的代理名列表（供前端悬停排查）
 					names := make([]string, 0, len(tunnelNames))
 					for name := range tunnelNames {
-						if !strings.HasPrefix(name, "domain:") {
+						name = strings.TrimSpace(name)
+						if name != "" && !strings.HasPrefix(name, "domain:") {
 							names = append(names, name)
 						}
 					}
 					sort.Strings(names)
-					item.TunnelDetail = fmt.Sprintf("frps 已注册代理: %s；但均未绑定域名 %s", strings.Join(names, ", "), domain)
+					item.TunnelDetail = tunnelMismatchDetail(names, domain)
 				}
 			} else {
 				item.TunnelDetail = dashboardDiag
@@ -1665,6 +1666,15 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 		}
 	}
 	return out, nil
+}
+
+// tunnelMismatchDetail 区分「frps 一个代理都没有」和「有代理但没绑定当前域名」，
+// 避免空列表被拼成 “frps 已注册代理: ；” 这种误导性提示。
+func tunnelMismatchDetail(names []string, domain string) string {
+	if len(names) == 0 {
+		return fmt.Sprintf("frps 当前没有注册任何代理；请确认 frpc 已启动并成功登录，域名 %s 尚未绑定", domain)
+	}
+	return fmt.Sprintf("frps 已注册代理: %s；但均未绑定域名 %s", strings.Join(names, ", "), domain)
 }
 
 // GetProxy 导出单条穿透规则读取（供 handler 校验规则归属与域名）。

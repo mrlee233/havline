@@ -809,11 +809,12 @@ func (h *FRPMultiHandler) AgentFRPSAction(w http.ResponseWriter, r *http.Request
 		writeError(r, w, http.StatusBadRequest, "请求格式无效")
 		return
 	}
-	if err := h.svc.AgentFRPSAction(r.Context(), id, body.Action); err != nil {
+	result, err := h.svc.AgentFRPSAction(r.Context(), id, body.Action)
+	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "action": body.Action})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *FRPMultiHandler) InstallFRPSOnAgent(w http.ResponseWriter, r *http.Request) {

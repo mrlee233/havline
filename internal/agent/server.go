@@ -31,8 +31,7 @@ import (
 	"github.com/havline/havline/internal/sysinfo"
 )
 
-
-const AgentVersion = "0.15.0"
+const AgentVersion = "0.15.1"
 
 // Config 是 havline-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -307,7 +306,7 @@ func (s *Server) status(w http.ResponseWriter, _ *http.Request) {
 		"frps_unit_exec":         strings.TrimSpace(execCommandOutput("systemctl", "show", "frps", "-p", "ExecStart", "--value")),
 		"frps_enabled":           exec.Command("systemctl", "is-enabled", "--quiet", "frps").Run() == nil,
 		"frps_version":           strings.TrimSpace(frpsVersion(s.cfg.FrpsBinary)),
-		"frps_log_tail":          strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)),
+		"frps_log_tail":          frpsLogTailDesc(),
 		"dashboard_addr":         strings.TrimSpace(dashboardAddr(s.cfg.FrpsConfigPath)),
 		"routes":                 s.routeNames(),
 		"checked_at":             time.Now().UTC().Format(time.RFC3339),
@@ -431,7 +430,7 @@ func (s *Server) installFRPS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if writeUnit {
-		unit := fmt.Sprintf("[Unit]\nDescription=frps service (managed by havline-agent)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s -c %s\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target\n", installPath, s.cfg.FrpsConfigPath)
+		unit := fmt.Sprintf("[Unit]\nDescription=frps service (managed by havline-agent)\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=%s -c %s\nRestart=on-failure\nRestartSec=3\nStandardOutput=append:%s\nStandardError=append:%s\n\n[Install]\nWantedBy=multi-user.target\n", installPath, s.cfg.FrpsConfigPath, frpsSystemdLogPath, frpsSystemdLogPath)
 		if err := atomicWrite(unitPath, []byte(unit), 0o644); err != nil {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "写入 frps.service 失败: " + err.Error()})
 			return
@@ -486,20 +485,109 @@ func (s *Server) frpsAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action 需为 start/stop/restart"})
 		return
 	}
+	notes := make([]string, 0, 2)
+	if req.Action == "start" || req.Action == "restart" {
+		if note := cleanupOrphanFRPS(); note != "" {
+			notes = append(notes, note)
+		}
+	}
 	if output, err := command.CombinedOutput(); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("systemctl %s frps 失败: %s", req.Action, strings.TrimSpace(string(output)))})
 		return
 	}
 	time.Sleep(800 * time.Millisecond) // 给 frps 启动留出窗口，失败时才能在 is-active/journal 里看到
 	active := exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil
-	result := map[string]any{"ok": true, "action": req.Action, "frps_active": active}
+	result := map[string]any{"ok": true, "action": req.Action, "frps_active": active, "notes": notes}
 	if !active {
 		// 启动失败时把 frps 的失败原因带回去，而不是只说“启动成功”
-		journal, _ := exec.Command("journalctl", "-u", "frps", "-n", "8", "--no-pager").CombinedOutput()
 		result["ok"] = false
-		result["error"] = fmt.Sprintf("systemctl %s 已执行但 frps 未进入运行状态，最近日志：\n%s", req.Action, strings.TrimSpace(string(journal)))
+		result["error"] = s.frpsFailureDetail(req.Action)
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+const frpsSystemdLogPath = "/var/log/frps-systemd.log"
+
+// cleanupOrphanFRPS 在 systemd 服务未运行时清理手工启动的 frps，
+// 避免旧进程占用 7000/vhost 端口后导致 systemd 启动即退出。
+func cleanupOrphanFRPS() string {
+	if exec.Command("systemctl", "is-active", "--quiet", "frps").Run() == nil {
+		return ""
+	}
+	if exec.Command("pgrep", "-x", "frps").Run() != nil {
+		return ""
+	}
+	if err := exec.Command("pkill", "-x", "frps").Run(); err != nil {
+		return "检测到 systemd 之外运行的 frps 进程，但停止失败"
+	}
+	time.Sleep(300 * time.Millisecond)
+	return "检测到 systemd 之外运行的 frps 进程，已先停止旧进程"
+}
+
+// frpsFailureDetail 汇总 systemd 状态、输出日志与直接启动结果，
+// 避免 journald 不可用时只剩 “No journal files were found”。
+func (s *Server) frpsFailureDetail(action string) string {
+	lines := []string{fmt.Sprintf("systemctl %s 已执行但 frps 未进入运行状态", action)}
+	if out := strings.TrimSpace(execCommandOutput("systemctl", "show", "frps",
+		"-p", "ActiveState", "-p", "SubState", "-p", "Result", "-p", "ExecMainCode", "-p", "ExecMainStatus")); out != "" {
+		lines = append(lines, "systemd 状态:\n"+out)
+	}
+	if out := strings.TrimSpace(execCommandOutput("systemctl", "status", "frps", "--no-pager", "-l")); out != "" {
+		lines = append(lines, "systemctl status:\n"+tailText(out, 2000))
+	}
+	if out := strings.TrimSpace(journalTail("frps", frpsLogTailLines)); out != "" && !strings.Contains(out, "No journal files were found") {
+		lines = append(lines, "journal 日志:\n"+out)
+	}
+	if out := strings.TrimSpace(readFRPSSystemdLog()); out != "" {
+		lines = append(lines, "frps 输出:\n"+out)
+	}
+	if out := s.probeFRPSStartup(); out != "" {
+		lines = append(lines, "直接启动诊断:\n"+out)
+	}
+	return strings.Join(lines, "\n\n")
+}
+
+// probeFRPSStartup 在无 systemd 日志时直接运行 frps 2 秒：
+// 配置错误会立即返回；配置正常时会打印启动成功后被 timeout 结束。
+func (s *Server) probeFRPSStartup() string {
+	if exec.Command("pgrep", "-x", "frps").Run() == nil {
+		return "已有 frps 进程在运行，跳过直接启动诊断"
+	}
+	out, err := exec.Command("timeout", "2s", s.cfg.FrpsBinary, "-c", s.cfg.FrpsConfigPath).CombinedOutput()
+	text := strings.TrimSpace(string(out))
+	hint := frpsStartupHint(text)
+	if err != nil {
+		if text == "" {
+			text = err.Error()
+		}
+		return tailText(text+hint, 2400)
+	}
+	if text == "" {
+		return "frps 直接运行 2 秒未报错，可能已正常启动后被超时结束；请检查 systemd 单元和端口占用"
+	}
+	return tailText(text+hint, 2400)
+}
+
+func frpsStartupHint(output string) string {
+	if !strings.Contains(output, "address already in use") {
+		return ""
+	}
+	return "\n\n建议：80/443 通常由 VPS 上的 Nginx 占用；请把 frps 的 vhostHTTPPort/vhostHTTPSPort 改为 8080/8443，保存后重新下发 frps 配置并重启 frps。"
+}
+
+func frpsLogTailDesc() string {
+	if out := strings.TrimSpace(journalTailDesc("frps", frpsLogTailLines)); out != "" && !strings.Contains(out, "No journal files were found") {
+		return out
+	}
+	return readFRPSSystemdLog()
+}
+
+func readFRPSSystemdLog() string {
+	data, err := os.ReadFile(frpsSystemdLogPath)
+	if err != nil {
+		return ""
+	}
+	return tailText(string(data), 8000)
 }
 
 func downloadToFile(url, path string) error {
