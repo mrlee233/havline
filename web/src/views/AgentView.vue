@@ -800,6 +800,7 @@ const headerDescription = computed(() => {
 const agentConnectionText = computed(() => {
   if (!statusLoaded.value) return statusLoading.value ? '读取中…' : '—'
   if (agentStatus.value?.configured === false) return '未配置'
+  if (agentStatus.value?.token_mismatch) return 'Token 不匹配'
   return agentStatusOk.value ? '在线' : '未连接'
 })
 const frpsStateText = computed(() => {
@@ -840,6 +841,13 @@ const statusAlert = computed<{ type: 'error' | 'warning'; text: string; action?:
         type: 'warning',
         text: 'Agent 已配置，但「启用 Agent 日常管理」未开启。',
         action: { label: '编辑服务端', run: () => openServerModal(current) },
+      }
+    }
+    if (agentStatus.value?.token_mismatch) {
+      return {
+        type: 'error',
+        text: 'Agent Token 不匹配：Havline 保存的 Token 与 VPS 上的 Agent 配置不一致。',
+        action: { label: '升级 Agent', run: () => installAgent(current) },
       }
     }
     return {

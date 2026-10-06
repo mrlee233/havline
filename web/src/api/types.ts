@@ -869,6 +869,7 @@ export interface FrpAgentStatus {
   configured?: boolean
   mgmt_enabled?: boolean
   available?: boolean
+  token_mismatch?: boolean
   message?: string
   agent_version?: string
   listen_addr?: string

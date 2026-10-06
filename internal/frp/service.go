@@ -1360,6 +1360,15 @@ func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]a
 	}
 	status, err := client.Status(statusCtx)
 	if err != nil {
+		if statusErr, ok := err.(*statusError); ok && statusErr.code == 401 {
+			return map[string]any{
+				"configured":     true,
+				"mgmt_enabled":   true,
+				"available":      false,
+				"token_mismatch": true,
+				"message":        "Agent Token 不匹配，请点击「升级 Agent」重新同步",
+			}, nil
+		}
 		return nil, err
 	}
 	if status == nil {
