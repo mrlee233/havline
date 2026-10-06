@@ -116,7 +116,11 @@ func extractToken(output string) string {
 func extractAgentVersion(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		if version, found := strings.CutPrefix(strings.TrimSpace(line), "agent version: "); found {
-			return strings.TrimSpace(version)
+			fields := strings.Fields(version)
+			if len(fields) == 0 {
+				return ""
+			}
+			return strings.TrimPrefix(fields[len(fields)-1], "v")
 		}
 	}
 	return ""
