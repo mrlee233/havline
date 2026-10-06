@@ -866,6 +866,9 @@ export interface FrpAgentRouteDetail {
 }
 
 export interface FrpAgentStatus {
+  configured?: boolean
+  available?: boolean
+  message?: string
   agent_version?: string
   listen_addr?: string
   listen_scope?: string

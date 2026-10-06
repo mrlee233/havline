@@ -1319,11 +1319,37 @@ func (s *Service) AgentClient(ctx context.Context, serverID int64) (*AgentClient
 }
 
 func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]any, error) {
-	client, ok := s.agentClient(ctx, serverID)
-	if !ok {
-		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
+	statusCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	server, err := s.store.GetServer(statusCtx, serverID)
+	if err != nil {
+		return nil, err
 	}
-	return client.Status(ctx)
+	if server.AgentTransport == "tunnel" {
+		if state, lastError, ok := s.tunnelState(serverID); ok && (state == "failed" || state == "reconnecting") {
+			if strings.TrimSpace(lastError) == "" {
+				lastError = state
+			}
+			return nil, fmt.Errorf("SSH 隧道未连接：%s", lastError)
+		}
+	}
+	client, ok := s.agentClient(statusCtx, serverID)
+	if !ok {
+		return map[string]any{
+			"configured": false,
+			"available":  false,
+			"message":    "公网 agent 未配置或 Token 未保存",
+		}, nil
+	}
+	status, err := client.Status(statusCtx)
+	if err != nil {
+		return nil, err
+	}
+	if status == nil {
+		status = map[string]any{}
+	}
+	status["configured"] = true
+	return status, nil
 }
 
 func (s *Service) InstallFRPSOnAgent(ctx context.Context, serverID int64, version, proxy string) (map[string]any, error) {

@@ -16,6 +16,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:6893',
+        timeout: 300_000,
+        proxyTimeout: 300_000,
         configure(proxy) {
           proxy.on('proxyRes', (proxyRes, req) => {
             if (req.url?.includes('/stream')) {

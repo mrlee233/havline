@@ -59,6 +59,7 @@ export function asList<T>(value: T[] | null | undefined): T[] {
 
 const REQUEST_TIMEOUT_MS = 30_000
 const CERT_REQUEST_TIMEOUT_MS = 10 * 60_000
+const AGENT_OPERATION_TIMEOUT_MS = 5 * 60_000
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController()
@@ -325,11 +326,11 @@ export const api = {
     request<FrpServer>(`/api/frpmulti/servers/${id}/agent/transport`, {
       method: 'POST',
       body: JSON.stringify({ transport, port }),
-    }),
+    }, AGENT_OPERATION_TIMEOUT_MS),
   getFrpAgentTransport: (id: number) =>
     request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/transport`),
   rotateFrpAgentTLSCert: (id: number) =>
-    request<FrpServer>(`/api/frpmulti/servers/${id}/agent/transport/rotate`, { method: 'POST' }),
+    request<FrpServer>(`/api/frpmulti/servers/${id}/agent/transport/rotate`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
   getFrpAgentFirewall: (id: number, port: number) =>
     request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/firewall?port=${port}`),
   allowFrpAgentFirewallPort: (id: number, port: number) =>
@@ -337,17 +338,17 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ port }),
     }),
-  probeFrpAgent: (id: number) => request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/probe`, { method: 'POST' }),
-  installFrpAgent: (id: number) => request<FrpServer>(`/api/frpmulti/servers/${id}/agent/install`, { method: 'POST' }),
-  uninstallFrpAgent: (id: number, keepData: boolean) => request<{ ok: boolean; output: string }>(`/api/frpmulti/servers/${id}/agent/uninstall?keep_data=${keepData}`, { method: 'POST' }),
-  sshDiagnoseFrpAgent: (id: number) => request<{ output: string }>(`/api/frpmulti/servers/${id}/agent/ssh-diagnose`, { method: 'POST' }),
+  probeFrpAgent: (id: number) => request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/probe`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
+  installFrpAgent: (id: number) => request<FrpServer>(`/api/frpmulti/servers/${id}/agent/install`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
+  uninstallFrpAgent: (id: number, keepData: boolean) => request<{ ok: boolean; output: string }>(`/api/frpmulti/servers/${id}/agent/uninstall?keep_data=${keepData}`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
+  sshDiagnoseFrpAgent: (id: number) => request<{ output: string }>(`/api/frpmulti/servers/${id}/agent/ssh-diagnose`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
   getFrpAgentStatus: (id: number) => request<import('./types').FrpAgentStatus>(`/api/frpmulti/servers/${id}/agent/status`),
     getFrpAgentCerts: (id: number) =>
     request<import('./types').FrpAgentCerts>(`/api/frpmulti/servers/${id}/agent/certs`),
   reloadFrpAgentNginx: (id: number) =>
     request<import('./types').FrpAgentNginxReload>(`/api/frpmulti/servers/${id}/agent/nginx/reload`, {
       method: 'POST',
-    }),
+    }, AGENT_OPERATION_TIMEOUT_MS),
   getFrpAgentMetrics: (id: number) =>
     request<import('./types').FrpAgentMetrics>(`/api/frpmulti/servers/${id}/agent/metrics`),
   getFrpAgentNginxLogs: (id: number, type: 'access' | 'error', lines = 200) =>
@@ -379,7 +380,7 @@ export const api = {
       { method: 'POST' },
     ),
   installFrpAgentNginx: (serverId: number) =>
-    request<{ ok: boolean; manager?: string; output?: string; path?: string; error?: string }>(`/api/frpmulti/servers/${serverId}/agent/nginx/install`, { method: 'POST' }),
+    request<{ ok: boolean; manager?: string; output?: string; path?: string; error?: string }>(`/api/frpmulti/servers/${serverId}/agent/nginx/install`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
   getFrpAgentRouteHealth: (serverId: number) =>
     request<import('./types').FrpAgentRouteHealth[]>(`/api/frpmulti/servers/${serverId}/agent/routes/health`),
   getFrpRouteHealthSummary: () =>
@@ -397,13 +398,13 @@ export const api = {
       `/api/status-page${code ? `?code=${encodeURIComponent(code)}` : ''}`,
     ),
   removeFrpAgentRoute: (serverId: number, proxyId: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${serverId}/agent/routes/${proxyId}`, { method: 'DELETE' }),
-  pushFrpConfigToAgent: (id: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-config`, { method: 'POST' }),
+  pushFrpConfigToAgent: (id: number) => request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-config`, { method: 'POST' }, AGENT_OPERATION_TIMEOUT_MS),
   frpsServerAction: (id: number, action: 'start' | 'stop' | 'restart') =>
-    request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-action`, { method: 'POST', body: JSON.stringify({ action }) }),
+    request<{ ok: boolean }>(`/api/frpmulti/servers/${id}/agent/frps-action`, { method: 'POST', body: JSON.stringify({ action }) }, AGENT_OPERATION_TIMEOUT_MS),
   frpsServerActionRaw: (id: number, action: 'start' | 'stop' | 'restart') =>
-    request<{ ok: boolean; error?: string }>(`/api/frpmulti/servers/${id}/agent/frps-action`, { method: 'POST', body: JSON.stringify({ action }) }),
+    request<{ ok: boolean; error?: string }>(`/api/frpmulti/servers/${id}/agent/frps-action`, { method: 'POST', body: JSON.stringify({ action }) }, AGENT_OPERATION_TIMEOUT_MS),
   installFrpServer: (id: number, version: string, proxy: string) =>
-    request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/frps-install`, { method: 'POST', body: JSON.stringify({ version, proxy }) }),
+    request<Record<string, any>>(`/api/frpmulti/servers/${id}/agent/frps-install`, { method: 'POST', body: JSON.stringify({ version, proxy }) }, AGENT_OPERATION_TIMEOUT_MS),
 
   getAccessLogs: (params?: { limit?: number; keyword?: string; status?: number }) => {
     const q = new URLSearchParams()

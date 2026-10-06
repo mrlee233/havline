@@ -799,6 +799,7 @@ const headerDescription = computed(() => {
 // 三态：未加载 / 加载中 / 失败——避免把"没拉到"显示成"未连接"
 const agentConnectionText = computed(() => {
   if (!statusLoaded.value) return statusLoading.value ? '读取中…' : '—'
+  if (agentStatus.value?.configured === false) return '未配置'
   return agentStatusOk.value ? '在线' : '未连接'
 })
 const frpsStateText = computed(() => {
@@ -827,6 +828,13 @@ const statusAlert = computed<{ type: 'error' | 'warning'; text: string; action?:
   const current = server.value
   if (!current || !statusLoaded.value) return null
   if (!agentStatusOk.value) {
+    if (agentStatus.value?.configured === false) {
+      return {
+        type: 'warning',
+        text: '尚未安装 Agent：请先填写 SSH 信息，再点击下方「安装 Agent」。',
+        action: { label: '安装 Agent', run: () => installAgent(current) },
+      }
+    }
     return {
       type: 'error',
       text: 'Agent 未连接：请确认 VPS 上 havline-agent 正在运行，且 Agent 地址与 Token 与页面一致。',
@@ -1026,8 +1034,9 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   if (!current) return
   if (options.silent === false) statusLoading.value = true
   try {
-    agentStatus.value = await api.getFrpAgentStatus(current.id)
-    agentStatusOk.value = true
+    const status = await api.getFrpAgentStatus(current.id)
+    agentStatus.value = status
+    agentStatusOk.value = status.configured !== false
     statusLoaded.value = true
     // 资源采集单独走，不阻断状态加载
     void loadMetrics(current.id)
