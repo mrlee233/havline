@@ -1325,6 +1325,22 @@ func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]a
 	if err != nil {
 		return nil, err
 	}
+	if !server.AgentConfigured {
+		return map[string]any{
+			"configured":   false,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "公网 agent 未配置或 Token 未保存",
+		}, nil
+	}
+	if !server.MgmtEnabled {
+		return map[string]any{
+			"configured":   true,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "Agent 已配置，但未启用日常管理",
+		}, nil
+	}
 	if server.AgentTransport == "tunnel" {
 		if state, lastError, ok := s.tunnelState(serverID); ok && (state == "failed" || state == "reconnecting") {
 			if strings.TrimSpace(lastError) == "" {
@@ -1336,9 +1352,10 @@ func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]a
 	client, ok := s.agentClient(statusCtx, serverID)
 	if !ok {
 		return map[string]any{
-			"configured": false,
-			"available":  false,
-			"message":    "公网 agent 未配置或 Token 未保存",
+			"configured":   false,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "公网 agent 未配置或 Token 未保存",
 		}, nil
 	}
 	status, err := client.Status(statusCtx)
@@ -1349,6 +1366,7 @@ func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]a
 		status = map[string]any{}
 	}
 	status["configured"] = true
+	status["mgmt_enabled"] = true
 	return status, nil
 }
 

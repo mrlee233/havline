@@ -867,6 +867,7 @@ export interface FrpAgentRouteDetail {
 
 export interface FrpAgentStatus {
   configured?: boolean
+  mgmt_enabled?: boolean
   available?: boolean
   message?: string
   agent_version?: string

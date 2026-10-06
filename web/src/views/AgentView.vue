@@ -835,6 +835,13 @@ const statusAlert = computed<{ type: 'error' | 'warning'; text: string; action?:
         action: { label: '安装 Agent', run: () => installAgent(current) },
       }
     }
+    if (agentStatus.value?.mgmt_enabled === false) {
+      return {
+        type: 'warning',
+        text: 'Agent 已配置，但「启用 Agent 日常管理」未开启。',
+        action: { label: '编辑服务端', run: () => openServerModal(current) },
+      }
+    }
     return {
       type: 'error',
       text: 'Agent 未连接：请确认 VPS 上 havline-agent 正在运行，且 Agent 地址与 Token 与页面一致。',
@@ -1036,11 +1043,17 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   try {
     const status = await api.getFrpAgentStatus(current.id)
     agentStatus.value = status
-    agentStatusOk.value = status.configured !== false
+    agentStatusOk.value = status.configured !== false && status.mgmt_enabled !== false
     statusLoaded.value = true
-    // 资源采集单独走，不阻断状态加载
-    void loadMetrics(current.id)
-    void loadAgentCerts(current.id)
+    if (agentStatusOk.value) {
+      // 资源采集单独走，不阻断状态加载
+      void loadMetrics(current.id)
+      void loadAgentCerts(current.id)
+    } else {
+      agentMetrics.value = null
+      metricsError.value = ''
+      havlineCertDomains.value = new Set()
+    }
   } catch (error) {
     agentStatusOk.value = false
     statusLoaded.value = true
@@ -1243,7 +1256,7 @@ function defaultServerOptions(): FrpServerOptions {
 
 const serverForm = reactive({
   name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
-  agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: false,
+  agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: true,
   oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
   clear_tls_key: false, clear_tls_trusted_ca: false, options: defaultServerOptions(),
 })
