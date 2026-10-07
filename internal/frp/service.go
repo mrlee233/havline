@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -416,6 +417,17 @@ func (s *Service) StartServer(ctx context.Context, id int64) (Server, error) {
 	if err != nil {
 		return Server{}, err
 	}
+	hasProxies, err := s.hasEnabledProxies(ctx, id)
+	if err != nil {
+		return Server{}, err
+	}
+	if !hasProxies {
+		// 空服务端没有 frpc 需要运行，保持 stopped，避免后续监控把它误判为异常退出。
+		s.setServerRuntime(ctx, id, "stopped", "")
+		s.enrichTLSStatus(&server)
+		s.enrichServerRuntime(ctx, &server)
+		return server, nil
+	}
 	s.setServerRuntime(ctx, id, "running", "")
 	s.enrichTLSStatus(&server)
 	s.enrichServerRuntime(ctx, &server)
@@ -638,6 +650,14 @@ func (s *Service) UpdateServer(ctx context.Context, id int64, in ServerInput) (S
 	if !server.Enabled {
 		_ = s.managerForServer(id).Stop(ctx)
 	}
+	sshChanged := sshSettingsChanged(existing, server, sshSecretUpdate)
+	if sshChanged {
+		// SSH 目标或凭据变化后必须废弃旧隧道，避免新服务端继续复用旧 VPS 的连接。
+		s.stopAgentTunnel(id)
+	}
+	if sshChanged || agentTokenUpdate || existing.AgentURL != server.AgentURL {
+		s.invalidateAgentClient(id)
+	}
 	if !server.MgmtEnabled || server.AgentTransport != "tunnel" {
 		s.stopAgentTunnel(id)
 	}
@@ -654,6 +674,7 @@ func (s *Service) DeleteServer(ctx context.Context, id int64) error {
 	}
 	_ = os.Remove(s.serverConfigPath(id))
 	_ = os.Remove(s.serverLogPath(id))
+	_ = os.Remove(s.cfg.SSHKnownHostsPathForServer(id))
 	s.removeManager(id)
 	return s.persistConfig(ctx)
 }
@@ -715,7 +736,7 @@ func (s *Service) sshInstaller(ctx context.Context, serverID int64) (Server, SSH
 			return Server{}, SSHInstaller{}, err
 		}
 	}
-	installer := SSHInstaller{Host: server.SSHHost, Port: server.SSHPort, User: server.SSHUser, KnownHostsPath: s.cfg.SSHKnownHostsPath()}
+	installer := SSHInstaller{Host: server.SSHHost, Port: server.SSHPort, User: server.SSHUser, KnownHostsPath: s.cfg.SSHKnownHostsPathForServer(serverID)}
 	if server.SSHAuth == "password" {
 		installer.Password = secret
 	} else {
@@ -733,6 +754,20 @@ func (s *Service) AgentProbe(ctx context.Context, serverID int64) (map[string]an
 }
 
 func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, error) {
+	return s.agentInstall(ctx, serverID, false)
+}
+
+// AgentInstallTrustHostKey 在用户确认 VPS 已重装系统后，先更新该服务端的 SSH 主机密钥记录，再安装 Agent。
+func (s *Service) AgentInstallTrustHostKey(ctx context.Context, serverID int64) (Server, error) {
+	return s.agentInstall(ctx, serverID, true)
+}
+
+func (s *Service) agentInstall(ctx context.Context, serverID int64, trustHostKey bool) (Server, error) {
+	if trustHostKey {
+		if err := s.resetAgentSSHKnownHost(ctx, serverID); err != nil {
+			return Server{}, err
+		}
+	}
 	server, installer, err := s.sshInstaller(ctx, serverID)
 	if err != nil {
 		return Server{}, err
@@ -745,9 +780,17 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	if err != nil {
 		return Server{}, err
 	}
-	// 已是 HTTPS 直连时，升级 Agent 不应把用户的传输方式改回隧道。
+	// 已是 HTTPS 直连时优先保持原传输方式；服务器重置或证书丢失时自动回退隧道，
+	// 避免 SSH 安装已经成功，却因为旧证书指纹失效而把整个升级判定为失败。
 	if server.AgentTransport == "https-pin" {
-		return s.keepAgentHTTPSAfterInstall(ctx, server, token, agentToken)
+		updated, keepErr := s.keepAgentHTTPSAfterInstall(ctx, server, token, agentToken)
+		if keepErr == nil {
+			return updated, nil
+		}
+		s.logger.Warn("HTTPS 直连验证失败，自动回退 SSH 隧道",
+			"server_id", serverID,
+			"error", keepErr.Error(),
+		)
 	}
 	localPort, listener, err := s.reserveAgentTunnelPort(ctx, serverID, server.AgentLocalPort)
 	if err != nil {
@@ -794,6 +837,23 @@ func (s *Service) AgentInstall(ctx context.Context, serverID int64) (Server, err
 	_ = client.DisableHTTPS(ctx)
 	s.invalidateAgentClient(serverID)
 	return updated, nil
+}
+
+func (s *Service) resetAgentSSHKnownHost(ctx context.Context, serverID int64) error {
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(server.SSHHost) == "" || strings.TrimSpace(server.SSHUser) == "" {
+		return fmt.Errorf("请先填写 SSH 地址与用户")
+	}
+	s.stopAgentTunnel(serverID)
+	s.invalidateAgentClient(serverID)
+	path := s.cfg.SSHKnownHostsPathForServer(serverID)
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("重置 SSH 主机密钥记录失败: %w", err)
+	}
+	return nil
 }
 
 // keepAgentHTTPSAfterInstall 在 HTTPS 直连模式下完成 Agent 升级：
@@ -1264,16 +1324,26 @@ func (s *Service) SwitchAgentToTunnel(ctx context.Context, serverID int64) (Serv
 		return Server{}, err
 	}
 	if server.AgentTransport == "https-pin" {
+		tunnel, err := s.ensureAgentTunnel(ctx, serverID)
+		if err != nil {
+			return Server{}, fmt.Errorf("建立 SSH 隧道失败: %w", err)
+		}
 		token, err := s.agentToken(ctx, serverID)
 		if err != nil {
 			return Server{}, err
 		}
-		client := NewAgentClientWithPin(agentHTTPSBaseURL(server), token, server.AgentTLSPin)
-		if err := client.DisableHTTPS(ctx); err != nil {
-			return Server{}, fmt.Errorf("关闭 HTTPS 直连失败: %w", err)
+		// 切换时不再依赖旧 HTTPS 直连；先通过隧道验证 Agent，再清理旧 HTTPS 配置。
+		client := NewAgentClient(fmt.Sprintf("http://127.0.0.1:%d", tunnel.localPort), token)
+		if err := client.Ping(ctx); err != nil {
+			return Server{}, fmt.Errorf("SSH 隧道已建立，但 Agent 验证失败: %w", err)
 		}
-	}
-	if _, err := s.ensureAgentTunnel(ctx, serverID); err != nil {
+		if err := client.DisableHTTPS(ctx); err != nil {
+			s.logger.Warn("关闭旧 HTTPS 直连失败，已保留 SSH 隧道",
+				"server_id", serverID,
+				"error", err.Error(),
+			)
+		}
+	} else if _, err := s.ensureAgentTunnel(ctx, serverID); err != nil {
 		return Server{}, err
 	}
 	updated, err := s.store.GetServer(ctx, serverID)
@@ -1319,11 +1389,64 @@ func (s *Service) AgentClient(ctx context.Context, serverID int64) (*AgentClient
 }
 
 func (s *Service) AgentStatus(ctx context.Context, serverID int64) (map[string]any, error) {
-	client, ok := s.agentClient(ctx, serverID)
-	if !ok {
-		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
+	statusCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	server, err := s.store.GetServer(statusCtx, serverID)
+	if err != nil {
+		return nil, err
 	}
-	return client.Status(ctx)
+	if !server.AgentConfigured {
+		return map[string]any{
+			"configured":   false,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "公网 agent 未配置或 Token 未保存",
+		}, nil
+	}
+	if !server.MgmtEnabled {
+		return map[string]any{
+			"configured":   true,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "Agent 已配置，但未启用日常管理",
+		}, nil
+	}
+	if server.AgentTransport == "tunnel" {
+		if state, lastError, ok := s.tunnelState(serverID); ok && (state == "failed" || state == "reconnecting") {
+			if strings.TrimSpace(lastError) == "" {
+				lastError = state
+			}
+			return nil, fmt.Errorf("SSH 隧道未连接：%s", lastError)
+		}
+	}
+	client, ok := s.agentClient(statusCtx, serverID)
+	if !ok {
+		return map[string]any{
+			"configured":   false,
+			"mgmt_enabled": false,
+			"available":    false,
+			"message":      "公网 agent 未配置或 Token 未保存",
+		}, nil
+	}
+	status, err := client.Status(statusCtx)
+	if err != nil {
+		if statusErr, ok := err.(*statusError); ok && statusErr.code == 401 {
+			return map[string]any{
+				"configured":     true,
+				"mgmt_enabled":   true,
+				"available":      false,
+				"token_mismatch": true,
+				"message":        "Agent Token 不匹配，请点击「升级 Agent」重新同步",
+			}, nil
+		}
+		return nil, err
+	}
+	if status == nil {
+		status = map[string]any{}
+	}
+	status["configured"] = true
+	status["mgmt_enabled"] = true
+	return status, nil
 }
 
 func (s *Service) InstallFRPSOnAgent(ctx context.Context, serverID int64, version, proxy string) (map[string]any, error) {
@@ -1598,7 +1721,7 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 					}
 					item.DNSOK = matched
 					if !matched {
-						item.DNSDetail = "未指向服务端地址"
+						item.DNSDetail = fmt.Sprintf("当前解析 %s；服务端地址 %s", formatIPAddrs(ips), formatIPAddrs(serverIPs))
 					}
 				}
 			}
@@ -1666,6 +1789,17 @@ func (s *Service) RouteHealth(ctx context.Context, serverID int64) ([]RouteHealt
 		}
 	}
 	return out, nil
+}
+
+func formatIPAddrs(addrs []net.IPAddr) string {
+	if len(addrs) == 0 {
+		return "无"
+	}
+	values := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		values = append(values, addr.IP.String())
+	}
+	return strings.Join(values, ", ")
 }
 
 // tunnelMismatchDetail 区分「frps 一个代理都没有」和「有代理但没绑定当前域名」，
@@ -1917,7 +2051,7 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	}
 	baseURL := server.AgentURL
 	var pins []string
-	if server.AgentTransport == "tunnel" {
+	if server.AgentTransport == "tunnel" || (server.AgentTransport == "http" && isLoopbackAgentURL(server.AgentURL)) {
 		tunnel, err := s.ensureAgentTunnel(ctx, serverID)
 		if err != nil {
 			return nil, false
@@ -1960,6 +2094,22 @@ func (s *Service) agentClient(ctx context.Context, serverID int64) (*AgentClient
 	}
 	s.agentClients[serverID] = cachedAgentClient{fingerprint: fingerprint, client: client}
 	return client, true
+}
+
+func isLoopbackAgentURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Service) syncAgentRoute(ctx context.Context, proxy Proxy) {
@@ -2013,6 +2163,16 @@ func (s *Service) Start(ctx context.Context) error {
 	var failures []string
 	for _, server := range servers {
 		manager := s.managerForServer(server.ID)
+		hasProxies, proxyErr := s.hasEnabledProxies(ctx, server.ID)
+		if proxyErr != nil {
+			failures = append(failures, fmt.Sprintf("服务端 %s 读取规则失败：%v", server.Name, proxyErr))
+			continue
+		}
+		if !hasProxies {
+			_ = manager.Stop(ctx)
+			s.recordProcessState(ctx, server.ID, manager, "")
+			continue
+		}
 		if err := manager.Verify(ctx, s.serverConfigPath(server.ID)); err != nil {
 			s.recordProcessState(ctx, server.ID, manager, err.Error())
 			failures = append(failures, fmt.Sprintf("服务端 %s 校验失败：%v", server.Name, err))
@@ -2085,6 +2245,16 @@ func (s *Service) Reload(ctx context.Context) error {
 	var failures []string
 	for _, server := range servers {
 		manager := s.managerForServer(server.ID)
+		hasProxies, proxyErr := s.hasEnabledProxies(ctx, server.ID)
+		if proxyErr != nil {
+			failures = append(failures, fmt.Sprintf("服务端 %s 读取规则失败：%v", server.Name, proxyErr))
+			continue
+		}
+		if !hasProxies {
+			_ = manager.Stop(ctx)
+			s.recordProcessState(ctx, server.ID, manager, "")
+			continue
+		}
 		if err := manager.Verify(ctx, s.serverConfigPath(server.ID)); err != nil {
 			s.recordProcessState(ctx, server.ID, manager, err.Error())
 			failures = append(failures, fmt.Sprintf("服务端 %s 校验失败：%v", server.Name, err))
@@ -2223,10 +2393,24 @@ func (s *Service) Status(ctx context.Context) RuntimeStatus {
 		current.Configured = s.serverConfigured(server)
 		if proxies, proxyErr := s.store.ListEnabledProxies(ctx, server.ID); proxyErr == nil {
 			current.EnabledProxies = len(proxies)
+			if len(proxies) == 0 {
+				// 没有启用规则的服务端不应启动 frpc，也不应把它的历史退出错误聚合到全局状态。
+				current.Status = "stopped"
+				current.PID = 0
+				current.LastError = ""
+			}
 		}
 		statuses = append(statuses, current)
 	}
 	return latestRuntimeStatus(statuses)
+}
+
+func (s *Service) hasEnabledProxies(ctx context.Context, serverID int64) (bool, error) {
+	proxies, err := s.store.ListEnabledProxies(ctx, serverID)
+	if err != nil {
+		return false, err
+	}
+	return len(proxies) > 0, nil
 }
 
 // statusWithVersion 取服务端运行状态，并在版本探测失败时按二进制目录名推导版本：

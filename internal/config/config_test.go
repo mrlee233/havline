@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -40,5 +41,13 @@ func TestLoadUpdaterTokenFile(t *testing.T) {
 	cfg := Load()
 	if cfg.UpdaterTokenFile != "/tmp/havline-updater.token" {
 		t.Fatalf("updater token file %q", cfg.UpdaterTokenFile)
+	}
+}
+
+func TestSSHKnownHostsPathForServer(t *testing.T) {
+	cfg := Config{DataDir: "/data"}
+	want := filepath.Join("/data", "ssh_known_hosts", "server-3")
+	if got := cfg.SSHKnownHostsPathForServer(3); got != want {
+		t.Fatalf("per-server known_hosts path %q", got)
 	}
 }

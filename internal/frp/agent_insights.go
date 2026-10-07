@@ -14,7 +14,8 @@ func (s *Service) AgentMetrics(ctx context.Context, serverID int64) (map[string]
 	if !ok {
 		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
 	}
-	return client.Metrics(ctx)
+	result, err := client.Metrics(ctx)
+	return result, wrapAgentAuth(err)
 }
 
 // AgentNginxLogs 读取 VPS 上 Nginx 的 access / error 日志尾部
@@ -29,7 +30,8 @@ func (s *Service) AgentNginxLogs(ctx context.Context, serverID int64, kind strin
 	if lines <= 0 || lines > 2000 {
 		lines = 200
 	}
-	return client.NginxLogs(ctx, kind, lines)
+	result, err := client.NginxLogs(ctx, kind, lines)
+	return result, wrapAgentAuth(err)
 }
 
 // AgentCerts 列出 VPS 证书目录下的域名与到期时间，供与 Havline 证书库交叉核对
@@ -38,7 +40,8 @@ func (s *Service) AgentCerts(ctx context.Context, serverID int64) (map[string]an
 	if !ok {
 		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
 	}
-	return client.Certs(ctx)
+	result, err := client.Certs(ctx)
+	return result, wrapAgentAuth(err)
 }
 
 // AgentNginxReload 显式校验并重载 VPS 上的 Nginx，返回失败原因
@@ -47,7 +50,18 @@ func (s *Service) AgentNginxReload(ctx context.Context, serverID int64) (map[str
 	if !ok {
 		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
 	}
-	return client.NginxReload(ctx)
+	result, err := client.NginxReload(ctx)
+	return result, wrapAgentAuth(err)
+}
+
+// AgentNginxAction 启动 / 停止 / 重启 VPS 上的 Nginx（需 agent ≥ 0.15.2）
+func (s *Service) AgentNginxAction(ctx context.Context, serverID int64, action string) (map[string]any, error) {
+	client, ok := s.agentClient(ctx, serverID)
+	if !ok {
+		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
+	}
+	result, err := client.NginxAction(ctx, action)
+	return result, wrapAgentAuth(err)
 }
 
 // AgentFRPSConfig 回读 VPS 上的 frps.toml，供与「即将下发的内容」比对
@@ -56,5 +70,6 @@ func (s *Service) AgentFRPSConfig(ctx context.Context, serverID int64) (map[stri
 	if !ok {
 		return nil, fmt.Errorf("公网 agent 未配置或 Token 未保存")
 	}
-	return client.FRPSConfig(ctx)
+	result, err := client.FRPSConfig(ctx)
+	return result, wrapAgentAuth(err)
 }

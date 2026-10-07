@@ -168,6 +168,7 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("GET /api/frpmulti/servers/{id}/agent/certs", frpHandler.AgentCerts)
 		protect("POST /api/frpmulti/servers/{id}/agent/nginx/reload", frpHandler.AgentNginxReload)
 		protect("POST /api/frpmulti/servers/{id}/agent/nginx/install", frpHandler.AgentInstallNginx)
+		protect("POST /api/frpmulti/servers/{id}/agent/nginx/action", frpHandler.AgentNginxAction)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/{proxyID}/conf", frpHandler.AgentRouteConf)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/{proxyID}/versions", frpHandler.AgentRouteVersions)
 		protect("GET /api/frpmulti/servers/{id}/agent/routes/{proxyID}/versions/{name}", frpHandler.AgentRouteVersion)

@@ -1,6 +1,7 @@
 package frp
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -59,6 +60,31 @@ func TestRenderNATTraversalOnlyWhenDisabledAssistedAddrs(t *testing.T) {
 	}})
 	if !strings.Contains(enabled, "natTraversal.disableAssistedAddrs = true") {
 		t.Fatalf("disableAssistedAddrs=true 应渲染 natTraversal:\n%s", enabled)
+	}
+}
+
+// 旧数据（config_json = "{}"）缺省布尔键时必须补回表单默认值，
+// 否则会生成 transport.tcpMux = false，让每条新连接都重建 TCP+TLS。
+func TestServerOptionsBooleanDefaultsWhenKeysMissing(t *testing.T) {
+	var legacy ServerOptions
+	if err := json.Unmarshal([]byte("{}"), &legacy); err != nil {
+		t.Fatalf("解析旧版空配置失败：%v", err)
+	}
+	legacy = normalizeServerOptions(legacy)
+	if !legacy.TCPMux || !legacy.LoginFailExit {
+		t.Fatalf("缺省键应补默认值 true，实际 tcpMux=%v loginFailExit=%v", legacy.TCPMux, legacy.LoginFailExit)
+	}
+	content := renderTOML(renderedConfig{Server: Server{ServerAddr: "vps.example.com", ServerPort: 7000, Options: legacy}})
+	if !strings.Contains(content, "transport.tcpMux = true") {
+		t.Fatalf("旧版配置应渲染 transport.tcpMux = true:\n%s", content)
+	}
+
+	var explicit ServerOptions
+	if err := json.Unmarshal([]byte(`{"tcp_mux":false,"login_fail_exit":false}`), &explicit); err != nil {
+		t.Fatalf("解析显式配置失败：%v", err)
+	}
+	if explicit.TCPMux || explicit.LoginFailExit {
+		t.Fatalf("显式 false 不应被默认值覆盖，实际 tcpMux=%v loginFailExit=%v", explicit.TCPMux, explicit.LoginFailExit)
 	}
 }
 

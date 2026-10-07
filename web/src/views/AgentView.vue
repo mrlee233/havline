@@ -215,6 +215,25 @@
             <p v-if="agentStatus?.nginx_error" class="form-hint nginx-error mono">{{ agentStatus.nginx_error }}</p>
             <p v-if="reloadHint" class="form-hint">{{ reloadHint }}</p>
             <div class="agent-actions">
+              <n-popconfirm
+                v-if="agentStatus?.nginx_running"
+                positive-text="停止"
+                negative-text="取消"
+                @positive-click="nginxAction('stop')"
+              >
+                <template #trigger>
+                  <n-button size="small" :loading="actingNginx" :disabled="busy !== null">停止 Nginx</n-button>
+                </template>
+                停止后 VPS 上所有经 Nginx 反代的域名会立即无法访问，需要重新启动才能恢复。确定停止？
+              </n-popconfirm>
+              <n-button
+                v-else
+                size="small"
+                type="primary"
+                :loading="actingNginx"
+                :disabled="busy !== null || !agentStatus?.nginx_path"
+                @click="nginxAction('start')"
+              >启动 Nginx</n-button>
               <n-button size="small" :loading="reloadingNginx" :disabled="busy !== null" @click="reloadNginx">重载 Nginx</n-button>
               <router-link to="/public-proxy"><n-button size="small" quaternary>去「公网反代」处理</n-button></router-link>
             </div>
@@ -241,7 +260,7 @@
       <HavlineCard class="section-card" title="Agent 生命周期（SSH）">
         <div class="section-body">
           <p class="form-hint">
-            首次安装、升级、卸载需要 SSH（在「内网穿透」页服务端表单的「公网 Agent 管理」区填写）；安装成功后自动建立 SSH 隧道，不会默认暴露公网 7700。
+            首次安装、升级、卸载需要 SSH（在本页「编辑服务端 → 远程管理 → 公网 Agent 管理」区填写）；安装成功后自动建立 SSH 隧道，不会默认暴露公网 7700。
             SSH 信息仅用于生命周期和隧道，凭据加密存储、不回显。
           </p>
           <div class="field-grid agent-transport-grid">
@@ -307,7 +326,7 @@
                   <n-button size="small" quaternary :disabled="!dashboardURL" @click="openDashboard">frps 管理面板</n-button>
                 </span>
               </template>
-              未配置 frps 管理接口：在「内网穿透」页服务端表单的「frps 管理接口」填写地址与端口后保存
+              未配置 frps 管理接口：在本页「编辑服务端 → 服务端配置 → frps 管理接口」填写地址与端口后保存
             </n-tooltip>
             <n-button size="small" :loading="busy === 'push-config'" :disabled="busy !== null && busy !== 'push-config'" @click="pushAgentConfig(server)">下发 frps 配置</n-button>
             <n-button size="small" quaternary :loading="configLoading" :disabled="busy !== null" @click="viewConfig(server)">配置查看</n-button>
@@ -403,6 +422,7 @@
         <div class="proxy-modal__tabbar">
           <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'basic' }" @click="serverFormTab = 'basic'">基础配置</button>
           <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'advanced' }" @click="serverFormTab = 'advanced'">高级配置</button>
+          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'server' }" @click="serverFormTab = 'server'">服务端配置</button>
           <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'remote' }" @click="serverFormTab = 'remote'">远程管理</button>
         </div>
         <div class="proxy-modal__scroll">
@@ -415,6 +435,7 @@
           <n-form-item label="主机地址" required><n-input v-model:value="serverForm.server_addr" placeholder="例如：frps.example.com" /></n-form-item>
           <n-form-item label="端口" required><n-input-number v-model:value="serverForm.server_port" :min="1" :max="65535" /></n-form-item>
         </div>
+        <div class="switch-row"><span>启用服务端</span><n-switch v-model:value="serverForm.enabled" /></div>
       </section>
 
       <section class="form-section">
@@ -461,10 +482,10 @@
         <n-form-item label="描述"><n-input v-model:value="serverForm.options.remark" type="textarea" :rows="2" placeholder="添加一些关于此服务器的备注" /></n-form-item>
       </section>
             </div>
-            <div v-show="serverFormTab === 'remote'" class="frp-server-modal__remote">
+            <div v-show="serverFormTab === 'server'" class="frp-server-modal__server">
       <section class="form-section">
-        <h3><n-icon :component="SwapHorizontalOutline" /> frps vhost 反代端口</h3>
-        <p class="form-hint">frps 的 vhostHTTPPort / vhostHTTPSPort，即 Nginx 反代的回源端口（proxy_pass http://127.0.0.1:端口）。修改后需「下发 frps 配置」并重启 frps，且重新部署各规则的反代。留空用默认 8080 / 8443。</p>
+        <h3><n-icon :component="SwapHorizontalOutline" /> frps vhost 与域名反代</h3>
+        <p class="form-hint">frps 的 vhostHTTPPort / vhostHTTPSPort 是 Nginx 反代的回源端口（proxy_pass http://127.0.0.1:端口），同时包含 subDomainHost、tcpmux 等域名入口配置。修改后需「下发 frps 配置」并重启 frps，且重新部署各规则的反代。留空用默认 8080 / 8443。</p>
         <n-alert
           v-if="serverForm.options.vhost_http_port === 80 || serverForm.options.vhost_https_port === 443"
           type="warning"
@@ -482,15 +503,20 @@
           <n-form-item label="tcpmux 监听端口"><n-input-number v-model:value="serverForm.options.tcpmux_http_connect_port" :min="1" :max="65535" placeholder="存在 tcpmux 规则时必填" /></n-form-item>
         </div>
         <div class="form-grid">
-          <n-form-item label="端口白名单（allowPorts）"><n-input v-model:value="serverForm.options.allow_ports" placeholder="如 6000,6005-6010,7000-8000；留空不限制" /></n-form-item>
-          <n-form-item label="每客户端端口上限"><n-input-number v-model:value="serverForm.options.max_ports_per_client" :min="0" :max="65535" placeholder="0 表示不限" /></n-form-item>
-        </div>
-        <div class="form-grid">
           <n-form-item label="自定义 404 页面（VPS 路径）"><n-input v-model:value="serverForm.options.custom_404_page" placeholder="例如 /var/www/404.html；留空用默认" /></n-form-item>
           <div class="switch-row"><span>强制 TLS（frps 只接受 TLS 连接）</span><n-switch v-model:value="serverForm.options.tls_force" /></div>
         </div>
         <div class="switch-row"><span>frps 写文件日志（/var/log/frps.log）</span><n-switch v-model:value="serverForm.options.frps_log_to_file" /></div>
         <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" class="narrow-input" /></n-form-item>
+      </section>
+
+      <section class="form-section">
+        <h3><n-icon :component="GitNetworkOutline" /> TCP/UDP 端口分配</h3>
+        <p class="form-hint">allowPorts 只限制 tcp / udp 规则使用的 remotePort，不控制 HTTP/HTTPS 的 vhost 回源端口。留空表示不限制，但实际远程端口仍需在云安全组和 VPS 主机防火墙放行。</p>
+        <div class="form-grid">
+          <n-form-item label="端口白名单（allowPorts）"><n-input v-model:value="serverForm.options.allow_ports" placeholder="如 6000,6005-6010,7000-8000；留空不限制" /></n-form-item>
+          <n-form-item label="每客户端端口上限"><n-input-number v-model:value="serverForm.options.max_ports_per_client" :min="0" :max="65535" placeholder="0 表示不限" /></n-form-item>
+        </div>
       </section>
 
       <section class="form-section">
@@ -513,18 +539,19 @@
         </div>
         <n-button v-if="editingServer?.dashboard_has_pwd" size="small" quaternary type="error" @click="serverForm.clear_dashboard_password = true">清除管理密码</n-button>
       </section>
-
+            </div>
+            <div v-show="serverFormTab === 'remote'" class="frp-server-modal__remote">
       <section class="form-section">
         <h3><n-icon :component="CloudOutline" /> 公网 Agent 管理</h3>
-        <p class="form-hint">Agent 部署在公网 VPS 上，保存 HTTP/HTTPS 规则后可由 Agent 自动生成反代；「公网 Agent」页提供完整管理面板。首次安装/升级需要 SSH，日常管理走 Agent API。</p>
+        <p class="form-hint">Agent 部署在公网 VPS 上，保存 HTTP/HTTPS 规则后可由 Agent 自动生成反代；「公网 Agent」页提供完整管理面板。首次安装/升级需要 SSH，日常管理走 Agent API。Agent 地址通常由 SSH 隧道或 HTTPS 固定自动回填，不建议将 7700 明文暴露到公网。</p>
         <div class="form-grid">
-          <n-form-item label="Agent API 地址"><n-input v-model:value="serverForm.agent_url" placeholder="例如：http://vps.example.com:7700" /></n-form-item>
+          <n-form-item label="Agent API 地址"><n-input v-model:value="serverForm.agent_url" placeholder="安装后自动回填；也可填 http://127.0.0.1:7700（SSH 隧道）" /></n-form-item>
           <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.agent_token" label="Agent Token" :configured="!!editingServer?.agent_configured" placeholder="留空保持不变" /></n-form-item>
           <n-form-item label="SSH 地址"><n-input v-model:value="serverForm.ssh_host" placeholder="用于安装/升级/卸载 agent" /></n-form-item>
           <n-form-item label="SSH 端口"><n-input-number v-model:value="serverForm.ssh_port" :min="1" :max="65535" /></n-form-item>
           <n-form-item label="SSH 用户"><n-input v-model:value="serverForm.ssh_user" placeholder="root 或具备 sudo 权限的用户" /></n-form-item>
           <n-form-item label="SSH 认证"><n-select v-model:value="serverForm.ssh_auth" :options="[{ label: '私钥', value: 'key' }, { label: '密码', value: 'password' }]" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.ssh_secret" label="SSH 密码/私钥" :configured="!!editingServer?.ssh_configured" placeholder="用于 Agent 安装与升级" /></n-form-item>
+          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.ssh_secret" :label="serverForm.ssh_auth === 'key' ? 'SSH 私钥' : 'SSH 密码'" :configured="!!editingServer?.ssh_configured" :placeholder="serverForm.ssh_auth === 'key' ? '粘贴私钥内容，用于 Agent 安装与升级' : '输入 SSH 密码，用于 Agent 安装与升级'" /></n-form-item>
         </div>
         <div class="switch-row"><span>启用 Agent 日常管理</span><n-switch v-model:value="serverForm.mgmt_enabled" /></div>
         <div v-if="editingServer?.agent_configured" class="agent-actions">
@@ -532,6 +559,7 @@
           <n-button size="small" :loading="busy === 'push-config'" :disabled="busy !== null && busy !== 'push-config'" @click="pushAgentConfig(editingServer)">下发 frps 配置</n-button>
           <n-button size="small" quaternary @click="showServerModal = false; selectedId = editingServer.id">查看服务端详情</n-button>
         </div>
+        <p v-if="editingServer?.agent_configured" class="form-hint">「下发 frps 配置」使用已保存的配置；若刚修改了上方参数，请先保存再下发。</p>
       </section>
             </div>
             <div v-show="serverFormTab === 'advanced'" class="frp-server-modal__advanced">
@@ -593,7 +621,7 @@
         </div>
       </div>
       <div class="proxy-modal__help">
-        <h4>{{ serverFormTab === 'basic' ? '配置说明' : '高级配置说明' }}</h4>
+        <h4>{{ serverHelpTitle }}</h4>
         <ol>
           <li v-for="item in serverHelpItems" :key="item.title"><strong>{{ item.title }}</strong>：{{ item.text }}</li>
         </ol>
@@ -799,6 +827,8 @@ const headerDescription = computed(() => {
 // 三态：未加载 / 加载中 / 失败——避免把"没拉到"显示成"未连接"
 const agentConnectionText = computed(() => {
   if (!statusLoaded.value) return statusLoading.value ? '读取中…' : '—'
+  if (agentStatus.value?.configured === false) return '未配置'
+  if (agentStatus.value?.token_mismatch) return 'Token 不匹配'
   return agentStatusOk.value ? '在线' : '未连接'
 })
 const frpsStateText = computed(() => {
@@ -827,6 +857,27 @@ const statusAlert = computed<{ type: 'error' | 'warning'; text: string; action?:
   const current = server.value
   if (!current || !statusLoaded.value) return null
   if (!agentStatusOk.value) {
+    if (agentStatus.value?.configured === false) {
+      return {
+        type: 'warning',
+        text: '尚未安装 Agent：请先填写 SSH 信息，再点击下方「安装 Agent」。',
+        action: { label: '安装 Agent', run: () => installAgent(current) },
+      }
+    }
+    if (agentStatus.value?.mgmt_enabled === false) {
+      return {
+        type: 'warning',
+        text: 'Agent 已配置，但「启用 Agent 日常管理」未开启。',
+        action: { label: '编辑服务端', run: () => openServerModal(current) },
+      }
+    }
+    if (agentStatus.value?.token_mismatch) {
+      return {
+        type: 'error',
+        text: 'Agent Token 不匹配：Havline 保存的 Token 与 VPS 上的 Agent 配置不一致。',
+        action: { label: '升级 Agent', run: () => installAgent(current) },
+      }
+    }
     return {
       type: 'error',
       text: 'Agent 未连接：请确认 VPS 上 havline-agent 正在运行，且 Agent 地址与 Token 与页面一致。',
@@ -998,6 +1049,8 @@ async function loadHavlineCerts() {
 // Nginx 显式重载（需 agent ≥ 0.11.0）：把校验 / 重载失败原因直接显示出来
 const reloadingNginx = ref(false)
 const reloadHint = ref('')
+// Nginx 启停（需 agent ≥ 0.15.2）：按钮文案随进程状态切换
+const actingNginx = ref(false)
 
 async function reloadNginx() {
   const target = server.value
@@ -1020,18 +1073,42 @@ async function reloadNginx() {
   }
 }
 
+// 启停后刷新状态，让卡片上的「进程」与按钮文案同步
+async function nginxAction(action: 'start' | 'stop' | 'restart') {
+  const target = server.value
+  if (!target) return
+  actingNginx.value = true
+  reloadHint.value = ''
+  try {
+    const result = await api.actionFrpAgentNginx(target.id, action)
+    await refreshAll({ silent: true })
+    reloadHint.value = result.nginx_running ? 'Nginx 已启动' : 'Nginx 已停止'
+  } catch (error) {
+    reloadHint.value = error instanceof Error ? error.message : 'Nginx 操作失败'
+  } finally {
+    actingNginx.value = false
+  }
+}
+
 // 轮询走静默（不触碰 busy）；首次加载显示 statusLoading
 async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   const current = server.value
   if (!current) return
   if (options.silent === false) statusLoading.value = true
   try {
-    agentStatus.value = await api.getFrpAgentStatus(current.id)
-    agentStatusOk.value = true
+    const status = await api.getFrpAgentStatus(current.id)
+    agentStatus.value = status
+    agentStatusOk.value = status.configured !== false && status.mgmt_enabled !== false && status.token_mismatch !== true
     statusLoaded.value = true
-    // 资源采集单独走，不阻断状态加载
-    void loadMetrics(current.id)
-    void loadAgentCerts(current.id)
+    if (agentStatusOk.value) {
+      // 资源采集单独走，不阻断状态加载
+      void loadMetrics(current.id)
+      void loadAgentCerts(current.id)
+    } else {
+      agentMetrics.value = null
+      metricsError.value = ''
+      havlineCertDomains.value = new Set()
+    }
   } catch (error) {
     agentStatusOk.value = false
     statusLoaded.value = true
@@ -1048,9 +1125,39 @@ function probe(target: FrpServer) {
   }))
 }
 
+function isSSHHostKeyChangedError(error: unknown) {
+  return error instanceof Error && error.message.includes('SSH 主机密钥与首次记录不一致')
+}
+
+function confirmTrustSSHHostKey(): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: 'SSH 主机密钥已变化',
+      content: '该服务器可能已重装系统。确认新主机密钥可信后，Havline 将更新记录并重新安装 Agent。',
+      positiveText: '信任并重装',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
+}
+
+async function installAgentWithTrust(target: FrpServer) {
+  try {
+    return await api.installFrpAgent(target.id)
+  } catch (error) {
+    if (!isSSHHostKeyChangedError(error)) throw error
+    if (!(await confirmTrustSSHHostKey())) {
+      throw new Error('已取消信任新的 SSH 主机密钥')
+    }
+    return api.installFrpAgent(target.id, true)
+  }
+}
+
 function installAgent(target: FrpServer) {
   return run('agent-install', target.agent_configured ? '升级 Agent' : '安装 Agent',
-    () => api.installFrpAgent(target.id),
+    () => installAgentWithTrust(target),
     () => ({ text: 'Agent 安装/升级完成，已自动回填 Agent 地址与 Token', ok: true }))
     .then(async (result) => { if (result !== undefined) await load() })
 }
@@ -1209,7 +1316,7 @@ async function compareFrpsConfig() {
 const frpsConfigTarget = ref<FrpServer | null>(null)
 const frpsConfigLoading = ref(false)
 
-const serverFormTab = ref<'basic' | 'advanced' | 'remote'>('basic')
+const serverFormTab = ref<'basic' | 'advanced' | 'server' | 'remote'>('basic')
 
 const editingServer = ref<FrpServer | null>(null)
 const viewingServer = ref<FrpServer | null>(null)
@@ -1229,12 +1336,14 @@ function defaultServerOptions(): FrpServerOptions {
     dial_server_keepalive: 7200, pool_count: 0, tcp_mux: true, tcp_mux_keepalive_interval: 60,
     heartbeat_interval: 30, heartbeat_timeout: 90, login_fail_exit: true, tls_disable_custom_first_byte: false, auto_start: false,
     dashboard_addr: '', dashboard_port: 0, dashboard_user: '',
+    sub_domain_host: '', custom_404_page: '', tls_force: false, allow_ports: '', max_ports_per_client: 0,
+    frps_log_to_file: false, frps_log_max_days: 3,
   }
 }
 
 const serverForm = reactive({
   name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
-  agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: false,
+  agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: true,
   oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
   clear_tls_key: false, clear_tls_trusted_ca: false, options: defaultServerOptions(),
 })
@@ -1246,17 +1355,27 @@ const serverHelpItems = computed(() => {
     { title: 'TLS', text: '默认启用；证书与密钥用于双向认证，受信任的 CA 用于校验 frps 证书，SNI 与 frps 侧证书域名一致。' },
     { title: '连接调优', text: '心跳与 TCP 多路复用保持默认即可；网络不稳定时可加大超时，连接池可降低高并发时的建连延迟。' },
   ]
+  if (serverFormTab.value === 'server') return [
+    { title: 'frps vhost 与域名反代', text: 'vhostHTTPPort/vhostHTTPSPort 是 Nginx 反代的回源端口，同时决定 subDomainHost、tcpmux 等域名入口；留空用默认 8080/8443，80/443 会与 VPS 上的 Nginx 冲突。修改后需「下发 frps 配置」并重启 frps，再重新部署各规则。' },
+    { title: 'TCP/UDP 端口分配', text: 'allowPorts 只限制 tcp/udp 规则使用的 remotePort，不控制 vhost 回源端口；实际端口仍需在云安全组与 VPS 主机防火墙放行。' },
+    { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Havline 借此拉取穿透规则的实时连接与流量；地址与端口需成对填写，与连接认证无关。' },
+  ]
+  if (serverFormTab.value === 'remote') return [
+    { title: '公网 Agent 管理', text: 'Agent 部署在 VPS 上，保存 HTTP/HTTPS 规则后自动生成反代；首次安装/升级需 SSH，日常管理走 Agent API，Token 与 SSH 凭据加密存储、不回显。' },
+  ]
   const common = [
     { title: '基本信息', text: '主机地址和端口对应 frps 的 bindAddr / bindPort，多个服务端可并行配置，规则保存时选择归属。' },
     { title: '认证方式', text: '与 frps 的 auth 配置保持一致：无认证、令牌（auth.token）或 OIDC；令牌与密钥加密存储，编辑时留空保持不变。' },
-    { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Havline 借此拉取穿透规则的实时连接与流量；不写入 frpc.toml，与连接认证无关。' },
     { title: '描述', text: '仅用于在 Havline 中区分多台服务端的备注信息。' },
   ]
   if (serverForm.options.auth_method === 'oidc') return [...common, { title: 'OIDC', text: '客户端 ID、密钥和令牌端点由身份提供商提供；受众与权限范围需与 frps 的 OIDC 校验配置匹配。' }]
   return common
 })
+const serverHelpTitle = computed(() => ({ basic: '配置说明', advanced: '高级配置说明', server: '服务端配置说明', remote: '远程管理说明' }[serverFormTab.value]))
 const serverHelpTip = computed(() => {
-  if (serverFormTab.value === 'advanced') return '传输参数需与 frps 服务端配置匹配；修改后请点击“校验并应用配置”。'
+  if (serverFormTab.value === 'advanced') return '传输参数需与 frps 服务端配置匹配；修改后保存即可生效。'
+  if (serverFormTab.value === 'server') return 'frps 参数修改后需保存并「下发 frps 配置」，再重启 frps 才会生效。'
+  if (serverFormTab.value === 'remote') return '首次安装/升级需 SSH；安装成功后建议使用 SSH 隧道或 HTTPS 固定接入，不要长期暴露公网 7700。'
   if (serverForm.options.auth_method === 'oidc') return 'OIDC 需要身份提供商支持客户端凭证模式，且 frps 侧已启用相同的 OIDC 校验。'
   return '请先在 VPS 上部署 frps 并放行对应端口，再保存服务端配置。'
 })
@@ -1333,10 +1452,12 @@ function statusBarTooltip(sample: FrpServerDetail['status']['samples'][number]) 
 function resetServerForm() {
   Object.assign(serverForm, {
     name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
+    agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: true,
     oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
     clear_tls_key: false, clear_tls_trusted_ca: false,
   })
-  Object.assign(serverForm.options, defaultServerOptions())
+  // 整体替换 options，避免上一次编辑的字段（如 vhost/日志/端口）残留到新增表单
+  serverForm.options = defaultServerOptions()
 }
 
 function openServerModal(server?: FrpServer) {
@@ -1535,7 +1656,67 @@ function serverStateTooltip(server: FrpServer) {
   return `期望：${serverStartupText(server)}；frpc：${processStateText(server)}；FRP：${connectionStateText(server)}${server.last_error ? `；${server.last_error}` : ''}`
 }
 
+function validateServerForm(): string {
+  const form = serverForm
+  if (!form.name.trim()) return '请填写服务端名称'
+  if (!form.server_addr.trim()) return '请填写主机地址'
+  if (!form.server_port || form.server_port < 1 || form.server_port > 65535) return '端口需在 1-65535 之间'
+
+  if (form.options.auth_method === 'token' && !editingServer.value && !form.token.trim()) {
+    return '认证方式为令牌时，请填写与 frps 一致的令牌'
+  }
+  if (form.options.auth_method === 'oidc') {
+    if (!form.options.oidc_client_id?.trim()) return 'OIDC 需填写客户端 ID'
+    if (!form.options.oidc_token_endpoint_url?.trim()) return 'OIDC 需填写令牌端点'
+    if (!editingServer.value && !form.oidc_client_secret.trim()) return 'OIDC 需填写客户端密钥'
+  }
+
+  if (form.options.vhost_http_port === 80 || form.options.vhost_https_port === 443) {
+    return 'frps 回源端口不能使用 80/443（通常由 VPS 上的 Nginx 占用），请改为 8080/8443'
+  }
+
+  const ports: Array<[string, number]> = [
+    ['控制端口', form.server_port],
+    ['HTTP 回源端口', form.options.vhost_http_port || 8080],
+    ['HTTPS 回源端口', form.options.vhost_https_port || 8443],
+  ]
+  if (form.options.dashboard_port) ports.push(['管理端口', form.options.dashboard_port])
+  if (form.options.tcpmux_http_connect_port) ports.push(['tcpmux 端口', form.options.tcpmux_http_connect_port])
+  const seen = new Map<number, string>()
+  for (const [label, port] of ports) {
+    const prev = seen.get(port)
+    if (prev) return `${prev}与${label}不能使用同一端口（${port}）`
+    seen.set(port, label)
+  }
+
+  const hasDashboardAddr = !!form.options.dashboard_addr?.trim()
+  const hasDashboardPort = !!form.options.dashboard_port
+  if (hasDashboardAddr !== hasDashboardPort) return 'frps 管理接口的地址与端口需同时填写或同时留空'
+
+  if (form.ssh_host.trim()) {
+    if (!form.ssh_user.trim()) return '填写了 SSH 地址后，需同时填写 SSH 用户'
+    if (!editingServer.value?.ssh_configured && !form.ssh_secret.trim()) return '填写了 SSH 地址后，需填写 SSH 密码或私钥'
+  }
+
+  if (form.options.tls_force && !form.tls_enabled) return '已勾选「强制 TLS」，请在高级配置中启用 TLS'
+
+  const allowPorts = form.options.allow_ports?.trim()
+  if (allowPorts && !/^\d+(-\d+)?(\s*,\s*\d+(-\d+)?)*$/.test(allowPorts)) {
+    return '端口白名单格式应为 6000,6005-6010 这样的单端口或范围'
+  }
+
+  return ''
+}
+
 async function saveServer() {
+  const invalid = validateServerForm()
+  if (invalid) {
+    message.error(invalid)
+    return
+  }
+  if (serverForm.mgmt_enabled && !serverForm.agent_url.trim()) {
+    message.warning('未填写 Agent 地址：保存后可在本页通过 SSH 安装 Agent 自动回填')
+  }
   savingServer.value = true
   try {
     const payload: FrpServerPayload = {

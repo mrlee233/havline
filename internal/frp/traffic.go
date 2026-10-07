@@ -7,7 +7,13 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+)
+
+const (
+	legacyProxyQueryTimeout = 8 * time.Second
+	legacyProxyConcurrency  = 4
 )
 
 // frps 管理接口（webServer）返回的代理状态结构，仅取本模块用到的字段。
@@ -118,15 +124,43 @@ func (c *frpsTrafficClient) fetchLegacyProxyByName(ctx context.Context, server S
 // fetchLegacyRouteProxies 按候选规则逐条查询旧版 frps，并保留域名到真实代理名的映射。
 func (c *frpsTrafficClient) fetchLegacyRouteProxies(ctx context.Context, server Server, password string, names []string) ServerTraffic {
 	empty := map[string]ProxyTraffic{}
+	if len(names) == 0 {
+		return ServerTraffic{ServerID: server.ID, OK: true, Proxies: empty}
+	}
+	queryCtx, cancel := context.WithTimeout(ctx, legacyProxyQueryTimeout)
+	defer cancel()
+
+	type queryResult struct {
+		info legacyProxyInfo
+		err  error
+	}
+	results := make(chan queryResult, len(names))
+	semaphore := make(chan struct{}, legacyProxyConcurrency)
+	var wait sync.WaitGroup
+	for _, name := range names {
+		wait.Add(1)
+		go func(name string) {
+			defer wait.Done()
+			semaphore <- struct{}{}
+			defer func() { <-semaphore }()
+			proxyName := name
+			if user := strings.TrimSpace(server.Options.User); user != "" && !strings.HasPrefix(proxyName, user+".") {
+				proxyName = user + "." + proxyName
+			}
+			info, _, err := c.fetchLegacyProxyByName(queryCtx, server, password, proxyName)
+			results <- queryResult{info: info, err: err}
+		}(name)
+	}
+	go func() {
+		wait.Wait()
+		close(results)
+	}()
+
 	proxies := make(map[string]ProxyTraffic)
 	proxyNamesByDomain := make(map[string]string)
 	var lastErr error
-	for _, name := range names {
-		proxyName := name
-		if user := strings.TrimSpace(server.Options.User); user != "" && !strings.HasPrefix(proxyName, user+".") {
-			proxyName = user + "." + proxyName
-		}
-		info, _, err := c.fetchLegacyProxyByName(ctx, server, password, proxyName)
+	for result := range results {
+		info, err := result.info, result.err
 		if err != nil {
 			lastErr = err
 			continue

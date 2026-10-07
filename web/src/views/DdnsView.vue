@@ -11,7 +11,7 @@
   <LoadError v-if="loadError" :message="loadError" @retry="init" />
 
   <n-alert
-    v-if="!loadError && frpEnabled"
+    v-if="!loadError && frpEnabled && !bypassFrpHint"
     class="frp-ddns-alert"
     type="info"
     :bordered="false"
@@ -19,6 +19,7 @@
   >
     请将域名 DNS 解析指向 <strong>FRP 服务器（VPS）的公网 IP</strong>，而非 NAS 本机 IP。可在
     <router-link :to="{ name: 'frp' }">内网穿透</router-link> 页管理 FRP 配置。
+    <n-button size="small" type="primary" @click="bypassFrpHint = true">仍然进入 DDNS 设置</n-button>
   </n-alert>
 
   <template v-else-if="!loadError">
@@ -528,6 +529,7 @@ const dialog = useDialog()
 const configs = ref<DDNSConfig[]>([])
 const loading = ref(false)
 const frpEnabled = ref(false)
+const bypassFrpHint = ref(false)
 const refreshingIP = ref(false)
 const loadError = ref('')
 const savingTask = ref(false)

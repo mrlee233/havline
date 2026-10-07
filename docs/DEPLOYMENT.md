@@ -1,15 +1,17 @@
 # Havline 部署安装文档
 
-> 适用版本：v1.1.0（源码包 `havline-1.1.0-src.zip`）。本文覆盖从拿到安装包到服务上线的完整流程：环境要求 → 打包 → 三种部署方式 → 首次配置 → FRP/DDNS/证书联动 → 升级与回滚 → 故障排查。
+> 适用版本：v1.9.0。本文覆盖 Docker / 飞牛 fnOS / Linux 原生部署、数据持久化、敏感数据保护、updater sidecar、一键升级、回滚和故障排查。文中旧版本包名仅用于说明历史交付物，不代表当前发布包名。
+>
+> 当前发布源：`https://jayhub.top/mrlee/Havline.git`，分支：`main`。`docker-compose.hub.yml` 和 updater sidecar 都固定使用这组仓库地址与分支；如果实际发布仓库发生变化，必须同步修改 Compose 文件、updater 环境变量和本节说明后再部署。
 > 功能细节与组合场景请配合项目内两份文档：`README.md`（功能总览）与 FRP 页面右上「使用说明」（内置十个组合场景详解）。
 
 ## 0. 交付物清单与安装路径速查
 
 | 交付物 | 内容 | 适用 | 安装方式 |
 | --- | --- | --- | --- |
-| `havline-1.1.0-linux-amd64.tar.gz`（14MB） | 编译好的 Linux 二进制（前端已内嵌）+ migrations + systemd + 一键脚本 | **裸机 Linux 服务器**，目标机只需系统 nginx | 解压 → `sudo bash install.sh`（见 3.4） |
-| `havline-1.1.0-image.tar.gz`（约 100-150MB） | 构建好的 Docker 镜像 `havline:local`（含 nginx + frpc） | 目标机有 Docker、要离线安装 | `docker load` → `docker run`（见 3.3 方式 C） |
-| `havline-1.1.0-src.zip`（11MB） | 完整源码 + Dockerfile/compose + 部署文档 | 要自行构建 / 二次开发 / 交叉编译 | `docker compose build` 后按方式 A/B 部署（见第 2 节） |
+| `havline-1.9.0-linux-amd64.tar.gz`（大小以实际发布包为准） | 编译好的 Linux 二进制（前端已内嵌）+ migrations + systemd + 一键脚本 | **裸机 Linux 服务器**，目标机只需系统 nginx | 解压 → `sudo bash install.sh` |
+| `havline-1.9.0-image.tar.gz`（大小以实际发布包为准） | 构建好的 Docker 镜像 `havline:local`（含 Nginx，不预装 frpc） | 目标机有 Docker、要离线安装 | `docker load` → `docker run` |
+| `havline-1.9.0-src.zip`（大小以实际发布包为准） | 完整源码 + Dockerfile/compose + 部署文档 | 要自行构建 / 二次开发 / 交叉编译 | `docker compose build` 后按方式 A/B 部署（见第 2 节） |
 
 **怎么选**：飞牛 fnOS 首选镜像包导入（图形界面，见第 3 节末「飞牛 fnOS 部署详解」），要在 NAS 上构建则用源码包 + host 模式 compose；普通 Linux 服务器要省事用 Linux 运行包（免 Docker）；目标机不方便联网构建用镜像包离线导入。三者的功能完全一致——容器里跑的也是同一份二进制 + 系统 nginx。
 
@@ -17,15 +19,15 @@
 
 ### 1.1 源码包内容
 
-`havline-1.1.0-src.zip`（约 11MB，304 项）为完整可构建源码：
+`havline-1.9.0-src.zip`（文件大小与条目数以实际发布包为准）为完整可构建源码：
 
 | 目录/文件 | 说明 |
 | --- | --- |
 | `cmd/` `internal/` | Go 后端源码（含已迁移的多服务端 FRP 模块） |
 | `web/` | Vue 3 + TypeScript 前端源码 |
-| `migrations/` | SQLite 数据库迁移 001–022（启动时自动按序应用） |
+| `migrations/` | SQLite 数据库迁移 001–036（启动时自动按序应用） |
 | `Dockerfile` / `docker-compose*.yml` | 本地构建镜像与三种部署编排 |
-| `VERSION` / `CHANGELOG.md` | 版本号单一来源（当前 `1.1.0`）与版本记录 |
+| `VERSION` / `CHANGELOG.md` | 版本号单一来源（当前 `1.9.0`）与版本记录 |
 | `deploy/nginx/mime.types` | 容器内 Nginx 依赖的 MIME 类型文件 |
 | `docs/screenshots/` | README 引用的界面截图 |
 
@@ -52,7 +54,7 @@ docker compose build
 
 一次构建同时产出：前端 `dist`、Go 后端二进制与运行镜像（frpc 不预装，运行期用「应用配置」按需下载），标签为 `havline:local`。
 
-**版本号**：读取根目录 `VERSION` 文件（当前 `1.1.0`）自动注入前后端显示；要改版本号只需编辑该文件后重新 build。
+**版本号**：读取根目录 `VERSION` 文件（当前 `1.9.0`）自动注入前后端显示；要改版本号只需编辑该文件后重新 build。
 
 **网络受限环境**可覆盖基础镜像与 frpc 下载源（默认值见 `Dockerfile` 顶部注释）：
 
@@ -71,7 +73,9 @@ docker build \
 飞牛系统自带 Nginx 占用 80/443，Havline 使用 host 网络 + 高位反代端口避免冲突。
 
 ```bash
-HAVLINE_SESSION_SECRET=请改成一串随机字符 docker compose -f docker-compose.host.yml up -d --build
+# host 编排不启用 updater sidecar；HAVLINE_SESSION_SECRET 留空时由应用生成并持久化
+# 如需显式密钥，请提前写入同层 .env
+docker compose -f docker-compose.host.yml up -d --build
 ```
 
 - 无端口映射，容器直接使用宿主机网络栈；
@@ -82,11 +86,12 @@ HAVLINE_SESSION_SECRET=请改成一串随机字符 docker compose -f docker-comp
 ### 方式 B：其他环境 / 空闲 80/443 —— Bridge 端口映射
 
 ```bash
-HAVLINE_SESSION_SECRET=请改成一串随机字符 docker compose -f docker-compose.hub.yml up -d --build
+docker compose -f docker-compose.hub.yml up -d --build
 ```
 
 - 端口映射 `6893:6893`、`18080:80`、`9443:443`（宿主机 18080/9443 → 容器 80/443）；
-- 数据同样在命名卷 `havline-data`。
+- 数据同样在命名卷 `havline-data`；
+- 主程序首次启动时会在共享卷中自动生成 updater Token，sidecar 等待并读取同一文件。旧部署如显式设置 `HAVLINE_UPDATER_TOKEN`，仍会优先使用该值。
 
 ### 方式 C：docker run（不想用 compose）
 
@@ -94,16 +99,18 @@ HAVLINE_SESSION_SECRET=请改成一串随机字符 docker compose -f docker-comp
 docker run -d --name havline \
   --net=host \
   -v ./data:/data \
-  -e HAVLINE_SESSION_SECRET=请改成一串随机字符 \
+  -e HAVLINE_SESSION_SECRET=可选的固定密钥 \
   --restart unless-stopped \
   havline:local
 ```
 
 host 模式下反代端口用环境变量控制：`-e HAVLINE_NGINX_HTTP_PORT=18080 -e HAVLINE_NGINX_HTTPS_PORT=9443`。Bridge 环境改为 `-p 6893:6893 -p 18080:80 -p 9443:443`（去掉 `--net=host`）。
 
-**生成随机 SESSION_SECRET**：`openssl rand -hex 32`（Linux）或 PowerShell：`-join ((48..57)+(97..122) | Get-Random -Count 32 | % {[char]$_})`。
+**生成随机密钥**：Linux 使用 `openssl rand -hex 32`；PowerShell 可使用 `-join ((48..57)+(97..102) | Get-Random -Count 64 | % {[char]$_})`。
 
-> **`HAVLINE_SESSION_SECRET` 是什么**：Havline 的主密钥，两个用途——① 签名/加密登录会话 Cookie（决定登录态是否可被伪造）；② 作为 `secret.Box` 加密存储中敏感凭据（DDNS API Token、FRP Token、SMTP 密码等）。默认值 `change-me-in-production` 是公开的：拿到它即可伪造管理员会话、解密数据库里的全部凭据，**生产环境必须替换**。⚠️ 换密钥的时机：首次启动前设置；若之后更换，旧密钥加密的凭据将无法解密（应用会提示重新保存），需到对应页面重录 Token。
+> **`HAVLINE_SESSION_SECRET`** 是会话签名和敏感凭据加密密钥。当前代码在它为空时，会在 `/data/session_secret` 生成 32 字节随机值并以 `0600` 权限持久化。已有数据后不要更换，否则数据库中已加密的 DDNS、FRP、通知、Cloudflare 等凭据无法解密。
+>
+> **`HAVLINE_UPDATER_TOKEN`** 是主程序与 updater sidecar 的共享鉴权密钥。包含 updater 的 Compose 会由主程序在共享卷中自动生成 Token 文件，默认不需要手动配置。旧部署仍可用环境变量覆盖；Token 文件不得提交到仓库、截图、工单或公开备份说明。
 
 ### Linux 服务器完整部署步骤（Ubuntu / Debian / CentOS）
 
@@ -113,12 +120,12 @@ curl -fsSL https://get.docker.com | sh
 sudo systemctl enable --now docker
 
 # 1. 解压源码包并进入目录
-unzip havline-1.1.0-src.zip -d havline && cd havline
+unzip havline-1.9.0-src.zip -d havline && cd havline
 
 # 2. 构建镜像（约 3-10 分钟，取决于网络与机器性能）
 docker compose build
 
-# 3. 生成密钥并启动（Bridge 模式，映射 6893/18080/9443）
+# 3. 可选：生成会话密钥并启动（Bridge 模式，映射 6893/18080/9443）
 echo "HAVLINE_SESSION_SECRET=$(openssl rand -hex 32)" > .env
 docker compose -f docker-compose.hub.yml up -d
 
@@ -143,7 +150,7 @@ curl -I http://127.0.0.1:6893/login   # 应返回 200
 
 ```bash
 # 1. 解压
-tar xzf havline-1.1.0-linux-amd64.tar.gz -C havline && cd havline
+tar xzf havline-1.9.0-linux-amd64.tar.gz -C havline && cd havline
 
 # 2. 一键安装（自动建 havline 系统用户、装到 /opt/havline、生成随机密钥、注册 systemd 开机自启）
 sudo bash install.sh
@@ -169,7 +176,7 @@ journalctl -u havline | grep -i password    # 取 admin 初始密码
 
 **手动安装**（不用脚本）：按包内 `README.txt` 要点——建 `havline` 系统用户、复制二进制与 migrations 到 `/opt/havline`、`EnvironmentFile` 写入随机密钥、`systemctl enable --now havline`。
 
-> 镜像包（`havline-1.1.0-image.tar.gz`）来源：在任意装了 Docker 的机器上对源码包执行 `docker compose build` 后 `docker save havline:local | gzip > havline-1.1.0-image.tar.gz`；目标机 `docker load < havline-1.1.0-image.tar.gz` 后按方式 C 启动。
+> 镜像包（`havline-1.9.0-image.tar.gz`）来源：在任意装了 Docker 的机器上对源码包执行 `docker compose build` 后 `docker save havline:local | gzip > havline-1.9.0-image.tar.gz`；目标机 `docker load < havline-1.9.0-image.tar.gz` 后按方式 C 启动。
 
 ### 飞牛 fnOS 部署详解（图形界面，不敲命令）
 
@@ -177,7 +184,7 @@ journalctl -u havline | grep -i password    # 取 admin 初始密码
 
 **方式一：导入现成镜像（推荐，5 分钟）**
 
-1. **上传文件**：把 `havline-1.1.0-image.tar.gz` 通过文件管理 / SMB 上传到 NAS，如共享目录 `docker/havline/`；
+1. **上传文件**：把 `havline-1.9.0-image.tar.gz` 通过文件管理 / SMB 上传到 NAS，如共享目录 `docker/havline/`；
 2. **导入镜像**：打开 Docker 应用 → 镜像 → 导入（从文件加载）→ 选择该 tar.gz → 等待镜像列表出现 `havline:local`（若界面只接受 .tar，先在电脑上解压出内层的 .tar 再导入）；
 3. **创建容器**：容器 → 创建：
 
@@ -187,7 +194,7 @@ journalctl -u havline | grep -i password    # 取 admin 初始密码
 | 镜像 | `havline:local` |
 | 网络 | **host**（飞牛 80/443 被系统占用，host + 高位端口最省事；UI 不支持 host 时选 Bridge 并映射 6893/18080/9443） |
 | 存储挂载 | NAS 建目录（如 `/vol1/…/docker/havline/data`）→ 映射到容器 `/data`（读写） |
-| 环境变量 | `HAVLINE_SESSION_SECRET=随机串`、`HAVLINE_DATA_DIR=/data`、`HAVLINE_LISTEN=:6893`、`HAVLINE_NGINX_HTTP_PORT=18080`、`HAVLINE_NGINX_HTTPS_PORT=9443` |
+| 环境变量 | `HAVLINE_DATA_DIR=/data`、`HAVLINE_LISTEN=:6893`、`HAVLINE_NGINX_HTTP_PORT=18080`、`HAVLINE_NGINX_HTTPS_PORT=9443`；`HAVLINE_SESSION_SECRET` 可留空自动生成 |
 | 重启策略 | 自动重启 / unless-stopped（开机自启） |
 
 4. **启动并取初始密码**：容器详情 → 日志，搜 `password`；浏览器打开 `http://<NAS-IP>:6893` 登录。
@@ -196,13 +203,13 @@ journalctl -u havline | grep -i password    # 取 admin 初始密码
 
 1. 把源码包 zip 上传到 NAS 并解压（文件管理支持解压，或电脑解压后整目录上传）；
 2. Docker 应用 → 项目（Compose）→ 新建：指定项目目录为解压后的源码目录、使用 `docker-compose.host.yml`（或直接把该文件内容粘贴到 Compose 编辑器）；
-3. 在源码目录同层放一个 `.env` 文件，内容一行：`HAVLINE_SESSION_SECRET=随机串`；
+3. 在源码目录同层放一个 `.env` 文件；host 编排不需要 updater Token，`HAVLINE_SESSION_SECRET` 可留空，应用会在数据目录生成并持久化；
 4. 构建并启动。⚠️ NAS 上构建耗时较长（前端编译），低配机器建议改用方式一；
 5. 后续升级：上传新源码覆盖 → 项目重新构建即可，数据在卷里不受影响。
 
 **Compose 构建报 401（docker.fnnas.com）**：fnOS 的 Docker 设置里默认配了自家加速地址，但它对 `library/` 官方镜像拒绝匿名拉取。三种解法任选：
 
-1. **改用镜像包（最省事）**：跳过构建，按方式一导入 `havline-1.1.0-image.tar.gz`；
+1. **改用镜像包（最省事）**：跳过构建，按方式一导入 `havline-1.9.0-image.tar.gz`；
 2. **覆盖基础镜像源**：在源码目录的 `.env` 里加三行（已有 HAVLINE_SESSION_SECRET 就追加在下面）：
    ```
    NODE_IMAGE=docker.m.daocloud.io/library/node:22-alpine
@@ -224,10 +231,13 @@ journalctl -u havline | grep -i password    # 取 admin 初始密码
 
 ## 4. 首次登录与安全配置
 
+> `docker-compose.host.yml` 不包含 updater sidecar；`docker-compose.yml` 和 `docker-compose.hub.yml` 会由主程序自动生成共享 Token。不要把 host 模式的“自动生成会话密钥”和 updater 的“自动生成共享 Token”混为一谈。
+
+
 1. 启动后查看初始密码：`docker logs havline | grep -i password`（自动生成的 admin 初始密码会打印在日志里）；
 2. 浏览器打开 `http://<NAS-IP>:6893/login`，用 `admin` + 初始密码登录；
 3. **立即**在「设置 → 安全」修改管理员密码；
-4. 确认「设置 → 常规」中 `HAVLINE_SESSION_SECRET` 已改为非默认值（compose 文件中已传入则跳过）；
+4. 确认数据目录中存在 `session_secret`，并将其与数据库、证书和配置一起纳入备份；不要在已有数据后更换它；
 5. 建议在「设置 → 通知」配置一种告警方式（邮件 / Webhook / Telegram），DDNS 失败、证书续签失败、登录异常等事件会推送。
 
 ## 5. 反向代理与 HTTPS 证书
@@ -259,7 +269,102 @@ DDNS 页 → 添加任务：选服务商 → 填 API 凭证（可「测试连接
 3. **添加穿透规则**：8 种类型按需选——tcp/udp 填远程端口；http/https/tcpmux 填自定义域名（走 frps vhost 端口）；stcp/sudp/xtcp 凭 secretKey（无公网监听）；
 4. **应用并验证**：「应用配置」→「校验并应用配置」；服务端「详情」看五项诊断（TCP 可达 / frpc 登录 / 代理可达 / DNS 解析 / 归属地）与独立日志。
 
-## 8. 升级与回滚
+## 8. 数据保护、升级与回滚
+
+### 8.1 敏感数据保护边界
+
+Havline 的持久化数据不是只有 SQLite。生产环境应把整个 `/data` 数据目录视为高敏感资产，并限制宿主机目录或 Docker volume 的读权限。以下内容不得提交到 Git、写入公开日志或上传到公开工单：
+
+| 数据 | 位置或来源 | 保护要求 |
+| --- | --- | --- |
+| 管理员、会话、代理、DDNS、FRP、Cloudflare 和健康记录 | `/data/havline.db` | 限制文件权限；不要在服务运行时直接编辑；备份需加密并限制访问 |
+| 会话签名与凭据加密主密钥 | `/data/session_secret` 或 `HAVLINE_SESSION_SECRET` | 与数据库一起备份；已有数据后不可随意更换；文件权限应为 `0600` |
+| ACME 证书和私钥 | `/data/certs/` | 私钥按密钥材料保护；备份和迁移必须保密 |
+| Nginx、FRP、Cloudflare 配置 | `/data/nginx/`、`/data/frp/` 及 Cloudflare 数据目录 | 配置可能包含域名、Token 引用和内部地址，不应公开 |
+| API Token、FRP Token、DNS/SMTP/Webhook 凭据 | 数据库加密字段及备份归档 | 依赖会话密钥解密；不要只恢复数据库而遗漏 `session_secret` |
+| updater 共享鉴权 Token | 共享卷中的 `/run/havline-updater/updater.token` | 只给主程序和 sidecar；旧部署可用 `HAVLINE_UPDATER_TOKEN` 覆盖 |
+| Docker Socket | updater sidecar 的宿主机挂载 | 等同高权限 Docker 控制权；仅允许受信任管理员操作宿主机 |
+
+推荐备份整个数据目录，并在服务停止或应用备份流程完成后复制，避免 SQLite 和配置文件处于不一致状态：
+
+```bash
+# 先确认当前 Compose 项目和数据卷名称；不要盲目使用旧卷名
+ docker compose -f docker-compose.hub.yml stop havline
+ docker volume ls | grep havline
+ docker run --rm \
+   -v havline_havline-data:/data:ro \
+   -v "$PWD":/backup \
+   alpine tar czf /backup/havline-data-$(date +%F).tgz -C /data .
+ docker compose -f docker-compose.hub.yml start havline
+```
+
+如果使用 `HAVLINE_DATA_PATH` 绑定目录，应备份该绑定目录而不是假设命名卷仍存在。备份文件本身应存放在受限目录，最好再进行离线加密；恢复前先停止服务，恢复后检查 `session_secret`、数据库迁移、证书权限和 Nginx/FRP 配置。
+
+### 8.2 updater sidecar 的安全边界与验证
+
+`docker-compose.yml` 和 `docker-compose.hub.yml` 中，主程序只挂载共享 Unix Socket，不挂载 Docker Socket；只有 updater sidecar 挂载 `${DOCKER_SOCK:-/var/run/docker.sock}`。Socket 目录通过 `havline-updater-sock` 共享，文件权限为 `0660`，HTTP 接口还必须携带 `X-Havline-Updater-Token`，Token 由 `.env` 注入两侧。sidecar 缺少 Token 时拒绝启动。
+
+sidecar 的 Compose 项目目录边界如下：
+
+- `/workspace` 只映射 `${HAVLINE_UPDATE_HOST_DIR:-.}`；
+- `HAVLINE_UPDATE_PROJECT_DIR` 固定为容器内 `/workspace`；
+- Compose 文件名由编排固定为 `docker-compose.yml` 或 `docker-compose.hub.yml`；
+- 服务名固定为 `havline`；
+- git 模式仓库和分支固定为 `https://jayhub.top/mrlee/Havline.git` / `main`；
+- updater 会读取现有容器的 Compose 项目标签，无法确认原项目时拒绝升级；
+- 本地模式会拒绝带未提交改动的 Git 工作区；
+- helper 模式只接受位于宿主机项目目录内的 Compose 文件，不能通过 `..` 越界。
+
+部署后应执行以下检查：
+
+```bash
+# 1. 确认两个容器都在运行，且 updater 挂载了 Socket、主程序没有 Docker Socket
+ docker compose -f docker-compose.hub.yml ps
+ docker inspect havline-updater --format '{{json .Mounts}}'
+ docker inspect havline --format '{{json .Mounts}}'
+
+# 2. 确认 Compose 项目、工作目录和配置文件标签来自同一个部署项目
+ docker inspect havline --format '{{ index .Config.Labels "com.docker.compose.project" }}'
+ docker inspect havline --format '{{ index .Config.Labels "com.docker.compose.project.working_dir" }}'
+ docker inspect havline --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}'
+
+# 3. 不要把 Token 打印到终端；只确认 Token 文件已生成
+ docker compose -f docker-compose.hub.yml exec havline test -s /run/havline-updater/updater.token && echo updater-token-ready
+
+# 4. 从主程序页面检查 updater status；手工请求 Unix Socket 无 Token 应返回 401
+ docker compose -f docker-compose.hub.yml logs --tail 100 havline-updater
+```
+
+### 8.3 升级、健康检查与回滚事实
+
+升级流程是：读取远端 `VERSION` → 记录当前镜像 → 构建目标镜像 → 只重建 `havline` → 在 `HAVLINE_UPDATE_APP_URL` 上轮询 `/api/version` → 成功才标记完成。当前实现的自动回滚触发条件是“容器重建成功，但新版本在健康检查超时内未返回目标版本”；回滚使用升级前记录的镜像 tag。
+
+以下情况**不会**由当前 updater 自动恢复：
+
+- 构建失败；
+- Compose 重建失败；
+- updater sidecar 自己退出、Token 错误或 Docker Socket 不可用；
+- 升级前已经没有可识别的旧镜像 tag；
+- 数据库迁移已经向前执行后，旧版本代码不兼容新结构。
+
+因此升级前必须保留整目录备份和旧镜像 tag：
+
+```bash
+# 记录可回滚镜像，不要只记录 VERSION 文本
+ docker image inspect "havline:${HAVLINE_VERSION:-local}" --format '{{.RepoTags}}'
+ docker images havline
+
+# hub 模式从固定 main 分支构建；先备份，再执行升级
+ docker compose -f docker-compose.hub.yml up -d --build
+ docker compose -f docker-compose.hub.yml logs --tail 200 havline-updater
+ curl -fsS http://127.0.0.1:6893/api/version
+
+# 自动回滚未成功时，使用实际存在的旧 tag 手动重建
+ HAVLINE_VERSION=<旧版本> docker compose -f docker-compose.hub.yml up -d --no-deps --force-recreate havline
+```
+
+异常重启由两个服务的 `restart: unless-stopped` 覆盖：主程序或 updater 进程退出后 Docker 会尝试重启。但这不等于升级成功；必须同时检查容器状态、日志、`/api/version`、数据库迁移和数据目录内容。
+
 
 ### 升级
 
@@ -289,12 +394,13 @@ docker compose -f docker-compose.host.yml up -d --build
 | 现象 | 处理 |
 | --- | --- |
 | 容器起来但 6893 打不开 | `docker logs havline` 看启动报错；`docker port havline`（Bridge 模式）确认映射 |
-| 提示「会话加密密钥」警告 | 未设置 `HAVLINE_SESSION_SECRET`，compose 传入即可 |
+| updater 启动失败或一直等待 Token | 检查主程序日志，以及共享卷中的 `/run/havline-updater/updater.token` 是否存在；旧部署可用 `HAVLINE_UPDATER_TOKEN` 覆盖 |
 | 反代 502 | 目标内网应用未启动或地址填错；日志中心看 Nginx error 日志 |
 | 证书申请失败 | DDNS 凭证是否有效、域名 DNS 是否已生效、ACME 邮箱是否已设置 |
 | frpc 连不上 frps | 两端 Token/端口不一致；用服务端「详情 → frps.toml」重新生成对齐 |
 | 穿透流量显示 0 | frps 未配置 webServer 或 Havline 服务端表单未填管理地址（非必须功能） |
 | 页面改动未生效 | 确认访问的是容器端口而非开发服务器；`docker compose up -d --build` 重建 |
+| 升级失败后服务未恢复 | 先查看 `docker logs havline-updater`；只有重建成功但新版本健康检查失败时才会自动回滚，构建失败或 updater 自身异常需要人工按镜像 tag 回滚 |
 
 ## 10. 卸载
 

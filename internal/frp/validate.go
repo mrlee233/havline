@@ -1,6 +1,7 @@
 package frp
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -278,6 +279,31 @@ func normalizeServerOptions(in ServerOptions) ServerOptions {
 		in.HeartbeatTimeout = 90
 	}
 	return in
+}
+
+// ServerOptions 的布尔字段在表单默认值里是 true，但 JSON 缺省时零值是 false。
+// 016 迁移给已有服务端补的 config_json 默认值为 "{}"，非 UI 路径创建的服务端也可能不带这些键；
+// 缺省时若不兜底，生成的 frpc 配置会变成 transport.tcpMux = false（每条新连接都要重新建
+// TCP+TLS，首连明显变慢）与 loginFailExit = false（登录失败不再退出，排障信息被吞掉）。
+// 因此按「键缺省即取默认值」反序列化；显式写入 false 的配置仍然保留 false。
+func (in *ServerOptions) UnmarshalJSON(data []byte) error {
+	type plain ServerOptions
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var keys map[string]json.RawMessage
+	if err := json.Unmarshal(data, &keys); err != nil {
+		return err
+	}
+	*in = ServerOptions(decoded)
+	if _, ok := keys["tcp_mux"]; !ok {
+		in.TCPMux = true
+	}
+	if _, ok := keys["login_fail_exit"]; !ok {
+		in.LoginFailExit = true
+	}
+	return nil
 }
 
 func validAuthMethod(value string) bool {

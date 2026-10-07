@@ -1,13 +1,14 @@
 # Havline 文档索引
 
 > 维护约定：新增方案 / 审查文档时在下方登记；方案落地后在「状态」列标注实施结果，并给已被推翻的描述加时效说明。
-> 最近更新：2026-10-01（v1.9.0）
+> 最近更新：2026-10-03（v1.9.0）
 
 ## 方案与设计（本目录）
 
 | 文件 | 主题 | 状态 |
 | --- | --- | --- |
-| `project-analysis-2026-09-27.md` | 全项目详细分析（v1.2.19）：架构、模块、数据、API、前端、链路、风险与改进路线 | 当前版本快照 |
+| `project-analysis-2026-10-03.md` | 当前目录结构与实现分析（v1.9.0）：架构、模块、数据、API、前端、部署、文档偏差与风险 | 当前版本快照 |
+| `project-analysis-2026-09-27.md` | 全项目详细分析（v1.2.19）：架构、模块、数据、API、前端、链路、风险与改进路线 | 历史版本快照 |
 | `improvement-roadmap-2026-09-27.md` | P0-P3 改进路线实施方案：逐项改法、测试、验收、依赖、发布与回滚 | P0-1、P0-3、P0-4 已完成，其余待实施 |
 | `system-upgrade.md` | Docker Compose 一键升级：sidecar 架构、首次部署、安全边界、回滚、故障排查与验证页 | 已实施（v1.3.8） |
 | `agent-listen-strategy-plan.md` | Agent 默认监听策略：回环监听、SSH 隧道优先、HTTPS pin 可选与自动迁移方案 | 阶段 1-4 已实施（v1.4.0）；2.0.0 兼容清理待后续 |
@@ -19,6 +20,8 @@
 | `fnos-app-packaging-plan.md` | 飞牛 fnOS 应用打包方案：官方文档依据、Docker 模板、向导、权限、数据迁移、升级与发布流程 | 方案待实施 |
 | `project-audit-2026-09-24.md` | 全项目审查：P0/P1/P2 分级，含精确行号与逐条修法 | **进行中**——P0 已随 v1.2.7 完成，P1 实施中 |
 | `frp-server-list-merge-plan.md` | FRP 服务端列表并入「公网服务端」页（方案 A，四步） | 步 1/2 已完成（v1.2.6）；步 3 文案收尾、步 4 死样式清理未做 |
+| `agent-standalone-project-analysis.md` | havline-agent 独立项目化分析：现状盘点、耦合面、同类项目对标、三种定位方案、能力扩展与安全模型 | 方向讨论稿，待决策 |
+| `agent-server-automation-vision.md` | havline-agent 场景化蓝图：网站部署、软件安装、网络运维等场景地图，Resource/Action/Recipe 三层能力模型、Scope Guard 与落地路线 | 方向讨论稿，待决策 |
 | `agent-capability-plan.md` | havline-agent 能力扩展（P0/P1/P2/P3） | 已实施（agent 0.11.0）；P3 三项不做 |
 | `agent-view-design.md` | 公网 Agent 页设计方案（Pass 1/2 流程） | 部分过期：顶部下拉已被左列表 + 右详情取代 |
 | `agent-view-design-v2.md` | 公网 Agent 页设计方案 v2 | 部分过期：同上 |

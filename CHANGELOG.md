@@ -2,11 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [v1.9.2] - 2026-10-07
 
 ### 新增
 
 - **updater Token 零配置且无额外容器**：主程序首次启动时在共享卷中自动生成 `/run/havline-updater/updater.token`，sidecar 等待并读取同一文件；主服务与 sidecar 支持 `HAVLINE_UPDATER_TOKEN_FILE`，旧部署仍可用 `HAVLINE_UPDATER_TOKEN` 覆盖
+- **Nginx 启停控制**：「公网服务端」页的 Nginx 卡片新增启动 / 停止按钮，停止前有二次确认并提示影响范围；Agent 提升到 `0.15.2`，新增 `POST /api/v1/nginx/action` 端点（start / stop / restart），走 nginx 自身信号而非 systemctl，兼容宝塔、源码编译等没有 systemd unit 的安装方式；两个内嵌 Agent 二进制已重编
 
 ### 修复
 
@@ -15,11 +16,13 @@ All notable changes to this project will be documented in this file.
 - **frps 与 Nginx 端口冲突防呆**：frps `vhostHTTPPort` / `vhostHTTPSPort` 禁止使用 `80/443`，服务端保存和 `frps.toml` 生成阶段都会提示改用 `8080/8443`，避免 VPS 上 Nginx 已占用 80/443 时 frps 启动即退出
 - **frps 启动前清理旧进程**：systemd 服务未运行但检测到 systemd 之外的手工 `frps` 进程时，启动/重启前先停止旧进程，避免端口占用导致 systemd 反复 auto-restart
 - **公网反代隧道提示修正**：frps 管理接口可访问但没有任何注册代理时，不再显示 `frps 已注册代理: ；`，改为提示 frpc 未登录或尚未注册该域名
+- **旧服务端配置的布尔默认值补齐**：`config_json` 缺少 `tcp_mux` / `login_fail_exit` 键时（016 迁移给已有服务端补的默认值是 `{}`）按表单默认值补成 `true`，不再静默生成 `transport.tcpMux = false`（每条新连接都要重建 TCP+TLS，首次建连明显变慢）与 `loginFailExit = false`；显式配置为 `false` 的仍然保留
 
 ### 测试
 
 - 新增 Agent 操作结果解析、Agent 版本解析、frps vhost 端口冲突校验和隧道提示文案测试
 - 新增 updater Token 环境变量优先级、共享文件生成与解析、等待超时、缺失文件和空文件测试
+- 新增服务端选项缺省 `tcp_mux` / `login_fail_exit` 键时的默认值兜底测试
 - `go test ./...`、`npm run typecheck` 通过
 
 ### 变更

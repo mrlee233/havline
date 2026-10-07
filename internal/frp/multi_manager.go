@@ -102,3 +102,11 @@ func (s *Service) waitForManagers(ctx context.Context, action func(*Manager) err
 	}
 	return nil
 }
+
+func sshSettingsChanged(existing, updated Server, secretUpdated bool) bool {
+	return existing.SSHHost != updated.SSHHost ||
+		existing.SSHPort != updated.SSHPort ||
+		existing.SSHUser != updated.SSHUser ||
+		existing.SSHAuth != updated.SSHAuth ||
+		secretUpdated
+}

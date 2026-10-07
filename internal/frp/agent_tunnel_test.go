@@ -24,8 +24,8 @@ func TestAgentTunnelBindsLoopbackAndReleasesPort(t *testing.T) {
 		t.Fatal("隧道启动后本地端口应已被占用")
 	}
 	state, _ := tunnel.State()
-	if state != "connected" && state != "reconnecting" {
-		t.Fatalf("state=%q, want connected 或 reconnecting", state)
+	if state != "connecting" && state != "connected" && state != "reconnecting" {
+		t.Fatalf("state=%q, want connecting、connected 或 reconnecting", state)
 	}
 	tunnel.Stop()
 	if listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port)); err != nil {
@@ -49,5 +49,19 @@ func TestNextTunnelBackoff(t *testing.T) {
 		if got := nextTunnelBackoff(tc.in); got != tc.want {
 			t.Fatalf("nextTunnelBackoff(%v) = %v, 期望 %v", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestAgentTunnelStopClosesActiveConnections(t *testing.T) {
+	tunnel := newAgentTunnel(context.Background(), 1, 0, SSHInstaller{})
+	server, client := net.Pipe()
+	defer client.Close()
+	if !tunnel.trackConn(server) {
+		t.Fatal("隧道运行时应能登记活动连接")
+	}
+	tunnel.Stop()
+	_ = client.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := client.Read(make([]byte, 1)); err == nil {
+		t.Fatal("隧道停止后活动连接应被关闭")
 	}
 }

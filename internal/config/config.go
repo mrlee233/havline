@@ -12,6 +12,8 @@ import (
 
 type Config struct {
 	ListenAddr            string
+	GatewaySocket         string
+	GatewayPrefix         string
 	DataDir               string
 	SessionSecret         string
 	NginxBin              string
@@ -33,6 +35,8 @@ func Load() Config {
 	}
 	return Config{
 		ListenAddr:            envOr("HAVLINE_LISTEN", ":6893"),
+		GatewaySocket:         envOr("HAVLINE_GATEWAY_SOCKET", ""),
+		GatewayPrefix:         envOr("HAVLINE_GATEWAY_PREFIX", ""),
 		DataDir:               dataDir,
 		SessionSecret:         envOr("HAVLINE_SESSION_SECRET", ""),
 		NginxBin:              envOr("HAVLINE_NGINX_BIN", "nginx"),
@@ -106,6 +110,12 @@ func (c Config) CertsDir() string {
 // SSHKnownHostsPath 是 SSH 主机密钥的 TOFU 记录文件（首次连接记录指纹，之后必须一致）。
 func (c Config) SSHKnownHostsPath() string {
 	return filepath.Join(c.DataDir, "ssh_known_hosts")
+}
+
+// SSHKnownHostsPathForServer 为每台 FRP 服务端提供独立的 known_hosts，
+// 避免一台 VPS 的主机密钥记录影响另一台服务器的 SSH 连接。
+func (c Config) SSHKnownHostsPathForServer(serverID int64) string {
+	return filepath.Join(c.DataDir, "ssh_known_hosts", fmt.Sprintf("server-%d", serverID))
 }
 
 func (c Config) ErrorsDir() string {

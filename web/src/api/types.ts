@@ -345,62 +345,6 @@ export interface DDNSTestPayload {
   api_secret?: string
 }
 
-export interface FRPStatus {
-  enabled: boolean
-  connected: boolean
-  message: string
-  last_error?: string
-  server_endpoint?: string
-  connected_at?: string
-  uptime_seconds?: number
-  client_version?: string
-  http_gateway_enabled?: boolean
-  https_gateway_enabled?: boolean
-  synced_domain_count?: number
-}
-
-export interface FRPConfig {
-  enabled: boolean
-  server_addr: string
-  server_port: number
-  auth_token: string
-  has_auth_token: boolean
-  tls_enabled: boolean
-  custom_domains: string[]
-}
-
-export interface FRPResponse {
-  enabled: boolean
-  server_addr: string
-  server_port: number
-  auth_token: string
-  has_auth_token: boolean
-  tls_enabled: boolean
-  custom_domains: string[]
-  status: FRPStatus
-  frps_config: string
-  nginx_http_port: number
-  nginx_https_port: number
-}
-
-export interface FRPSaveResponse {
-  message: string
-  config: FRPConfig
-  status: FRPStatus
-  frps_config: string
-  nginx_http_port: number
-  nginx_https_port: number
-}
-
-export interface FRPSavePayload {
-  enabled: boolean
-  server_addr: string
-  server_port: number
-  auth_token?: string
-  tls_enabled: boolean
-  custom_domains: string[]
-}
-
 // ===== FRP 多服务端模块（/api/frpmulti，0.1.25 核心迁移）=====
 
 export interface FrpServer {
@@ -796,6 +740,14 @@ export interface FrpAgentNginxReload {
   checked_at: string
 }
 
+export interface FrpAgentNginxAction {
+  ok: boolean
+  action: string
+  nginx_running?: boolean
+  nginx_ok?: boolean
+  nginx_error?: string
+}
+
 export interface FrpAgentMetrics {
   cpu_percent: number
   mem_used_bytes: number
@@ -866,6 +818,11 @@ export interface FrpAgentRouteDetail {
 }
 
 export interface FrpAgentStatus {
+  configured?: boolean
+  mgmt_enabled?: boolean
+  token_mismatch?: boolean
+  available?: boolean
+  message?: string
   agent_version?: string
   listen_addr?: string
   listen_scope?: string

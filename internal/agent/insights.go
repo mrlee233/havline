@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -307,6 +308,83 @@ func (s *Server) nginxReload(w http.ResponseWriter, _ *http.Request) {
 	payload["ok"] = true
 	payload["reload_ok"] = true
 	writeJSON(w, http.StatusOK, payload)
+}
+
+// nginxAction 启动 / 停止 / 重启 VPS 上的 Nginx。
+//
+// 不走 systemctl：宝塔、源码编译等安装方式没有 systemd unit，
+// 统一用 nginx 自身信号控制，与 reloadNginx 走同一条路径，行为一致可预期。
+func (s *Server) nginxAction(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if req.Action != "start" && req.Action != "stop" && req.Action != "restart" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action 需为 start/stop/restart"})
+		return
+	}
+	nginx := s.nginxPath()
+	if nginx == "" {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "未找到 nginx 可执行文件：请先安装 Nginx，或用 HAVLINE_AGENT_NGINX_BIN 指定路径"})
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := runNginxAction(nginx, req.Action); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	// 启停异步生效，留出短暂窗口再重新探测，避免页面读到旧状态
+	time.Sleep(600 * time.Millisecond)
+	s.invalidateNginxProbe()
+	probe := s.probeNginx()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":            true,
+		"action":        req.Action,
+		"nginx_running": probe.Running,
+		"nginx_ok":      probe.OK,
+		"nginx_error":   probe.Error,
+	})
+}
+
+// runNginxAction 执行一次启停；已经是目标状态时按幂等处理，不报错。
+func runNginxAction(nginx, action string) error {
+	running := nginxRunning()
+	switch action {
+	case "start":
+		if running {
+			return nil
+		}
+		return startNginx(nginx)
+	case "stop":
+		if !running {
+			return nil
+		}
+		return stopNginx(nginx)
+	default: // restart
+		if running {
+			_ = stopNginx(nginx)
+			time.Sleep(500 * time.Millisecond)
+		}
+		return startNginx(nginx)
+	}
+}
+
+func startNginx(nginx string) error {
+	if out, err := exec.Command(nginx).CombinedOutput(); err != nil {
+		return fmt.Errorf("启动 Nginx 失败：%s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func stopNginx(nginx string) error {
+	if out, err := exec.Command(nginx, "-s", "stop").CombinedOutput(); err != nil {
+		return fmt.Errorf("停止 Nginx 失败：%s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // frpsConfig 回读 VPS 上的 frps.toml，供应用侧与「即将下发的内容」比对，检出被手工修改的情况

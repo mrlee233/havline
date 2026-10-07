@@ -277,7 +277,12 @@ func (h *FRPMultiHandler) AgentInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
 		return
 	}
-	server, err := h.svc.AgentInstall(r.Context(), id)
+	var server frp.Server
+	if r.URL.Query().Get("trust_new_host_key") == "true" {
+		server, err = h.svc.AgentInstallTrustHostKey(r.Context(), id)
+	} else {
+		server, err = h.svc.AgentInstall(r.Context(), id)
+	}
 	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return
@@ -789,6 +794,28 @@ func (h *FRPMultiHandler) AgentNginxReload(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	result, err := h.svc.AgentNginxReload(r.Context(), id)
+	if err != nil {
+		writeError(r, w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// AgentNginxAction 启动 / 停止 / 重启 VPS 上的 Nginx（需 agent ≥ 0.15.2）
+func (h *FRPMultiHandler) AgentNginxAction(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(r, w, http.StatusBadRequest, "FRP 服务端 ID 无效")
+		return
+	}
+	var body struct {
+		Action string `json:"action"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(r, w, http.StatusBadRequest, "请求格式无效")
+		return
+	}
+	result, err := h.svc.AgentNginxAction(r.Context(), id, body.Action)
 	if err != nil {
 		writeError(r, w, http.StatusBadGateway, err.Error())
 		return

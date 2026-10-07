@@ -219,8 +219,14 @@ const agentMinVersionInsights = "0.11.0"
 // agentMinVersionRouteVersions 是域名 vhost 版本列表 / 对比 / 回滚端点要求的最低 agent 版本
 const agentMinVersionRouteVersions = "0.12.2"
 
+// agentMinVersionNginxAction 是 Nginx 启停（start / stop / restart）端点要求的最低 agent 版本
+const agentMinVersionNginxAction = "0.15.2"
+
 // ErrAgentEndpointMissing 表示 VPS 上的 agent 版本过旧、没有该端点（HTTP 404/405）
 var ErrAgentEndpointMissing = errors.New("VPS 上的 agent 版本过低，不支持该接口")
+
+// ErrAgentTokenMismatch 表示 Havline 保存的 Token 与 VPS 上 Agent 配置不一致。
+var ErrAgentTokenMismatch = errors.New("Agent Token 不匹配，请点击「升级 Agent」重新同步")
 
 // statusError 保留 HTTP 状态码，便于上层区分「端点不存在」与真实错误
 type statusError struct {
@@ -230,6 +236,14 @@ type statusError struct {
 
 func (e *statusError) Error() string {
 	return fmt.Sprintf("agent 返回 HTTP %d: %s", e.code, e.body)
+}
+
+func wrapAgentAuth(err error) error {
+	var statusErr *statusError
+	if errors.As(err, &statusErr) && statusErr.code == http.StatusUnauthorized {
+		return fmt.Errorf("%w: %s", ErrAgentTokenMismatch, statusErr.body)
+	}
+	return err
 }
 
 // wrapEndpointMissing 把「端点不存在」统一成带升级提示的错误（按端点给出最低版本），其它错误原样返回
@@ -276,6 +290,16 @@ func (c *AgentClient) NginxReload(ctx context.Context) (map[string]any, error) {
 	var result map[string]any
 	if err := c.request(ctx, http.MethodPost, "/api/v1/nginx/reload", nil, &result); err != nil {
 		return nil, wrapEndpointMissing(err, agentMinVersionInsights)
+	}
+	return result, nil
+}
+
+// NginxAction 启动 / 停止 / 重启 VPS 上的 Nginx（需 agent ≥ 0.15.2）
+func (c *AgentClient) NginxAction(ctx context.Context, action string) (map[string]any, error) {
+	var result map[string]any
+	payload := map[string]string{"action": action}
+	if err := c.request(ctx, http.MethodPost, "/api/v1/nginx/action", payload, &result); err != nil {
+		return nil, wrapEndpointMissing(err, agentMinVersionNginxAction)
 	}
 	return result, nil
 }

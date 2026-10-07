@@ -57,8 +57,8 @@ func (i SSHInstaller) hostKeyCallback() (ssh.HostKeyCallback, error) {
 			if len(keyErr.Want) == 0 {
 				return appendKnownHost(path, remote, key)
 			}
-			return fmt.Errorf("SSH 主机密钥与首次记录不一致（%s 期望 %s，实际 %s）；若确认 VPS 重装过系统，请删除 %s 后重连",
-				remote.String(), ssh.FingerprintSHA256(keyErr.Want[0].Key), ssh.FingerprintSHA256(key), path)
+			return fmt.Errorf("SSH 主机密钥与首次记录不一致（%s 期望 %s，实际 %s）；若确认 VPS 重装过系统，请重新点击「安装 Agent」并选择「信任并重装」",
+				remote.String(), ssh.FingerprintSHA256(keyErr.Want[0].Key), ssh.FingerprintSHA256(key))
 		}
 		return fmt.Errorf("SSH 主机密钥校验失败: %w", err)
 	}, nil

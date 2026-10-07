@@ -59,6 +59,9 @@
 
 ## 4. 首次部署
 
+`docker-compose.yml` 和 `docker-compose.hub.yml` 会由主程序在共享卷中自动生成 updater Token 文件，sidecar 等待并读取该文件。`HAVLINE_SESSION_SECRET` 可以留空，由应用生成并写入数据目录；已有数据时必须沿用原值。
+
+
 一键升级依赖 `havline-updater` 已经运行。
 
 旧版本升级到 v1.3.0 时，需要先手动执行一次：
@@ -85,6 +88,11 @@ docker compose -f docker-compose.hub.yml up -d --build
 
 | 变量 | 说明 |
 | --- | --- |
+| `HAVLINE_UPDATER_TOKEN` | 可选覆盖值；显式设置时优先于 Token 文件 |
+| `HAVLINE_UPDATER_TOKEN_FILE` | 主程序与 sidecar 共享的 Token 文件，默认 `/run/havline-updater/updater.token` |
+| `HAVLINE_UPDATER_SOCKET` | sidecar 监听的 Unix Socket |
+
+| 变量 | 说明 |
 | `HAVLINE_UPDATER_SOCKET` | sidecar 监听的 Unix Socket |
 | `HAVLINE_UPDATE_PROJECT_DIR` | Compose 项目目录，容器内为 `/workspace` |
 | `HAVLINE_UPDATE_COMPOSE_FILE` | 只允许 `docker-compose.yml`、`docker-compose.hub.yml`、`docker-compose.host.yml` |
@@ -193,6 +201,8 @@ docker compose -f /实际/的/Compose/目录/docker-compose.hub.yml up -d --buil
 说明 Compose 标签只返回了容器内路径。更新后的 updater 会优先从 `project.config_files` 标签推导宿主机目录，并忽略 `/workspace` 这类容器路径。若标签仍无法提供真实宿主机路径，应检查部署工具的 Compose 标签是否完整；正常情况下无需手工设置目录。
 
 ### `docker-compose.hub.yml` 模式无法读取远端版本
+
+当前 hub 发布源固定为 `https://jayhub.top/mrlee/Havline.git` 的 `main` 分支；检查 Compose 文件中的 `build.context`、`HAVLINE_UPDATE_REPO` 和 `HAVLINE_UPDATE_BRANCH` 三者是否一致。
 
 检查 sidecar 容器内是否可以访问 Git 仓库：
 

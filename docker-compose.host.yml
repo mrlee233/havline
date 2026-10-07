@@ -1,3 +1,4 @@
+# 源码仓库：https://github.com/mrlee233/havline.git（main 分支）
 # 飞牛 NAS 等已占用 80/443 的环境：使用 host 网络 + 高位默认反代端口
 # 本地项目：直接用源码构建镜像，不从 Docker Hub 拉取
 name: havline

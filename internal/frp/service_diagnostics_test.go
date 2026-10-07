@@ -62,3 +62,45 @@ func TestSummarizeServerSamplesUsesLatestStatus(t *testing.T) {
 		t.Fatalf("unexpected last error: %s", detail.LastError)
 	}
 }
+
+func TestSSHSettingsChanged(t *testing.T) {
+	base := Server{SSHHost: "vps-a.example.com", SSHPort: 22, SSHUser: "root", SSHAuth: "key"}
+	if sshSettingsChanged(base, base, false) {
+		t.Fatal("相同 SSH 配置不应判定为变化")
+	}
+	cases := []Server{
+		{SSHHost: "vps-b.example.com", SSHPort: 22, SSHUser: "root", SSHAuth: "key"},
+		{SSHHost: "vps-a.example.com", SSHPort: 2222, SSHUser: "root", SSHAuth: "key"},
+		{SSHHost: "vps-a.example.com", SSHPort: 22, SSHUser: "admin", SSHAuth: "key"},
+		{SSHHost: "vps-a.example.com", SSHPort: 22, SSHUser: "root", SSHAuth: "password"},
+	}
+	for _, updated := range cases {
+		if !sshSettingsChanged(base, updated, false) {
+			t.Fatalf("SSH 配置变化未识别: %+v", updated)
+		}
+	}
+	if !sshSettingsChanged(base, base, true) {
+		t.Fatal("SSH 凭据更新应判定为变化")
+	}
+}
+
+func TestIsLoopbackAgentURL(t *testing.T) {
+	for _, raw := range []string{
+		"http://127.0.0.1:17700",
+		"http://localhost:17700",
+		"https://[::1]:17700",
+	} {
+		if !isLoopbackAgentURL(raw) {
+			t.Fatalf("%q 应识别为回环地址", raw)
+		}
+	}
+	for _, raw := range []string{
+		"http://38.95.74.87:7700",
+		"https://agent.example.com",
+		"",
+	} {
+		if isLoopbackAgentURL(raw) {
+			t.Fatalf("%q 不应识别为回环地址", raw)
+		}
+	}
+}

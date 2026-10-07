@@ -31,7 +31,7 @@ import (
 	"github.com/havline/havline/internal/sysinfo"
 )
 
-const AgentVersion = "0.15.1"
+const AgentVersion = "0.15.2"
 
 // Config 是 havline-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -224,6 +224,7 @@ func agentRoutes(s *Server) []agentRoute {
 		{http.MethodGet, "/api/v1/frps/config", s.frpsConfig},
 		{http.MethodGet, "/api/v1/certs", s.certs},
 		{http.MethodPost, "/api/v1/nginx/reload", s.nginxReload},
+		{http.MethodPost, "/api/v1/nginx/action", s.nginxAction},
 	}
 }
 
