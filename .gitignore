@@ -13,6 +13,8 @@ dist/
 .cursor/
 .playwright-cli/
 output/
+# Windows 本地构建产物不入库（历史上误提交过 havline-agent.exe，10MB 级二进制）
+*.exe
 web/public/111favicon.png
 web/src/assets/brand/logo00.png
 # scripts/ 下的本地辅助脚本不入库，但随仓库分发的 agent 安装脚本需要跟踪

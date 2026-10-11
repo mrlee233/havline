@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mrlee233/havline/releases"><img src="https://img.shields.io/badge/version-1.9.0-22c55e?style=flat-square" alt="发布版本" /></a>
+  <a href="https://github.com/mrlee233/havline/releases"><img src="https://img.shields.io/badge/version-1.9.2-22c55e?style=flat-square" alt="发布版本" /></a>
   <img src="https://img.shields.io/badge/目标平台-飞牛_fnOS-22c55e?style=flat-square" alt="飞牛 fnOS" />
   <img src="https://img.shields.io/badge/其他环境-未测试-94a3b8?style=flat-square" alt="其他环境未测试" />
   <img src="https://img.shields.io/badge/Go-1.23-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" />
@@ -288,7 +288,7 @@ Havline 提供两种飞牛应用形态，均支持统一网关入口 `/app/havli
 ### Docker 应用（离线镜像包）
 
 - 独立仓库：<https://github.com/mrlee233/havline>
-- 安装包：`havline-1.9.0.fpk`
+- 安装包：`havline-1.9.2.fpk`
 - 包内包含 amd64 / arm64 离线镜像，安装时执行 `docker load`
 - Compose 使用本地镜像并设置 `pull_policy: never`，不依赖外部 Registry
 - 管理界面通过统一网关 `/app/havline` 访问
