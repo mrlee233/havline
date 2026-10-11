@@ -56,7 +56,6 @@ Havline 基于开源项目 [O96u/Fonu](https://github.com/O96u/Fonu) **1.0.2** �
 | **Cloudflare Tunnel** | cloudflared 按需下载、Account/API Token 预检、隧道与路由管理、DNS 同步、健康巡检和漂移修复 |
 | **一键升级** | Compose + updater sidecar，支持构建/重建/健康检查，并在部分失败场景下尝试回滚 |
 | **飞牛交付** | 提供 Docker 离线镜像包与 Native 应用两种形态，支持统一网关 `/app/havline` 接入 |
-| **文档体系** | 增加图文操作手册、部署/升级/迁移文档、飞牛打包方案和 Cloudflare/FRP 专题方案 |
 
 ## 技术栈
 
