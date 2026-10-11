@@ -58,63 +58,6 @@ Havline 基于开源项目 [O96u/Fonu](https://github.com/O96u/Fonu) **1.0.2** �
 | **飞牛交付** | 提供 Docker 离线镜像包与 Native 应用两种形态，支持统一网关 `/app/havline` 接入 |
 | **文档体系** | 增加图文操作手册、部署/升级/迁移文档、飞牛打包方案和 Cloudflare/FRP 专题方案 |
 
-## 界面展示
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <b>仪表盘</b><br>
-      <a href="docs/screenshots/guide-dashboard.png"><img src="docs/screenshots/guide-dashboard.png" alt="仪表盘" width="100%" /></a>
-    </td>
-    <td align="center" width="50%">
-      <b>反向代理</b><br>
-      <a href="docs/screenshots/guide-proxy.png"><img src="docs/screenshots/guide-proxy.png" alt="反向代理" width="100%" /></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <b>新建反向代理规则</b><br>
-      <a href="docs/screenshots/guide-dialog-proxy-create.png"><img src="docs/screenshots/guide-dialog-proxy-create.png" alt="新建反向代理规则" width="100%" /></a>
-    </td>
-    <td align="center">
-      <b>DDNS 添加任务</b><br>
-      <a href="docs/screenshots/guide-dialog-ddns-add.png"><img src="docs/screenshots/guide-dialog-ddns-add.png" alt="DDNS 添加任务" width="100%" /></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <b>证书申请</b><br>
-      <a href="docs/screenshots/guide-dialog-cert-apply.png"><img src="docs/screenshots/guide-dialog-cert-apply.png" alt="证书申请" width="100%" /></a>
-    </td>
-    <td align="center">
-      <b>内网穿透</b><br>
-      <a href="docs/screenshots/guide-frp.png"><img src="docs/screenshots/guide-frp.png" alt="内网穿透" width="100%" /></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <b>公网服务端</b><br>
-      <a href="docs/screenshots/guide-agent.png"><img src="docs/screenshots/guide-agent.png" alt="公网服务端" width="100%" /></a>
-    </td>
-    <td align="center">
-      <b>Cloudflare 隧道</b><br>
-      <a href="docs/screenshots/guide-cloudflare.png"><img src="docs/screenshots/guide-cloudflare.png" alt="Cloudflare 隧道" width="100%" /></a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <b>Cloudflare 新建隧道</b><br>
-      <a href="docs/screenshots/guide-dialog-cf-create.png"><img src="docs/screenshots/guide-dialog-cf-create.png" alt="Cloudflare 新建隧道" width="100%" /></a>
-    </td>
-    <td align="center">
-      <b>系统设置</b><br>
-      <a href="docs/screenshots/guide-settings.png"><img src="docs/screenshots/guide-settings.png" alt="系统设置" width="100%" /></a>
-    </td>
-  </tr>
-</table>
-
-更多页面、弹窗和逐步操作说明见 [`docs/user-guide.md`](docs/user-guide.md)。
-
 ## 技术栈
 
 | 层级         | 技术                                                                   |
@@ -147,7 +90,6 @@ Havline 基于开源项目 [O96u/Fonu](https://github.com/O96u/Fonu) **1.0.2** �
 | `internal/backup`、`internal/notify`、`internal/monitor`、`internal/metrics` | 备份恢复、通知渠道、监控采集和指标导出 |
 | `web/src` | Vue 3 前端，包含 API 客户端、组合式函数、组件、路由、样式和页面视图 |
 | `migrations` | SQLite 数据库迁移 |
-| `docs` | 项目方案、部署、升级、操作手册和飞牛应用文档 |
 | `docker-compose*.yml` | Host、Bridge 和单文件 Git 构建部署编排 |
 
 ## 部署
