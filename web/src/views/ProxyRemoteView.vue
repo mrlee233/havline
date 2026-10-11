@@ -61,8 +61,18 @@
       <!-- 数据读取失败：必须可见（原先 loadErrorMsg 写了但从未渲染） -->
       <n-alert v-if="loadErrorMsg" type="error" :bordered="false" class="page-alert">{{ loadErrorMsg }}</n-alert>
 
+      <!-- frps 回源端口 80/443：VPS 上由 frps 直接对外，公网反代没有位置（也不需要自动部署） -->
+      <n-alert v-if="publicProxyInapplicable" type="info" :bordered="false" class="page-alert">
+        <div class="alert-body__text">
+          <strong>该服务端的 frps 回源端口是 {{ privilegedVhostPorts.join(' / ') }}，公网反代不适用</strong>
+          <span>80/443 已由 frps 直接对外使用，VPS 上没有 Nginx 的位置：域名访问走 FRP 隧道直达 NAS，不需要再部署 Nginx 反代，本页也不会自动下发任何路由。</span>
+          <span>如需使用公网反代，请到「公网服务端」页把回源端口改回 8080/8443，再回本页部署。</span>
+          <span>若这台 VPS 上还留着以前部署的 Nginx 路由，需先把回源端口改回 8080/8443，才能在本页移除。</span>
+        </div>
+      </n-alert>
+
       <!-- 部署漂移：库里的期望与 VPS 上的实际不一致时才出现（P0-2） -->
-      <n-alert v-if="driftItems.length > 0" type="warning" :bordered="false" class="page-alert">
+      <n-alert v-if="driftItems.length > 0 && !publicProxyInapplicable" type="warning" :bordered="false" class="page-alert">
         <div class="alert-body">
           <div class="alert-body__text">
             <strong>检测到 {{ driftItems.length }} 项部署漂移（{{ driftSummary }}）</strong>
@@ -81,7 +91,7 @@
       </n-alert>
 
       <!-- Nginx 前置条件：缺失 / 校验未通过 -->
-      <n-alert v-if="nginxBlocking" :type="nginxBlocking.type" :bordered="false" class="page-alert">
+      <n-alert v-if="nginxBlocking && !publicProxyInapplicable" :type="nginxBlocking.type" :bordered="false" class="page-alert">
         <div class="alert-body">
           <div class="alert-body__text">
             <strong>{{ nginxBlocking.title }}</strong>
@@ -100,7 +110,7 @@
       </n-alert>
 
       <!-- 入口行：agent / frps 生命周期在另一页 -->
-      <div class="entrance-row">
+      <div v-if="!publicProxyInapplicable" class="entrance-row">
         <span class="entrance-row__text">
           Agent 与 frps 的安装、升级、启停、配置下发在「公网服务端」页；本页只负责把规则发布到 Nginx
         </span>
@@ -108,7 +118,7 @@
       </div>
 
       <!-- ① 统计区 -->
-      <section class="stats-row" aria-label="反代概览">
+      <section v-if="!publicProxyInapplicable" class="stats-row" aria-label="反代概览">
         <div class="stat-card">
           <n-icon :component="LayersOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
           <div class="stat-card__value">{{ candidates.length }}</div>
@@ -136,7 +146,7 @@
       </section>
 
       <!-- ② 环境与 Nginx -->
-      <HavlineCard class="section-card nginx-card" title="Nginx（公网反代依赖）">
+      <HavlineCard v-if="!publicProxyInapplicable" class="section-card nginx-card" title="Nginx（公网反代依赖）">
         <div class="section-body">
           <div class="field-grid">
             <div><label>可用性</label><span class="field-tags"><StatusBadge :kind="nginxKind" :text="nginxText" /></span></div>
@@ -170,7 +180,7 @@
       </HavlineCard>
 
       <!-- ③ 规则台账 -->
-      <HavlineCard class="section-card" title="规则台账">
+      <HavlineCard v-if="!publicProxyInapplicable" class="section-card" title="规则台账">
         <div class="section-body">
           <p class="form-hint">穿透规则保存后不会自动改 VPS：点「部署反代」才会发布到 Nginx（自动推送证书并做回源自检）</p>
           <div v-if="candidates.length" class="route-table-wrap">
@@ -485,6 +495,18 @@ const rollingBack = ref(false)
 const server = computed(() => servers.value.find((item) => item.id === selectedId.value) ?? null)
 const agentStatusOk = computed(() => statusLoaded.value && agentStatus.value !== null)
 
+// frps 回源端口落在 80/443 时，VPS 上由 frps 直接对外，没有 Nginx 的位置：
+// 公网反代整体不适用，也不需要（更不应该）自动部署。
+const privilegedVhostPorts = computed<string[]>(() => {
+  const options = server.value?.options
+  if (!options) return []
+  const ports: string[] = []
+  if ((options.vhost_http_port || 8080) === 80) ports.push('80')
+  if ((options.vhost_https_port || 8443) === 443) ports.push('443')
+  return ports
+})
+const publicProxyInapplicable = computed(() => privilegedVhostPorts.value.length > 0)
+
 // 统计：已生效 / 待处理 / 健康通过 / 当前连接
 const deployedCount = computed(() => candidates.value.filter((item) => stateOf(item).state === 'loaded').length)
 const pendingCount = computed(() => candidates.value.length - deployedCount.value)
@@ -541,6 +563,16 @@ async function load() {
 async function refreshAll(options: { silent?: boolean } = { silent: true }) {
   const current = server.value
   if (!current) return
+  // 80/443 回源端口下公网反代不适用：清空台账，也不必再去问 agent 的路由/漂移/健康
+  if (publicProxyInapplicable.value) {
+    candidates.value = []
+    routeDetails.value = []
+    routeHealth.value = []
+    routeDrift.value = null
+    agentStatus.value = null
+    statusLoaded.value = false
+    return
+  }
   if (options.silent === false) manualRefreshing.value = true
   const failures: string[] = []
   const track = async <T>(label: string, fn: () => Promise<T>, assign: (value: T) => void) => {

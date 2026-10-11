@@ -492,7 +492,7 @@
           :show-icon="false"
           style="margin-bottom: 12px"
         >
-          80/443 通常由 VPS 上的 Nginx 占用，frps 不能再次监听；请改为 8080/8443，否则 frps 会因端口冲突启动失败。
+          80/443 通常由 VPS 上的 Nginx 占用。继续使用前请先停止占用该端口的服务，保存时会再次弹窗确认；端口仍被占用时 frps 会因冲突启动失败。若 VPS 上还要保留 Nginx，请改用 8080/8443。
         </n-alert>
         <div class="form-grid">
           <n-form-item label="HTTP 回源端口"><n-input-number v-model:value="serverForm.options.vhost_http_port" :min="1" :max="65535" placeholder="默认 8080" /></n-form-item>
@@ -1264,6 +1264,8 @@ const serverStartingId = ref<number | null>(null)
 const agentActionId = ref<number | null>(null)
 const measuringId = ref<number | null>(null)
 const savingServer = ref(false)
+// 80/443 回源端口的二次确认结果，按弹窗会话记录，避免每次保存都重复弹窗
+const confirmedPrivilegedVhost = ref('')
 
 const showServerModal = ref(false)
 
@@ -1356,7 +1358,7 @@ const serverHelpItems = computed(() => {
     { title: '连接调优', text: '心跳与 TCP 多路复用保持默认即可；网络不稳定时可加大超时，连接池可降低高并发时的建连延迟。' },
   ]
   if (serverFormTab.value === 'server') return [
-    { title: 'frps vhost 与域名反代', text: 'vhostHTTPPort/vhostHTTPSPort 是 Nginx 反代的回源端口，同时决定 subDomainHost、tcpmux 等域名入口；留空用默认 8080/8443，80/443 会与 VPS 上的 Nginx 冲突。修改后需「下发 frps 配置」并重启 frps，再重新部署各规则。' },
+    { title: 'frps vhost 与域名反代', text: 'vhostHTTPPort/vhostHTTPSPort 是 Nginx 反代的回源端口，同时决定 subDomainHost、tcpmux 等域名入口；留空用默认 8080/8443。80/443 通常与 VPS 上的 Nginx 冲突，确需使用时保存前会二次确认，请先释放该端口。修改后需「下发 frps 配置」并重启 frps，再重新部署各规则。' },
     { title: 'TCP/UDP 端口分配', text: 'allowPorts 只限制 tcp/udp 规则使用的 remotePort，不控制 vhost 回源端口；实际端口仍需在云安全组与 VPS 主机防火墙放行。' },
     { title: 'frps 管理接口', text: 'frps 开启 webServer（dashboard）后填写，Havline 借此拉取穿透规则的实时连接与流量；地址与端口需成对填写，与连接认证无关。' },
   ]
@@ -1463,6 +1465,7 @@ function resetServerForm() {
 function openServerModal(server?: FrpServer) {
   editingServer.value = server ?? null
   serverFormTab.value = 'basic'
+  confirmedPrivilegedVhost.value = ''
   resetServerForm()
   if (server) {
     Object.assign(serverForm, { ...server, token: '', oidc_client_secret: '', agent_token: '', ssh_secret: '' })
@@ -1671,10 +1674,7 @@ function validateServerForm(): string {
     if (!editingServer.value && !form.oidc_client_secret.trim()) return 'OIDC 需填写客户端密钥'
   }
 
-  if (form.options.vhost_http_port === 80 || form.options.vhost_https_port === 443) {
-    return 'frps 回源端口不能使用 80/443（通常由 VPS 上的 Nginx 占用），请改为 8080/8443'
-  }
-
+  // 80/443 不再硬拦：由 saveServer 弹窗二次确认，后端要求同一次请求带上确认标记
   const ports: Array<[string, number]> = [
     ['控制端口', form.server_port],
     ['HTTP 回源端口', form.options.vhost_http_port || 8080],
@@ -1708,11 +1708,40 @@ function validateServerForm(): string {
   return ''
 }
 
+// 当前表单里用到的 80/443 回源端口；空数组表示无需确认。
+function privilegedVhostPorts(): number[] {
+  const ports: number[] = []
+  if (serverForm.options.vhost_http_port === 80) ports.push(80)
+  if (serverForm.options.vhost_https_port === 443) ports.push(443)
+  return ports
+}
+
+// 80/443 通常已被 VPS 上的 Nginx 占用，放行前必须让用户确认自己已经释放了端口。
+function confirmPrivilegedVhostPorts(ports: number[]): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: `确认使用 ${ports.join(' / ')} 作为 frps 回源端口`,
+      content: `${ports.join(' / ')} 通常已被 VPS 上的 Nginx 占用。继续前请先停止占用该端口的服务，否则 frps 会因端口冲突启动失败，隧道和公网反代都会不可用。保存后需在服务端详情「下发 frps 配置」并重启 frps 才生效。`,
+      positiveText: '端口已释放，继续保存',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    })
+  })
+}
+
 async function saveServer() {
   const invalid = validateServerForm()
   if (invalid) {
     message.error(invalid)
     return
+  }
+  const privileged = privilegedVhostPorts()
+  if (privileged.length > 0 && confirmedPrivilegedVhost.value !== privileged.join(',')) {
+    const confirmed = await confirmPrivilegedVhostPorts(privileged)
+    if (!confirmed) return
+    confirmedPrivilegedVhost.value = privileged.join(',')
   }
   if (serverForm.mgmt_enabled && !serverForm.agent_url.trim()) {
     message.warning('未填写 Agent 地址：保存后可在本页通过 SSH 安装 Agent 自动回填')
@@ -1730,6 +1759,7 @@ async function saveServer() {
       tls_certificate: serverForm.tls_certificate, tls_key: serverForm.tls_key, tls_trusted_ca: serverForm.tls_trusted_ca,
       clear_tls_certificate: serverForm.clear_tls_certificate, clear_tls_key: serverForm.clear_tls_key,
       clear_tls_trusted_ca: serverForm.clear_tls_trusted_ca,
+      allow_privileged_vhost_ports: privileged.length > 0,
     }
     if (editingServer.value) await api.updateFrpServer(editingServer.value.id, payload)
     else await api.createFrpServer(payload)

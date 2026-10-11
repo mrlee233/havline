@@ -50,7 +50,9 @@ type frpServerRequest struct {
 	TLSTrustedCA           string            `json:"tls_trusted_ca"`
 	ClearTLSCertificate    bool              `json:"clear_tls_certificate"`
 	ClearTLSKey            bool              `json:"clear_tls_key"`
-	ClearTLSTrustedCA      bool              `json:"clear_tls_trusted_ca"`
+	// 二次确认标记：vhost 回源端口填 80/443 时前端必须带上
+	AllowPrivilegedVhostPorts bool `json:"allow_privileged_vhost_ports"`
+	ClearTLSTrustedCA         bool `json:"clear_tls_trusted_ca"`
 }
 
 type frpProxyRequest struct {
@@ -1061,6 +1063,7 @@ func (request frpServerRequest) serverInput() frp.ServerInput {
 		DashboardPassword: request.DashboardPassword, ClearDashboardPassword: request.ClearDashboardPassword,
 		TLSCertificate: request.TLSCertificate, TLSKey: request.TLSKey, TLSTrustedCA: request.TLSTrustedCA,
 		ClearTLSCertificate: request.ClearTLSCertificate, ClearTLSKey: request.ClearTLSKey, ClearTLSTrustedCA: request.ClearTLSTrustedCA,
+		AllowPrivilegedVhostPorts: request.AllowPrivilegedVhostPorts,
 	}
 }
 

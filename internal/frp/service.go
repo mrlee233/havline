@@ -1502,6 +1502,12 @@ func (s *Service) PushFRPSConfigToAgent(ctx context.Context, serverID int64) err
 	return client.PushFRPSConfig(ctx, content)
 }
 
+// errPrivilegedVhostNoPublicProxy 说明：frps 回源端口落在 80/443 时，VPS 上由 frps 直接对外，
+// 没有 Nginx 的位置，公网反代（路由下发）整体不适用。
+func errPrivilegedVhostNoPublicProxy() error {
+	return fmt.Errorf("该服务端的 frps 回源端口为 80/443：VPS 上由 frps 直接对外，公网反代（Nginx）不适用也无需部署；如需公网反代，请到「公网服务端」页把回源端口改回 8080/8443")
+}
+
 // agentUpstreamFor 返回该规则反代时的回源地址（frps vhost 端口），端口来自服务端表单自定义，
 // 未配置时用默认 8080/8443，与 frps.toml 生成器同源。
 func (s *Service) agentUpstreamFor(ctx context.Context, proxy Proxy) (string, error) {
@@ -1840,6 +1846,14 @@ func (s *Service) DeployAgentRoute(ctx context.Context, proxyID int64) error {
 	if !proxy.Enabled || (proxy.Type != "http" && proxy.Type != "https") || len(proxy.CustomDomains) == 0 {
 		return fmt.Errorf("只有启用的 HTTP/HTTPS 规则可以部署公网反代")
 	}
+	server, serr := s.store.GetServer(ctx, proxy.ServerID)
+	if serr != nil {
+		return serr
+	}
+	// 80/443 回源端口的服务端由 frps 直接对外，VPS 上没有 Nginx 的位置，直接拒绝部署
+	if privilegedVhostPorts(server.Options) {
+		return errPrivilegedVhostNoPublicProxy()
+	}
 	client, ok := s.agentClient(ctx, proxy.ServerID)
 	if !ok {
 		return fmt.Errorf("公网 agent 未配置或 Token 未保存")
@@ -1855,10 +1869,6 @@ func (s *Service) DeployAgentRoute(ctx context.Context, proxyID int64) error {
 		return uerr
 	}
 	// vhost 端口供 agent 回源自检用
-	server, serr := s.store.GetServer(ctx, proxy.ServerID)
-	if serr != nil {
-		return serr
-	}
 	vhostPort := server.Options.VhostHTTPPort
 	if vhostPort <= 0 {
 		vhostPort = 8080
@@ -2114,6 +2124,10 @@ func isLoopbackAgentURL(raw string) bool {
 
 func (s *Service) syncAgentRoute(ctx context.Context, proxy Proxy) {
 	if !proxy.Enabled || (proxy.Type != "http" && proxy.Type != "https") || len(proxy.CustomDomains) == 0 {
+		return
+	}
+	// 80/443 回源端口的服务端由 frps 直接对外：任何自动下发都要跳过
+	if server, err := s.store.GetServer(ctx, proxy.ServerID); err == nil && privilegedVhostPorts(server.Options) {
 		return
 	}
 	client, ok := s.agentClient(ctx, proxy.ServerID)

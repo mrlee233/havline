@@ -159,6 +159,14 @@ type RedeployAllResult struct {
 // RedeployAllRoutes 把该服务端上所有启用中的公网反代规则重新下发一遍。
 // 逐条执行、单条失败不中断（沿用 Reload 的隔离报错风格），返回逐条结果供前端汇总展示。
 func (s *Service) RedeployAllRoutes(ctx context.Context, serverID int64) (RedeployAllResult, error) {
+	server, err := s.store.GetServer(ctx, serverID)
+	if err != nil {
+		return RedeployAllResult{}, err
+	}
+	// 80/443 回源端口的服务端不做任何公网反代下发（含漂移一键修复）
+	if privilegedVhostPorts(server.Options) {
+		return RedeployAllResult{}, errPrivilegedVhostNoPublicProxy()
+	}
 	proxies, err := s.store.ListEnabledProxies(ctx, serverID)
 	if err != nil {
 		return RedeployAllResult{}, err

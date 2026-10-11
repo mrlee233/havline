@@ -30,8 +30,10 @@ func validateServerInput(in ServerInput) error {
 	if in.Options.VhostHTTPSPort != 0 && !validPort(in.Options.VhostHTTPSPort) {
 		return fmt.Errorf("frps HTTPS 回源端口无效")
 	}
-	if in.Options.VhostHTTPPort == 80 || in.Options.VhostHTTPSPort == 443 {
-		return fmt.Errorf("frps vhost 回源端口不能使用 80/443（通常由 VPS 上的 Nginx 占用）；请使用 8080/8443")
+	// 80/443 默认由 VPS 上的 Nginx 占用，frps 再监听会因端口冲突启动失败；
+	// 仍允许使用（例如 VPS 上不跑 Nginx、由 frps 直接对外），但必须由前端二次确认后带标记提交。
+	if (in.Options.VhostHTTPPort == 80 || in.Options.VhostHTTPSPort == 443) && !in.AllowPrivilegedVhostPorts {
+		return fmt.Errorf("frps vhost 回源端口 80/443 通常由 VPS 上的 Nginx 占用；确认该端口已释放后，请确认风险提示再保存")
 	}
 	if !validDashboardAddr(in.Options.DashboardAddr) {
 		return fmt.Errorf("frps 管理接口地址无效")
@@ -364,6 +366,21 @@ func normalizeProxyOptions(in ProxyOptions) ProxyOptions {
 
 func validPort(port int) bool {
 	return port > 0 && port <= 65535
+}
+
+// privilegedVhostPorts 判断 frps 回源端口是否落在 80/443（未配置时按默认 8080/8443 计）。
+// 这种拓扑下 VPS 上由 frps 直接对外，没有 Nginx 监听 80/443 的位置，
+// 公网反代（Nginx 路由下发）既不适用、也不应该部署。
+func privilegedVhostPorts(options ServerOptions) bool {
+	httpPort := options.VhostHTTPPort
+	if httpPort <= 0 {
+		httpPort = 8080
+	}
+	httpsPort := options.VhostHTTPSPort
+	if httpsPort <= 0 {
+		httpsPort = 8443
+	}
+	return httpPort == 80 || httpsPort == 443
 }
 
 func validHost(host string) bool {

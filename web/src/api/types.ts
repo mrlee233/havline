@@ -676,6 +676,8 @@ export interface FrpServerPayload {
   clear_tls_certificate?: boolean
   clear_tls_key?: boolean
   clear_tls_trusted_ca?: boolean
+  /** 二次确认标记：vhost 回源端口使用 80/443 时必须为 true（前端弹窗确认后置位）*/
+  allow_privileged_vhost_ports?: boolean
 }
 
 export interface FrpAgentRouteCandidate {

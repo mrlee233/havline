@@ -57,17 +57,22 @@ func TestValidateServerInputVhostPorts(t *testing.T) {
 		name    string
 		http    int
 		https   int
+		confirm bool
 		wantErr bool
 	}{
 		{name: "默认端口", http: 8080, https: 8443},
-		{name: "HTTP 80 与 Nginx 冲突", http: 80, https: 8443, wantErr: true},
-		{name: "HTTPS 443 与 Nginx 冲突", http: 8080, https: 443, wantErr: true},
+		{name: "HTTP 80 未二次确认", http: 80, https: 8443, wantErr: true},
+		{name: "HTTPS 443 未二次确认", http: 8080, https: 443, wantErr: true},
+		{name: "HTTP 80 已二次确认", http: 80, https: 8443, confirm: true},
+		{name: "HTTPS 443 已二次确认", http: 8080, https: 443, confirm: true},
+		{name: "80 与 443 同时使用且已二次确认", http: 80, https: 443, confirm: true},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			input := normalizeServerInput(base)
 			input.Options.VhostHTTPPort = testCase.http
 			input.Options.VhostHTTPSPort = testCase.https
+			input.AllowPrivilegedVhostPorts = testCase.confirm
 			err := validateServerInput(input)
 			if (err != nil) != testCase.wantErr {
 				t.Fatalf("validateServerInput() error = %v, wantErr %v", err, testCase.wantErr)

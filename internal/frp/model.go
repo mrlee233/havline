@@ -241,6 +241,10 @@ type ServerInput struct {
 	ClearTLSCertificate    bool
 	ClearTLSKey            bool
 	ClearTLSTrustedCA      bool
+
+	// AllowPrivilegedVhostPorts 是本次请求的二次确认标记：vhost 回源端口填 80/443 时必须为 true。
+	// 只作用于本次校验，不落库。
+	AllowPrivilegedVhostPorts bool
 }
 
 type ProxyInput struct {
