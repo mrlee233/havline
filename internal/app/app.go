@@ -70,7 +70,9 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 	logger.Info("会话密钥已就绪", "module", "SYSTEM", "source", secretSource)
 
-	updaterToken, updaterTokenSource, err := updater.EnsureToken(cfg.UpdaterToken, cfg.UpdaterTokenFile)
+	// updater Token 只给「一键升级」sidecar 用；原生版与飞牛 Docker 版都显式把 socket 置空，
+	// 此时不能去写 /run/havline-updater：原生版以非 root 运行，权限不足会让应用直接起不来。
+	updaterToken, updaterTokenSource, err := updater.EnsureTokenIfEnabled(cfg.UpdaterSocket, cfg.UpdaterToken, cfg.UpdaterTokenFile)
 	if err != nil {
 		return nil, err
 	}

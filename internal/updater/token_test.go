@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,5 +104,38 @@ func TestWaitForTokenTimesOut(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.token")
 	if _, _, err := WaitForToken("", path, 50*time.Millisecond); err == nil {
 		t.Fatal("文件不存在时应等待超时")
+	}
+}
+
+// updater 未启用（socket 为空）时不能去碰 Token 文件：
+// 原生版以非 root 运行，写 /run/havline-updater 会失败并拖垮整个启动。
+func TestEnsureTokenIfEnabledSkipsWhenSocketDisabled(t *testing.T) {
+	tokenFile := filepath.Join(t.TempDir(), "nested", "updater.token")
+
+	token, source, err := EnsureTokenIfEnabled("", "", tokenFile)
+	if err != nil {
+		t.Fatalf("socket 未启用时不应报错：%v", err)
+	}
+	if token != "" || source != "" {
+		t.Fatalf("socket 未启用时应返回空 Token，实际 token=%q source=%q", token, source)
+	}
+	if _, statErr := os.Stat(tokenFile); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("socket 未启用时不应创建 Token 文件（statErr=%v）", statErr)
+	}
+}
+
+// 对照组：updater 启用（socket 非空）时仍照旧生成并落盘。
+func TestEnsureTokenIfEnabledCreatesWhenSocketSet(t *testing.T) {
+	tokenFile := filepath.Join(t.TempDir(), "nested", "updater.token")
+
+	token, source, err := EnsureTokenIfEnabled("/run/havline-updater/updater.sock", "", tokenFile)
+	if err != nil {
+		t.Fatalf("socket 启用时应生成 Token：%v", err)
+	}
+	if len(token) != 64 || source != tokenFile {
+		t.Fatalf("生成的 Token 不正确，实际 token=%q source=%q", token, source)
+	}
+	if _, statErr := os.Stat(tokenFile); statErr != nil {
+		t.Fatalf("socket 启用时应写入 Token 文件：%v", statErr)
 	}
 }

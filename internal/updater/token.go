@@ -67,6 +67,20 @@ func EnsureToken(token, tokenFile string) (string, string, error) {
 	return value, path, nil
 }
 
+// EnsureTokenIfEnabled 只在 updater 启用（socket 非空）时准备共享 Token。
+//
+// updater Token 只服务于「一键升级」sidecar，而 sidecar 与主程序是通过共享卷里的
+// Token 文件 + Unix Socket 对接的。原生版（飞牛 Native）与飞牛 Docker 版都显式把
+// socket 置空表示「不启用升级」，此时根本不需要这个文件：
+// 原生版以非 root 用户（havline）运行，去写 /run/havline-updater 会因权限不足报错，
+// 而启动期的这个错误会让整个应用起不来。
+func EnsureTokenIfEnabled(socketPath, token, tokenFile string) (string, string, error) {
+	if strings.TrimSpace(socketPath) == "" {
+		return "", "", nil
+	}
+	return EnsureToken(token, tokenFile)
+}
+
 // WaitForToken 等待主程序在共享卷中创建 Token 文件；环境变量已设置时立即返回。
 func WaitForToken(token, tokenFile string, timeout time.Duration) (string, string, error) {
 	if timeout <= 0 {
