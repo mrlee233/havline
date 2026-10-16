@@ -9,6 +9,8 @@ import (
 
 type ErrorBody struct {
 	Error string `json:"error"`
+	// Code 是给前端分支用的稳定标识（例如 terminal_locked），文案可能改，code 不改
+	Code string `json:"code,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
@@ -38,6 +40,12 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 func writeError(r *http.Request, w http.ResponseWriter, status int, message string, cause ...error) {
 	logAPIError(r, status, message, cause)
 	writeJSON(w, status, ErrorBody{Error: message})
+}
+
+// writeErrorCode 与 writeError 相同，但多带一个稳定错误码，供前端区分分支。
+func writeErrorCode(r *http.Request, w http.ResponseWriter, status int, code, message string, cause ...error) {
+	logAPIError(r, status, message, cause)
+	writeJSON(w, status, ErrorBody{Error: message, Code: code})
 }
 
 func logAPIError(r *http.Request, status int, message string, cause []error) {

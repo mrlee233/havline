@@ -31,7 +31,7 @@ import (
 	"github.com/havline/havline/internal/sysinfo"
 )
 
-const AgentVersion = "0.15.2"
+const AgentVersion = "0.15.3"
 
 // Config 是 havline-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -1029,6 +1029,31 @@ func (s *Server) putRoute(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "VPS 未安装 Nginx（或不在常见路径）：请先安装（apt install nginx / yum install nginx），或在「公网反代」页点「一键安装 Nginx」后再部署"})
 		return
 	}
+	// 写配置串行化；回源自检不持锁，避免重试等待期间阻塞其他路由操作
+	generatedPassword, writeErr := s.writeRouteLocked(req)
+	if writeErr != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": writeErr.Error()})
+		return
+	}
+	result := map[string]any{"ok": true, "domain": req.Domain, "websocket": req.WebSocket}
+	if generatedPassword != "" {
+		result["basic_auth_user"] = strings.TrimSpace(req.BasicAuthUser)
+		result["basic_auth_password"] = generatedPassword
+	}
+	// 部署后回源自检：模拟 Nginx 的回源请求，区分三种状态：
+	// 2xx/3xx = 隧道通且服务响应；404 = 反代/frps 正常但无此域名的隧道注册；0/5xx = 回源失败或内网服务异常
+	if vhost := req.VhostPort; vhost > 0 {
+		code, body := s.probeVhostReady(vhost, req.Domain)
+		result["probe_status"] = code
+		result["probe_ok"] = code >= 200 && code < 400
+		result["probe_notfound"] = code == 404
+		result["probe_body_snip"] = body
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+// writeRouteLocked 串行化写入路由配置，返回首次自动生成的 Basic Auth 明文（仅本次响应返回一次）。
+func (s *Server) writeRouteLocked(req routeRequest) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Basic Auth 密码留空时首次自动生成：生成的明文只在本次响应里回一次，
@@ -1044,24 +1069,31 @@ func (s *Server) putRoute(w http.ResponseWriter, r *http.Request) {
 			// 部署失败就丢弃刚生成的凭据，否则重试时文件已存在、密码再也拿不到
 			_ = os.Remove(basicAuthFilePath(req.Domain))
 		}
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
-		return
+		return "", err
 	}
-	result := map[string]any{"ok": true, "domain": req.Domain, "websocket": req.WebSocket}
-	if generatedPassword != "" {
-		result["basic_auth_user"] = strings.TrimSpace(req.BasicAuthUser)
-		result["basic_auth_password"] = generatedPassword
+	return generatedPassword, nil
+}
+
+// 回源自检的重试参数：刚应用完 frpc 配置时隧道可能还没注册到 frps，单测里会调小间隔。
+var (
+	routeProbeAttempts = 6
+	routeProbeInterval = 1500 * time.Millisecond
+)
+
+// probeVhostReady 与 probeVhost 相同，但在 404 时短时间重试：frpc 应用配置后需要几秒
+// 才把域名注册到 frps，立即探测会误报「没有该域名的隧道」。
+func (s *Server) probeVhostReady(port int, host string) (int, string) {
+	code, body := 0, ""
+	for attempt := 0; attempt < routeProbeAttempts; attempt++ {
+		code, body = s.probeVhost(port, host)
+		if code != http.StatusNotFound {
+			return code, body
+		}
+		if attempt < routeProbeAttempts-1 {
+			time.Sleep(routeProbeInterval)
+		}
 	}
-	// 部署后回源自检：模拟 Nginx 的回源请求，区分三种状态：
-	// 2xx/3xx = 隧道通且服务响应；404 = 反代/frps 正常但无此域名的隧道注册；0/5xx = 回源失败或内网服务异常
-	if vhost := req.VhostPort; vhost > 0 {
-		code, body := s.probeVhost(vhost, req.Domain)
-		result["probe_status"] = code
-		result["probe_ok"] = code >= 200 && code < 400
-		result["probe_notfound"] = code == 404
-		result["probe_body_snip"] = body
-	}
-	writeJSON(w, http.StatusOK, result)
+	return code, body
 }
 
 // probeVhost 从 VPS 本机模拟 Nginx 回源：返回 HTTP 状态码与响应片段（限长）。
@@ -1309,7 +1341,7 @@ func (s *Server) writeRoute(req routeRequest) error {
 		if err != nil {
 			return err
 		}
-		// putRoute 已持有 s.mu；这里不能再次加锁，否则会发生自锁死。
+		// writeRouteLocked 已持有 s.mu；这里不能再次加锁，否则会发生自锁死。
 		s.cfg.NginxConfDir = dir
 	}
 	certDir := req.CertDir

@@ -16,6 +16,8 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:6893',
+        // 内置 SSH 终端走 WebSocket：开发代理必须开 ws，否则升级请求会一直挂起
+        ws: true,
         timeout: 300_000,
         proxyTimeout: 300_000,
         configure(proxy) {

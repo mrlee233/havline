@@ -55,6 +55,20 @@ export function formatDate(iso?: string): string {
   })
 }
 
+/** 会话/任务时长：按量级切换单位，短时长不能被「0 分钟」吞掉 */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '-'
+  if (ms < 1000) return `${Math.round(ms)} ms`
+  const totalSeconds = Math.round(ms / 1000)
+  if (totalSeconds < 60) return `${totalSeconds} 秒`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  if (minutes < 60) return seconds ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest ? `${hours} 小时 ${rest} 分` : `${hours} 小时`
+}
+
 /** Normalize log timestamps to YYYY-MM-DD HH:mm:ss */
 export function formatLogTime(value?: string): string {
   if (!value) return '-'

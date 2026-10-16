@@ -14,13 +14,15 @@ import (
 )
 
 type AuthHandler struct {
-	auth   *auth.Service
-	notify *notify.Service
-	guard  *loginGuard
+	auth    *auth.Service
+	notify  *notify.Service
+	guard   *loginGuard
+	unlocks *terminalUnlockStore
 }
 
-func NewAuthHandler(authSvc *auth.Service, notifySvc *notify.Service) *AuthHandler {
-	return &AuthHandler{auth: authSvc, notify: notifySvc, guard: newLoginGuard()}
+// NewAuthHandler 装配登录处理器；unlocks 是终端二次认证票据，改密后要让当前会话立即失效。
+func NewAuthHandler(authSvc *auth.Service, notifySvc *notify.Service, unlocks *terminalUnlockStore) *AuthHandler {
+	return &AuthHandler{auth: authSvc, notify: notifySvc, guard: newLoginGuard(), unlocks: unlocks}
 }
 
 const (
@@ -154,6 +156,10 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.auth.ChangePassword(r.Context(), adminID, req.OldPassword, req.NewPassword, sessionID); err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
+	}
+	// 改密后当前会话的终端解锁票据立即作废：密码都换了，不该还留着已解锁的 shell
+	if h.unlocks != nil {
+		h.unlocks.revoke(sessionID)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"message": "密码已更新"})
 }

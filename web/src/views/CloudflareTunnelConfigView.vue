@@ -1,6 +1,22 @@
 <template>
   <PageHeader :title="`配置 · ${tunnel?.name || 'Cloudflare 隧道'}`" description="配置隧道、查看副本指标与已发布路由">
     <template #actions>
+      <!-- 进程操作提到页头：原来在页面最底部的「运行控制」卡，要滚动到底才能点到 -->
+      <n-button
+        v-if="runtimeState === 'connected'"
+        type="warning"
+        :loading="actionRunning === '停止'"
+        :disabled="actionRunning !== null"
+        @click="runAction('停止')"
+      >停止</n-button>
+      <n-button
+        v-else
+        type="success"
+        :loading="actionRunning === '启动'"
+        :disabled="actionRunning !== null"
+        @click="runAction('启动')"
+      >启动</n-button>
+      <n-button :loading="actionRunning === '重启'" :disabled="actionRunning !== null" @click="runAction('重启')">重启</n-button>
       <n-button @click="router.push('/cloudflare')">
         <template #icon><n-icon :component="ArrowBackOutline" /></template>
         返回列表
@@ -22,21 +38,32 @@
         <template #icon><n-icon :component="PulseOutline" /></template>
         <template #value><StatusBadge :kind="statusKind(runtimeState)" :text="statusText(runtimeState)" /></template>
       </StatCard>
-      <StatCard label="运行时间" :value="status?.running ? '运行中' : '未运行'" :sub="status?.metrics_port ? `metrics :${status.metrics_port}` : '无 metrics 端口'" tone="brand" value-small>
-        <template #icon><n-icon :component="TimeOutline" /></template>
+      <!-- 原来叫「运行时间」但值是进程状态，名实不符：改为「进程」，并换成服务端图标 -->
+      <StatCard label="进程" :value="status?.running ? '运行中' : '未运行'" :sub="status?.metrics_port ? `metrics :${status.metrics_port}` : '无 metrics 端口'" tone="brand" value-small>
+        <template #icon><n-icon :component="ServerOutline" /></template>
       </StatCard>
     </div>
 
+    <!-- 原来这张卡只有一个按钮／一条提示，等于白占一屏；改成直接展示关键字段，编辑按钮放卡头 -->
     <HavlineCard class="section-card" title="基础配置" subtitle="手工隧道可在这里修改；托管隧道由反向代理规则派生">
+      <template #header>
+        <n-button v-if="!tunnel.managed" size="small" @click="basicVisible = true">编辑基础配置</n-button>
+      </template>
       <div class="section-body">
-        <n-alert v-if="tunnel.managed" type="info" :bordered="false">
-          这是自动托管隧道。暴露域名与回源请到
+        <div class="config-facts">
+          <div class="config-fact"><label>名称</label><span>{{ tunnel.name || '—' }}</span></div>
+          <div class="config-fact"><label>模式</label><span>{{ tunnel.managed ? '自动托管' : '手工隧道' }}</span></div>
+          <div class="config-fact"><label>隧道 ID</label><span class="mono">{{ tunnel.tunnel_id || '—' }}</span></div>
+          <div class="config-fact"><label>完整主机名</label><span class="mono">{{ tunnel.hostnames?.join('、') || '—' }}</span></div>
+          <div class="config-fact"><label>回源服务</label><span class="mono">{{ tunnel.origin_service || '—' }}</span></div>
+          <div class="config-fact"><label>随 Havline 启动</label><span>{{ tunnel.auto_start ? '是' : '否' }}</span></div>
+        </div>
+        <n-alert v-if="tunnel.managed" type="info" :bordered="false" class="config-managed-hint">
+          自动托管隧道：暴露域名与回源在
           <router-link to="/proxies">反向代理</router-link>
           的 Cloudflare 出口中维护。
         </n-alert>
-        <div v-else class="config-basic-action">
-          <n-button type="primary" @click="basicVisible = true">编辑基础配置</n-button>
-        </div>
+        <p v-else class="config-hint">名称、主机名与回源服务可在右上角「编辑基础配置」里调整；路由在下方「路由」卡片维护。</p>
       </div>
     </HavlineCard>
 
@@ -114,17 +141,13 @@
             <span class="mono">{{ route.service }}</span>
             <n-tag size="small" :bordered="false" round>{{ route.source === 'rule' ? '反向代理规则' : 'config.yml' }}</n-tag>
             <div class="routes-table__actions">
-              <n-button size="tiny" quaternary :disabled="tunnel.managed || index === 0" @click="moveRoute(index, -1)">上移</n-button>
-              <n-button size="tiny" quaternary :disabled="tunnel.managed || index === (routeData?.routes.length ?? 1) - 1" @click="moveRoute(index, 1)">下移</n-button>
-              <n-button size="tiny" quaternary :disabled="tunnel.managed" @click="copyRoute(route)">复制</n-button>
-              <n-button size="tiny" quaternary @click="testRoute(route)">测试</n-button>
+              <!-- 原来一行平铺 6 个按钮，把这列撑到 360px；改为主操作「编辑」+「更多」 -->
               <n-button size="tiny" :disabled="tunnel.managed" @click="openEditRoute(route, index)">编辑</n-button>
-              <n-popconfirm :disabled="tunnel.managed" @positive-click="deleteRoute(index)">
-                <template #trigger>
-                  <n-button size="tiny" type="error" quaternary :disabled="tunnel.managed">删除</n-button>
-                </template>
-                删除路由 {{ route.hostname }}？保存后会同步到 Cloudflare。
-              </n-popconfirm>
+              <n-dropdown trigger="click" :options="routeActionOptions(index)" @select="handleRouteAction($event, route, index)">
+                <n-button size="tiny" quaternary circle title="更多操作">
+                  <template #icon><n-icon :component="EllipsisHorizontalOutline" /></template>
+                </n-button>
+              </n-dropdown>
             </div>
           </div>
         </div>
@@ -144,15 +167,6 @@
       </div>
     </HavlineCard>
 
-    <HavlineCard class="section-card" title="运行控制" subtitle="进程操作会立即作用在本机 cloudflared">
-      <div class="section-body">
-        <n-space>
-          <n-button type="success" :disabled="runtimeState === 'connected'" @click="runAction('启动')">启动</n-button>
-          <n-button type="warning" :disabled="runtimeState !== 'connected'" @click="runAction('停止')">停止</n-button>
-          <n-button @click="runAction('重启')">重启</n-button>
-        </n-space>
-      </div>
-    </HavlineCard>
   </template>
 
   <n-modal v-model:show="basicVisible" preset="card" :style="{ width: 'min(720px, 96vw)' }" title="基础配置">
@@ -238,8 +252,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NPopconfirm, NSelect, NSpace, NSwitch, NTag, useMessage } from 'naive-ui'
-import { AddOutline, ArrowBackOutline, CloudOutline, GitNetworkOutline, LayersOutline, PulseOutline, ServerOutline, TimeOutline } from '@vicons/ionicons5'
+import { NAlert, NButton, NDropdown, NForm, NFormItem, NIcon, NInput, NModal, NSelect, NSwitch, NTag, useDialog, useMessage, type DropdownOption } from 'naive-ui'
+import { AddOutline, ArrowBackOutline, CloudOutline, EllipsisHorizontalOutline, GitNetworkOutline, LayersOutline, PulseOutline, ServerOutline } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
 import type { CfRouteView, CfRuntimeStatus, CfTunnel, CfTunnelPayload, CfTunnelRoutes, CfZone } from '../api/types'
 import HavlineCard from '../components/HavlineCard.vue'
@@ -253,12 +267,15 @@ import type { StatusKind } from '../utils/status'
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const tunnel = ref<CfTunnel | null>(null)
 const status = ref<CfRuntimeStatus | null>(null)
 const routeData = ref<CfTunnelRoutes | null>(null)
 const zones = ref<CfZone[]>([])
 const loading = ref(false)
 const saving = ref(false)
+// 进程操作（启动 / 停止 / 重启）进行中：按钮显示 loading 并互相禁用
+const actionRunning = ref<'启动' | '停止' | '重启' | null>(null)
 const basicVisible = ref(false)
 const routeVisible = ref(false)
 const routeSaving = ref(false)
@@ -435,6 +452,40 @@ async function saveRoute() {
   }
 }
 
+// 路由行的「更多」菜单：托管隧道与首/末行按情况禁用，避免点了才发现不可用
+function routeActionOptions(index: number): DropdownOption[] {
+  const locked = tunnel.value?.managed ?? false
+  const isLast = index === ((routeData.value?.routes.length ?? 1) - 1)
+  return [
+    { label: '上移', key: 'up', disabled: locked || index === 0 },
+    { label: '下移', key: 'down', disabled: locked || isLast },
+    { type: 'divider', key: 'd1' },
+    { label: '复制主机名与服务', key: 'copy', disabled: locked },
+    { label: '测试连通性', key: 'test' },
+    { type: 'divider', key: 'd2' },
+    { label: '删除路由', key: 'delete', disabled: locked },
+  ]
+}
+
+function handleRouteAction(key: string | number, route: CfRouteView, index: number) {
+  if (key === 'up') return void moveRoute(index, -1)
+  if (key === 'down') return void moveRoute(index, 1)
+  if (key === 'copy') return void copyRoute(route)
+  if (key === 'test') return void testRoute(route)
+  if (key === 'delete') confirmDeleteRoute(route, index)
+}
+
+// 删除走对话框二次确认，替代原来包在行内的 n-popconfirm（菜单里无法嵌套 Popconfirm）
+function confirmDeleteRoute(route: CfRouteView, index: number) {
+  dialog.warning({
+    title: '删除路由',
+    content: `删除路由 ${route.hostname}？保存后会同步到 Cloudflare。`,
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: () => deleteRoute(index),
+  })
+}
+
 async function deleteRoute(index: number) {
   if (!tunnel.value || !routeData.value || tunnel.value.managed) return
   const next = routeData.value.routes
@@ -515,6 +566,7 @@ function manualHostname() {
 
 async function runAction(action: '启动' | '停止' | '重启') {
   if (!tunnel.value) return
+  actionRunning.value = action
   try {
     if (action === '启动') await api.startCfTunnel(tunnel.value.id)
     if (action === '停止') await api.stopCfTunnel(tunnel.value.id)
@@ -523,6 +575,8 @@ async function runAction(action: '启动' | '停止' | '重启') {
     await load()
   } catch (error) {
     message.error(error instanceof Error ? error.message : `${action}失败`)
+  } finally {
+    actionRunning.value = null
   }
 }
 
@@ -554,7 +608,17 @@ onMounted(load)
   margin-bottom: var(--havline-space-4);
 }
 .section-card + .section-card { margin-top: var(--havline-space-4); }
-.config-basic-action { display: flex; justify-content: flex-end; }
+/* 基础配置：把原来空着的一张卡换成关键字段网格 */
+.config-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--havline-space-3) var(--havline-space-4);
+}
+.config-fact { display: grid; gap: 4px; min-width: 0; }
+.config-fact label { font-size: 12px; color: var(--havline-text-secondary); }
+.config-fact span { font-size: 13px; color: var(--havline-text); overflow-wrap: anywhere; }
+.config-managed-hint { margin-top: var(--havline-space-3); }
+.config-hint { margin: var(--havline-space-3) 0 0; font-size: 12px; color: var(--havline-text-muted); }
 .topology-canvas {
   position: relative;
   width: 100%;
@@ -691,10 +755,11 @@ onMounted(load)
 .routes-table__head,
 .routes-table__row {
   display: grid;
-  grid-template-columns: 64px minmax(180px, 1fr) 90px minmax(220px, 1.2fr) 130px 360px;
+  /* 操作列从 360px 收到 120px（编辑 + 更多），窄屏不必再横向滚动才能点到操作 */
+  grid-template-columns: 56px minmax(180px, 1fr) 90px minmax(200px, 1.2fr) 130px 120px;
   gap: 12px;
   align-items: center;
-  min-width: 1080px;
+  min-width: 860px;
   padding: 10px 0;
 }
 .routes-table__actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }

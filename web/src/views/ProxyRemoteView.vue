@@ -8,6 +8,13 @@
         <template #icon><n-icon :component="RefreshOutline" /></template>
         刷新
       </n-button>
+      <!-- 原「入口行」的跳转与说明收进「更多」，不再占用首屏高度 -->
+      <n-dropdown trigger="click" :options="headerMenuOptions" @select="handleHeaderMenu">
+        <n-button>
+          <template #icon><n-icon :component="EllipsisHorizontalOutline" /></template>
+          更多
+        </n-button>
+      </n-dropdown>
     </template>
   </PageHeader>
 
@@ -25,7 +32,7 @@
     </EmptyState>
 
     <div v-else-if="server" class="proxy-layout">
-      <!-- 左：服务端列表；右：该服务端的漂移提示 / 统计 / Nginx 与反代台账 -->
+      <!-- 左：服务端列表；右：该服务端的行动横幅 / 状态 Hero / Nginx 详情 / 反代台账 -->
       <aside class="server-sidebar">
         <div class="server-sidebar__head">
           <div class="server-sidebar__head-row">
@@ -58,28 +65,38 @@
       </aside>
 
       <div class="proxy-detail">
-      <!-- 数据读取失败：必须可见（原先 loadErrorMsg 写了但从未渲染） -->
-      <n-alert v-if="loadErrorMsg" type="error" :bordered="false" class="page-alert">{{ loadErrorMsg }}</n-alert>
-
-      <!-- frps 回源端口 80/443：VPS 上由 frps 直接对外，公网反代没有位置（也不需要自动部署） -->
-      <n-alert v-if="publicProxyInapplicable" type="info" :bordered="false" class="page-alert">
-        <div class="alert-body__text">
-          <strong>该服务端的 frps 回源端口是 {{ privilegedVhostPorts.join(' / ') }}，公网反代不适用</strong>
-          <span>80/443 已由 frps 直接对外使用，VPS 上没有 Nginx 的位置：域名访问走 FRP 隧道直达 NAS，不需要再部署 Nginx 反代，本页也不会自动下发任何路由。</span>
-          <span>如需使用公网反代，请到「公网服务端」页把回源端口改回 8080/8443，再回本页部署。</span>
-          <span>若这台 VPS 上还留着以前部署的 Nginx 路由，需先把回源端口改回 8080/8443，才能在本页移除。</span>
-        </div>
-      </n-alert>
-
-      <!-- 部署漂移：库里的期望与 VPS 上的实际不一致时才出现（P0-2） -->
-      <n-alert v-if="driftItems.length > 0 && !publicProxyInapplicable" type="warning" :bordered="false" class="page-alert">
+      <!-- 行动横幅：原先并列的「读取失败 / 回源端口不适用 / 部署漂移 / Nginx 阻塞」合并为一条，按优先级只显示最该处理的那条 -->
+      <n-alert v-if="actionBanner" :type="actionBanner.type" :bordered="false" class="page-alert">
         <div class="alert-body">
           <div class="alert-body__text">
-            <strong>检测到 {{ driftItems.length }} 项部署漂移（{{ driftSummary }}）</strong>
-            <span>VPS 上的实际配置与 Havline 记录不一致：可能被手工修改过，或 agent 重装后没有重新部署。</span>
-            <span class="mono alert-body__detail">{{ driftPreview }}</span>
+            <strong>{{ actionBanner.title }}</strong>
+            <span>{{ actionBanner.text }}</span>
+            <span v-if="actionBanner.detail" class="mono alert-body__detail">{{ actionBanner.detail }}</span>
+            <span v-if="extraIssueCount > 0" class="alert-body__more">另有 {{ extraIssueCount }} 项待处理，处理完当前项后会自动显示</span>
           </div>
-          <n-popconfirm @positive-click="redeployAll">
+          <n-button
+            v-if="actionBanner.action === 'reload'"
+            size="small"
+            :loading="manualRefreshing"
+            @click="refreshAll({ silent: false })"
+          >重新读取</n-button>
+          <n-button
+            v-else-if="actionBanner.action === 'retry-deploy'"
+            size="small"
+            type="primary"
+            :loading="busy === 'reload-frp'"
+            :disabled="busy !== null && busy !== 'reload-frp'"
+            @click="applyFrpConfigAndRetry"
+          >应用配置并重试</n-button>
+          <n-button
+            v-else-if="actionBanner.action === 'install-nginx'"
+            size="small"
+            type="primary"
+            :loading="busy === 'install-nginx'"
+            :disabled="!agentStatusOk || (busy !== null && busy !== 'install-nginx')"
+            @click="installNginx"
+          >一键安装 Nginx</n-button>
+          <n-popconfirm v-else-if="actionBanner.action === 'redeploy-all'" @positive-click="redeployAll">
             <template #trigger>
               <n-button size="small" type="primary" :loading="redeploying" :disabled="busy !== null">
                 重新部署全部
@@ -87,95 +104,112 @@
             </template>
             将按 Havline 里的记录重新下发该服务端的全部启用规则，会覆盖 VPS 上的手工修改。确定继续？
           </n-popconfirm>
+          <router-link
+            v-else-if="actionBanner.action === 'fix-vhost-port' && server"
+            :to="{ name: 'frp-agent', query: { server: String(server.id) } }"
+          >
+            <n-button size="small" type="primary">去改回源端口</n-button>
+          </router-link>
         </div>
       </n-alert>
 
-      <!-- Nginx 前置条件：缺失 / 校验未通过 -->
-      <n-alert v-if="nginxBlocking && !publicProxyInapplicable" :type="nginxBlocking.type" :bordered="false" class="page-alert">
-        <div class="alert-body">
-          <div class="alert-body__text">
-            <strong>{{ nginxBlocking.title }}</strong>
-            <span>{{ nginxBlocking.text }}</span>
-            <span v-if="nginxBlocking.detail" class="mono alert-body__detail">{{ nginxBlocking.detail }}</span>
+      <!-- ① 状态 Hero：Nginx 结论 + 台账汇总 + 主操作（原 4 张统计卡与 Nginx 卡头部合并） -->
+      <section v-if="!publicProxyInapplicable" class="proxy-hero" aria-label="公网反代概览">
+        <div class="proxy-hero__top">
+          <div class="proxy-hero__status">
+            <n-icon :component="ShieldCheckmarkOutline" class="proxy-hero__icon" :class="nginxIconClass" aria-hidden="true" />
+            <div class="proxy-hero__headline">
+              <div class="proxy-hero__title">
+                <span class="proxy-hero__title-label">Nginx</span>
+                <StatusBadge :kind="nginxKind" :text="nginxText" />
+                <span v-if="agentStatus?.nginx_version" class="proxy-hero__version mono">{{ agentStatus.nginx_version }}</span>
+              </div>
+              <div class="proxy-hero__sub">
+                <template v-if="statusLoaded">
+                  进程{{ agentStatus?.nginx_running ? '运行中' : '未运行' }} · {{ agentStatus?.nginx_ok ? 'nginx -t 通过' : 'nginx -t 未通过' }}
+                </template>
+                <template v-else>正在检测 Nginx 运行状态</template>
+              </div>
+            </div>
           </div>
-          <n-button
-            v-if="agentStatus?.nginx_missing"
-            size="small"
-            type="primary"
-            :loading="busy === 'install-nginx'"
-            :disabled="!agentStatusOk || (busy !== null && busy !== 'install-nginx')"
-            @click="installNginx"
-          >一键安装 Nginx</n-button>
-        </div>
-      </n-alert>
-
-      <!-- 入口行：agent / frps 生命周期在另一页 -->
-      <div v-if="!publicProxyInapplicable" class="entrance-row">
-        <span class="entrance-row__text">
-          Agent 与 frps 的安装、升级、启停、配置下发在「公网服务端」页；本页只负责把规则发布到 Nginx
-        </span>
-        <router-link to="/frp-agent"><n-button size="small" quaternary>前往公网 Agent</n-button></router-link>
-      </div>
-
-      <!-- ① 统计区 -->
-      <section v-if="!publicProxyInapplicable" class="stats-row" aria-label="反代概览">
-        <div class="stat-card">
-          <n-icon :component="LayersOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
-          <div class="stat-card__value">{{ candidates.length }}</div>
-          <div class="stat-card__label">可部署规则</div>
-          <div class="stat-card__sub">来自「内网穿透」的 http 规则</div>
-        </div>
-        <div class="stat-card">
-          <n-icon :component="CheckmarkCircleOutline" class="stat-card__icon" :class="deployedCount ? 'stat-card__icon--green' : 'stat-card__icon--amber'" aria-hidden="true" />
-          <div class="stat-card__value">{{ deployedCount }}</div>
-          <div class="stat-card__label">已生效</div>
-          <div class="stat-card__sub">{{ pendingCount }} 条未部署 / 未加载</div>
-        </div>
-        <div class="stat-card">
-          <n-icon :component="PulseOutline" class="stat-card__icon" :class="healthyCount ? 'stat-card__icon--green' : 'stat-card__icon--amber'" aria-hidden="true" />
-          <div class="stat-card__value">{{ healthyCount }}<span class="stat-card__value-total">/{{ candidates.length }}</span></div>
-          <div class="stat-card__label">健康通过</div>
-          <div class="stat-card__sub">DNS · 证书 · 隧道 · 服务 四段全通过</div>
-        </div>
-        <div class="stat-card">
-          <n-icon :component="SwapHorizontalOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
-          <div class="stat-card__value">{{ totalConns }}</div>
-          <div class="stat-card__label">当前连接</div>
-          <div class="stat-card__sub">frps 侧实时连接数</div>
-        </div>
-      </section>
-
-      <!-- ② 环境与 Nginx -->
-      <HavlineCard v-if="!publicProxyInapplicable" class="section-card nginx-card" title="Nginx（公网反代依赖）">
-        <div class="section-body">
-          <div class="field-grid">
-            <div><label>可用性</label><span class="field-tags"><StatusBadge :kind="nginxKind" :text="nginxText" /></span></div>
-            <div><label>进程</label><span>{{ statusLoaded ? (agentStatus?.nginx_running ? '运行中' : '未运行') : '—' }}</span></div>
-            <div><label>版本</label><span class="mono">{{ agentStatus?.nginx_version || '—' }}</span></div>
-            <div><label>配置校验</label><span class="field-tags">
-              <StatusBadge v-if="statusLoaded" :kind="agentStatus?.nginx_ok ? 'success' : 'error'" :text="agentStatus?.nginx_ok ? 'nginx -t 通过' : '未通过'" />
-              <span v-else>—</span>
-            </span></div>
-            <div><label>可执行文件</label><span class="mono mono-wrap">{{ agentStatus?.nginx_path || agentStatus?.nginx_binary || '—' }}</span></div>
-            <div><label>vhost 配置目录</label><span class="mono mono-wrap">{{ agentStatus?.nginx_conf_dir || '—' }}</span></div>
-            <div><label>端口监听</label><span class="field-tags">
-              <StatusBadge :kind="agentStatus?.ports?.['80'] ? 'success' : 'warning'" :text="`80 ${agentStatus?.ports?.['80'] ? '✓' : '✗'}`" />
-              <StatusBadge :kind="agentStatus?.ports?.['443'] ? 'success' : 'warning'" :text="`443 ${agentStatus?.ports?.['443'] ? '✓' : '✗'}`" />
-            </span></div>
-            <div><label>反代配置文件</label><span>{{ routeDetails.length }} 个</span></div>
-          </div>
-          <p v-if="agentStatus?.nginx_error" class="form-hint nginx-error mono">{{ agentStatus.nginx_error }}</p>
-          <div class="agent-actions">
+          <div class="proxy-hero__actions">
             <n-button
               v-if="agentStatus?.nginx_missing"
               size="small"
               type="primary"
               :loading="busy === 'install-nginx'"
-              :disabled="busy !== null && busy !== 'install-nginx'"
+              :disabled="!agentStatusOk || (busy !== null && busy !== 'install-nginx')"
               @click="installNginx"
             >一键安装 Nginx</n-button>
             <n-button size="small" :loading="manualRefreshing" @click="refreshAll({ silent: false })">重新检测</n-button>
           </div>
+        </div>
+
+        <div class="proxy-hero__metrics">
+          <div class="proxy-hero__metric">
+            <span class="proxy-hero__metric-label"><n-icon :component="LayersOutline" class="proxy-hero__metric-icon" />可部署规则</span>
+            <span class="proxy-hero__metric-value">{{ candidates.length }}</span>
+            <span class="proxy-hero__metric-sub">来自「内网穿透」的 http 规则</span>
+          </div>
+          <div class="proxy-hero__metric">
+            <span class="proxy-hero__metric-label"><n-icon :component="CheckmarkCircleOutline" class="proxy-hero__metric-icon" />已生效</span>
+            <span class="proxy-hero__metric-value">{{ deployedCount }}</span>
+            <span class="proxy-hero__metric-sub">{{ pendingCount }} 条未部署 / 未加载</span>
+          </div>
+          <div class="proxy-hero__metric">
+            <span class="proxy-hero__metric-label"><n-icon :component="PulseOutline" class="proxy-hero__metric-icon" />健康通过</span>
+            <span class="proxy-hero__metric-value">{{ healthyCount }}<span class="proxy-hero__metric-total">/{{ candidates.length }}</span></span>
+            <span class="proxy-hero__metric-sub">DNS · 证书 · 隧道 · 服务 四段全通过</span>
+          </div>
+          <div class="proxy-hero__metric">
+            <span class="proxy-hero__metric-label"><n-icon :component="SwapHorizontalOutline" class="proxy-hero__metric-icon" />当前连接</span>
+            <span class="proxy-hero__metric-value">{{ totalConns }}</span>
+            <span class="proxy-hero__metric-sub">frps 侧实时连接数</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ② Nginx 详情：默认折叠，缺失或 nginx -t 未通过时自动展开 -->
+      <HavlineCard v-if="!publicProxyInapplicable" class="section-card nginx-card" title="Nginx 环境详情">
+        <div class="section-body">
+          <n-collapse
+            :expanded-names="nginxDetailOpen ? ['nginx-detail'] : []"
+            @update:expanded-names="setNginxDetailOpen"
+          >
+            <n-collapse-item name="nginx-detail">
+              <template #header>
+                <span class="nginx-detail__title">路径 / 端口 / 配置文件与一键操作</span>
+              </template>
+              <div class="field-grid">
+                <div><label>可用性</label><span class="field-tags"><StatusBadge :kind="nginxKind" :text="nginxText" /></span></div>
+                <div><label>进程</label><span>{{ statusLoaded ? (agentStatus?.nginx_running ? '运行中' : '未运行') : '—' }}</span></div>
+                <div><label>版本</label><span class="mono">{{ agentStatus?.nginx_version || '—' }}</span></div>
+                <div><label>配置校验</label><span class="field-tags">
+                  <StatusBadge v-if="statusLoaded" :kind="agentStatus?.nginx_ok ? 'success' : 'error'" :text="agentStatus?.nginx_ok ? 'nginx -t 通过' : '未通过'" />
+                  <span v-else>—</span>
+                </span></div>
+                <div><label>可执行文件</label><span class="mono mono-wrap">{{ agentStatus?.nginx_path || agentStatus?.nginx_binary || '—' }}</span></div>
+                <div><label>vhost 配置目录</label><span class="mono mono-wrap">{{ agentStatus?.nginx_conf_dir || '—' }}</span></div>
+                <div><label>端口监听</label><span class="field-tags">
+                  <StatusBadge :kind="agentStatus?.ports?.['80'] ? 'success' : 'warning'" :text="`80 ${agentStatus?.ports?.['80'] ? '✓' : '✗'}`" />
+                  <StatusBadge :kind="agentStatus?.ports?.['443'] ? 'success' : 'warning'" :text="`443 ${agentStatus?.ports?.['443'] ? '✓' : '✗'}`" />
+                </span></div>
+                <div><label>反代配置文件</label><span>{{ routeDetails.length }} 个</span></div>
+              </div>
+              <p v-if="agentStatus?.nginx_error" class="form-hint nginx-error mono">{{ agentStatus.nginx_error }}</p>
+              <div class="agent-actions">
+                <n-button
+                  v-if="agentStatus?.nginx_missing"
+                  size="small"
+                  type="primary"
+                  :loading="busy === 'install-nginx'"
+                  :disabled="busy !== null && busy !== 'install-nginx'"
+                  @click="installNginx"
+                >一键安装 Nginx</n-button>
+                <n-button size="small" :loading="manualRefreshing" @click="refreshAll({ silent: false })">重新检测</n-button>
+              </div>
+            </n-collapse-item>
+          </n-collapse>
         </div>
       </HavlineCard>
 
@@ -418,9 +452,11 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { NButton, NIcon, NPopconfirm, useMessage, type DataTableColumns } from 'naive-ui'
+import { useRouter } from 'vue-router'
+import { NButton, NDropdown, NIcon, NPopconfirm, useMessage, type DataTableColumns, type DropdownOption } from 'naive-ui'
 import {
-  CheckmarkCircleOutline, CopyOutline, InformationCircleOutline, LayersOutline, OpenOutline, PulseOutline, RefreshOutline, SwapHorizontalOutline,
+  CheckmarkCircleOutline, CopyOutline, EllipsisHorizontalOutline, InformationCircleOutline, LayersOutline, OpenOutline,
+  PulseOutline, RefreshOutline, ShieldCheckmarkOutline, SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import EmptyState from '../components/EmptyState.vue'
 import ConfigDiffView from '../components/ConfigDiffView.vue'
@@ -438,15 +474,34 @@ import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../util
 import { copyText } from '../utils/clipboard'
 
 type Action =
-  | `deploy:${number}` | `remove:${number}` | `conf:${number}` | `save-settings:${number}` | 'install-nginx'
+  | `deploy:${number}` | `remove:${number}` | `conf:${number}` | `save-settings:${number}` | 'install-nginx' | 'reload-frp'
 type RouteState = 'loaded' | 'written' | 'broken' | 'none'
 type BadgeKind = 'success' | 'warning' | 'error' | 'disabled'
 
 const message = useMessage()
+const router = useRouter()
+// Header「更多」：原「入口行」的说明与跳转收进菜单，不再占用首屏高度
+const headerMenuOptions = computed<DropdownOption[]>(() => [
+  { label: '前往公网服务端页（Agent / frps 管理）', key: 'frp-agent' },
+  { label: '前往内网穿透页（规则来源）', key: 'frp' },
+  { type: 'divider', key: 'divider' },
+  { key: 'hint', type: 'render', render: () => h('div', { class: 'header-menu-hint' }, '本页只负责把「内网穿透」的规则发布到 VPS 的 Nginx') } as DropdownOption,
+])
+
+function handleHeaderMenu(key: string | number) {
+  if (key === 'frp-agent') void router.push({ name: 'frp-agent' })
+  if (key === 'frp') void router.push({ name: 'frp' })
+}
 const servers = ref<FrpServer[]>([])
 const selectedId = ref<number | null>(null)
 const loadError = ref('')
 const loadErrorMsg = ref('')
+// 操作类失败（部署 / 移除 / 保存设置）与「数据读取失败」分开：前者是动作反馈，后者是刷新缺数据
+const actionErrorMsg = ref('')
+// 部署因「frps 里查不到该域名的隧道」失败时记下规则 ID，横幅据此给出「应用配置并重试」
+const lastTunnelMissingProxyId = ref<number | null>(null)
+// 两种隧道缺失说法：agent 自检报的「没有找到域名…的隧道注册」，以及部署前预检的「还没有下发给本机 frpc」
+const tunnelMissingRe = /没有找到域名|还没有下发给本机 frpc/
 const manualRefreshing = ref(false)
 const busy = ref<Action | null>(null)
 const candidates = ref<FrpProxy[]>([])
@@ -547,6 +602,21 @@ const nginxText = computed(() => {
   return agentStatus.value?.nginx_running === false ? '已安装未运行' : '正常'
 })
 
+// Hero 里的 Nginx 状态图标：与徽标同口径着色
+const nginxIconClass = computed(() => {
+  if (!statusLoaded.value) return 'proxy-hero__icon--unknown'
+  if (agentStatus.value?.nginx_missing || !agentStatus.value?.nginx_ok) return 'proxy-hero__icon--error'
+  if (agentStatus.value?.nginx_running === false) return 'proxy-hero__icon--warning'
+  return 'proxy-hero__icon--success'
+})
+
+// Nginx 详情默认折叠；缺失或 nginx -t 未通过时自动展开，方便直接看到错误与操作
+const nginxDetailOpen = ref(false)
+function setNginxDetailOpen(names: Array<string | number>) {
+  nginxDetailOpen.value = names.includes('nginx-detail')
+}
+watch(nginxBlocking, (blocking) => { if (blocking) nginxDetailOpen.value = true }, { immediate: true })
+
 async function load() {
   loadError.value = ''
   try {
@@ -574,6 +644,7 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
     return
   }
   if (options.silent === false) manualRefreshing.value = true
+  if (options.silent === false) actionErrorMsg.value = ''
   const failures: string[] = []
   const track = async <T>(label: string, fn: () => Promise<T>, assign: (value: T) => void) => {
     try { assign(await fn()) } catch (error) {
@@ -604,13 +675,14 @@ async function refreshAll(options: { silent?: boolean } = { silent: true }) {
 async function run<T>(action: Action, source: string, fn: () => Promise<T>) {
   if (busy.value) return undefined
   busy.value = action
+  actionErrorMsg.value = ''
   try {
     const result = await fn()
     message.success(`${source}完成`)
     return result
   } catch (error) {
     const text = error instanceof Error ? error.message : `${source}失败`
-    loadErrorMsg.value = `${source}失败 —— ${text}`
+    actionErrorMsg.value = `${source}失败 —— ${text}`
     message.error(`${source}失败`)
     return undefined
   } finally { busy.value = null }
@@ -693,6 +765,72 @@ const driftPreview = computed(() => {
   const preview = driftItems.value.slice(0, 3).map((item) => `${item.domain}（${driftKindText[item.kind] ?? item.kind}）`)
   return driftItems.value.length > 3 ? `${preview.join('；')} …` : preview.join('；')
 })
+
+// 首屏行动横幅：把原先并列的 4 条 alert 收敛成按优先级排序的列表，模板只渲染第一条
+type BannerAction = '' | 'reload' | 'install-nginx' | 'redeploy-all' | 'fix-vhost-port' | 'retry-deploy'
+interface ActionBanner {
+  type: 'error' | 'warning' | 'info'
+  title: string
+  text: string
+  detail?: string
+  action: BannerAction
+}
+
+const activeIssues = computed<ActionBanner[]>(() => {
+  const items: ActionBanner[] = []
+  if (actionErrorMsg.value) {
+    const tunnelMissing = lastTunnelMissingProxyId.value !== null
+    items.push(tunnelMissing ? {
+      type: 'error',
+      title: '部署反代未生效：frps 里还没有该域名的隧道',
+      text: 'Nginx 反代配置已经写到 VPS，但 frps 查不到该域名的隧道注册。通常是穿透规则改动后还没应用 frpc 配置，或该服务端的 frpc 没有运行；点右侧按钮会先应用 frpc 配置，再自动重试部署。',
+      detail: actionErrorMsg.value,
+      action: 'retry-deploy',
+    } : {
+      type: 'error',
+      title: '上次操作没有成功',
+      text: '部署 / 移除等操作被中断，按下方原因处理后重试即可；若只是刚改过穿透规则，稍等几秒再试一次通常就能通过。',
+      detail: actionErrorMsg.value,
+      action: 'reload',
+    })
+  }
+  if (loadErrorMsg.value) {
+    items.push({ type: 'error', title: '数据读取失败', text: '部分数据没有取到，页面内容可能不完整。', detail: loadErrorMsg.value, action: 'reload' })
+  }
+  // 回源端口 80/443 时不适用公网反代：此时 Nginx 与漂移都不再检查，直接给唯一动作
+  if (publicProxyInapplicable.value) {
+    items.push({
+      type: 'info',
+      title: `该服务端的 frps 回源端口是 ${privilegedVhostPorts.value.join(' / ')}，公网反代不适用`,
+      text: '80/443 已由 frps 直接对外使用，VPS 上没有 Nginx 的位置：域名访问走 FRP 隧道直达 NAS，不需要再部署 Nginx 反代，本页也不会自动下发任何路由。',
+      detail: '需使用公网反代时请把回源端口改回 8080/8443；若 VPS 上还留着以前部署的 Nginx 路由，也要先改回才能在本页移除。',
+      action: 'fix-vhost-port',
+    })
+    return items
+  }
+  if (nginxBlocking.value) {
+    items.push({
+      type: nginxBlocking.value.type,
+      title: nginxBlocking.value.title,
+      text: nginxBlocking.value.text,
+      detail: nginxBlocking.value.detail,
+      action: agentStatus.value?.nginx_missing ? 'install-nginx' : '',
+    })
+  }
+  if (driftItems.value.length > 0) {
+    items.push({
+      type: 'warning',
+      title: `检测到 ${driftItems.value.length} 项部署漂移（${driftSummary.value}）`,
+      text: 'VPS 上的实际配置与 Havline 记录不一致：可能被手工修改过，或 agent 重装后没有重新部署。',
+      detail: driftPreview.value,
+      action: 'redeploy-all',
+    })
+  }
+  return items
+})
+
+const actionBanner = computed(() => activeIssues.value[0] ?? null)
+const extraIssueCount = computed(() => Math.max(0, activeIssues.value.length - 1))
 
 // 全量重部署：逐条下发，失败不中断（后端已逐条汇总）
 async function redeployAll() {
@@ -882,12 +1020,27 @@ async function deployRoute(candidate: FrpProxy) {
   const current = server.value
   if (!current) return
   const result = await run(`deploy:${candidate.id}`, '部署反代', () => api.deployFrpAgentRoute(current.id, candidate.id))
-  if (result === undefined) return
+  if (result === undefined) {
+    // frps 里还没有该域名的隧道：多半是穿透规则改动后没应用 frpc 配置，横幅据此给出「应用配置并重试」
+    lastTunnelMissingProxyId.value = tunnelMissingRe.test(actionErrorMsg.value) ? candidate.id : null
+    return
+  }
+  lastTunnelMissingProxyId.value = null
   // 自动生成的 Basic Auth 密码只在这一次响应里返回：不再写进 nginx 配置，错过就得在「部署设置」里重设
   if (result.basic_auth_password) {
     message.warning(`Basic Auth 已生成（仅显示这一次，请立即保存）：${result.basic_auth_user} / ${result.basic_auth_password}`, { duration: 15000 })
   }
   await refreshAll()
+}
+
+// 部署失败在「隧道未注册」时：先应用 frpc 配置（等同「内网穿透」页的校验并应用），再自动重试一次部署
+async function applyFrpConfigAndRetry() {
+  const candidate = candidates.value.find((item) => item.id === lastTunnelMissingProxyId.value)
+  const applied = await run('reload-frp', '应用 frpc 配置', () => api.reloadFrp())
+  if (applied === undefined || !candidate) return
+  // frpc 重启后要几秒才重新向 frps 注册隧道；就算 agent 版本较老没有重试，也先等一拍再探测
+  await new Promise((resolve) => setTimeout(resolve, 2500))
+  await deployRoute(candidate)
 }
 
 async function removeRoute(candidate: FrpProxy) {
@@ -1067,24 +1220,52 @@ onMounted(() => { void load() })
 </script>
 
 <style scoped>
-/* 分区：提示 → 入口行 → ① 统计区 → ② 环境与 Nginx → ③ 规则台账 */
+/* 分区：行动横幅 → ① 状态 Hero → ② Nginx 详情 → ③ 规则台账 */
 .page-alert { margin-bottom: var(--havline-space-3); }
 .alert-body { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); }
 .alert-body__text { display: grid; gap: 4px; font-size: 13px; }
 .alert-body__detail { font-size: 12px; color: var(--havline-error); overflow-wrap: anywhere; }
-.entrance-row { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); margin-bottom: var(--havline-space-5); padding: 10px var(--havline-space-5); border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-info-soft); }
-.entrance-row__text { font-size: 13px; color: var(--havline-text); }
+.alert-body__more { font-size: 12px; color: var(--havline-text-muted); }
 
-.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-5); }
-.stat-card { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); padding: var(--havline-space-4) var(--havline-space-5); min-height: 118px; }
-.stat-card__icon { font-size: 18px; margin-bottom: 4px; }
-.stat-card__icon--blue { color: var(--havline-info); }
-.stat-card__icon--green { color: var(--havline-brand); }
-.stat-card__icon--amber { color: var(--havline-warning); }
-.stat-card__value { margin-top: 4px; font-size: 30px; font-weight: 700; line-height: 1.1; color: var(--havline-text); letter-spacing: -0.03em; }
-.stat-card__value-total { margin-left: 2px; font-size: 15px; font-weight: 600; color: var(--havline-text-muted); }
-.stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--havline-text); }
-.stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); }
+/* 状态 Hero：Nginx 结论 + 台账汇总 + 主操作（原 4 张统计卡与 Nginx 卡头部合并） */
+.proxy-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--havline-space-4);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  margin-bottom: var(--havline-space-5);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+}
+.proxy-hero__top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--havline-space-4); }
+.proxy-hero__status { display: flex; align-items: center; gap: var(--havline-space-3); min-width: 0; }
+.proxy-hero__icon { font-size: 26px; flex-shrink: 0; color: var(--havline-text-muted); }
+.proxy-hero__icon--success { color: var(--havline-success); }
+.proxy-hero__icon--warning { color: var(--havline-warning); }
+.proxy-hero__icon--error { color: var(--havline-error); }
+.proxy-hero__icon--unknown { color: var(--havline-text-muted); }
+.proxy-hero__headline { min-width: 0; }
+.proxy-hero__title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
+.proxy-hero__title-label { font-size: 13px; font-weight: 600; color: var(--havline-text-secondary); }
+.proxy-hero__version { font-size: 12px; color: var(--havline-text-muted); }
+.proxy-hero__sub { margin-top: 6px; font-size: 13px; color: var(--havline-text-secondary); }
+.proxy-hero__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
+.proxy-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--havline-space-4);
+  padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
+}
+.proxy-hero__metric { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.proxy-hero__metric-label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--havline-text-muted); }
+.proxy-hero__metric-icon { font-size: 14px; }
+.proxy-hero__metric-value { font-size: 22px; font-weight: 700; line-height: 1.15; color: var(--havline-text); letter-spacing: -0.02em; }
+.proxy-hero__metric-total { margin-left: 2px; font-size: 14px; font-weight: 600; color: var(--havline-text-muted); }
+.proxy-hero__metric-sub { font-size: 12px; color: var(--havline-text-muted); }
+.nginx-detail__title { font-size: 13px; font-weight: 500; color: var(--havline-text-secondary); }
 
 /* HavlineCard 自身已有 24px 内边距，这里不再叠加（与 FrpView 的用法一致） */
 .section-card { margin-bottom: var(--havline-space-5); }
@@ -1219,13 +1400,12 @@ onMounted(() => { void load() })
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.stats-row, .entrance-row, .section-card { animation: havline-fade-up 160ms ease-out both; }
+.proxy-hero, .page-alert, .section-card { animation: havline-fade-up 160ms ease-out both; }
 @media (prefers-reduced-motion: reduce) {
-  .stats-row, .entrance-row, .section-card { animation: none; }
+  .proxy-hero, .page-alert, .section-card { animation: none; }
 }
 
 @media (max-width: 1199px) {
-  .stats-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nginx-card .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* 台账为表格：窄屏靠 scroll-x 横向滚动，不改列 */
   .proxy-modal__help { display: none; }
@@ -1236,11 +1416,22 @@ onMounted(() => { void load() })
   .nginx-card .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 760px) {
-  .stats-row { grid-template-columns: 1fr; }
   .nginx-card .field-grid { grid-template-columns: 1fr; }
-  .entrance-row { flex-direction: column; align-items: flex-start; }
+  .proxy-hero__top { flex-direction: column; align-items: flex-start; }
+  .proxy-hero__actions { width: 100%; }
   .route-table-wrap :deep(.cell-actions) { width: 100%; justify-content: flex-start; }
   .route-table-wrap :deep(.cell-actions .n-button) { min-height: 44px; }
   .alert-body { flex-direction: column; align-items: flex-start; }
+}
+</style>
+
+<!-- 下拉面板由 naive-ui teleport 到 body，scoped 样式命不中，渲染型选项用全局样式约束换行 -->
+<style>
+.header-menu-hint {
+  width: 236px;
+  white-space: normal;
+  line-height: 1.5;
+  font-size: 12px;
+  color: var(--havline-text-muted);
 }
 </style>

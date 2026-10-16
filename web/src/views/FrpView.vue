@@ -2,21 +2,9 @@
   <PageHeader title="FRP 穿透" description="管理 NAS 到公网 VPS 的 frpc 客户端连接">
     <template #actions>
       <n-button @click="showExport = true; loadExport()">查看脱敏配置</n-button>
-      <n-button @click="openRuntimeModal">
-        <template #icon><n-icon :component="SettingsOutline" /></template>
-        应用配置
-      </n-button>
       <n-button @click="showGuide = true">
         <template #icon><n-icon :component="DocumentTextOutline" /></template>
         使用说明
-      </n-button>
-      <n-button v-if="status.status !== 'running'" type="primary" :loading="actionLoading === 'start'" @click="startClient">
-        <template #icon><n-icon :component="PlayOutline" /></template>
-        启动 frpc
-      </n-button>
-      <n-button v-else type="error" ghost :loading="actionLoading === 'stop'" @click="stopClient">
-        <template #icon><n-icon :component="StopOutline" /></template>
-        停止 frpc
       </n-button>
     </template>
   </PageHeader>
@@ -24,30 +12,80 @@
   <LoadError v-if="loadError" :message="loadError" @retry="load" />
 
   <template v-else>
-    <section class="stats-row" aria-label="frpc 状态">
-      <div class="stat-card">
-        <n-icon :component="GitNetworkOutline" class="stat-card__icon" :class="`stat-card__icon--${status.status}`" aria-hidden="true" />
-        <div class="stat-card__value stat-card__value--sm"><StatusBadge :kind="statusKind" :text="statusLabel" /></div>
-        <div class="stat-card__label">客户端状态</div>
-        <div class="stat-card__sub">frpc 进程状态</div>
+    <!-- FRP 状态 Hero：全局 frpc 状态 + 关键指标 + 应用配置与启停入口；当前服务端信息在规则区标题展示 -->
+    <section class="frp-hero" aria-label="FRP 运行状态">
+      <div class="frp-hero__top">
+        <div class="frp-hero__status">
+          <n-icon
+            :component="GitNetworkOutline"
+            class="frp-hero__icon"
+            :class="`frp-hero__icon--${status.status}`"
+            aria-hidden="true"
+          />
+          <div class="frp-hero__headline">
+            <div class="frp-hero__title">
+              <span class="frp-hero__title-label">全局 frpc</span>
+              <StatusBadge :kind="statusKind" :text="statusLabel" />
+            </div>
+          </div>
+        </div>
+        <div class="frp-hero__actions">
+          <n-button @click="openRuntimeModal">
+            <template #icon><n-icon :component="SettingsOutline" /></template>
+            应用配置
+          </n-button>
+          <n-button
+            v-if="status.status === 'running'"
+            type="error"
+            ghost
+            :loading="actionLoading === 'stop'"
+            @click="stopClient"
+          >
+            <template #icon><n-icon :component="StopOutline" /></template>
+            停止 frpc
+          </n-button>
+          <n-button
+            v-else
+            type="primary"
+            :loading="actionLoading === 'start'"
+            :disabled="servers.length === 0"
+            @click="startClient"
+          >
+            <template #icon><n-icon :component="PlayOutline" /></template>
+            启动 frpc
+          </n-button>
+        </div>
       </div>
-      <div class="stat-card">
-        <n-icon :component="LayersOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
-        <div class="stat-card__value">{{ status.enabled_proxies }}</div>
-        <div class="stat-card__label">启用规则</div>
-        <div class="stat-card__sub">已启用的穿透规则数</div>
-      </div>
-      <div class="stat-card">
-        <n-icon :component="TerminalOutline" class="stat-card__icon stat-card__icon--blue" aria-hidden="true" />
-        <div class="stat-card__value stat-card__value--sm">{{ status.frpc_version || '未检测' }}</div>
-        <div class="stat-card__label">frpc 版本</div>
-        <div class="stat-card__sub">本机运行的 frpc</div>
-      </div>
-      <div class="stat-card">
-        <n-icon :component="TimeOutline" class="stat-card__icon stat-card__icon--amber" aria-hidden="true" />
-        <div class="stat-card__value stat-card__value--sm">{{ formatDate(status.last_reloaded_at) || '尚未应用' }}</div>
-        <div class="stat-card__label">最近应用</div>
-        <div class="stat-card__sub">配置最近一次生效</div>
+
+      <div class="frp-hero__metrics">
+        <div class="frp-hero__metric">
+          <span class="frp-hero__metric-label">公网服务端</span>
+          <span class="frp-hero__metric-value">{{ servers.length }}</span>
+          <span class="frp-hero__metric-sub">{{ serverSummaryText }}</span>
+        </div>
+        <div class="frp-hero__metric">
+          <span class="frp-hero__metric-label">启用规则</span>
+          <span class="frp-hero__metric-value">{{ status.enabled_proxies }}</span>
+          <span class="frp-hero__metric-sub">当前服务端 {{ selectedServerEnabledCount }} 条</span>
+        </div>
+        <div class="frp-hero__metric">
+          <span class="frp-hero__metric-label">
+            <n-icon :component="PulseOutline" class="frp-hero__metric-icon" :class="healthIconClass" />
+            健康检查
+          </span>
+          <span class="frp-hero__metric-value">{{ healthValue }}</span>
+          <span class="frp-hero__metric-sub">{{ healthSub }}</span>
+        </div>
+        <div class="frp-hero__metric">
+          <span class="frp-hero__metric-label">frpc 版本</span>
+          <span class="frp-hero__metric-value">{{ status.frpc_version || '未检测' }}</span>
+          <span class="frp-hero__metric-sub">本机运行的 frpc</span>
+        </div>
+        <div class="frp-hero__metric">
+          <span class="frp-hero__metric-label">最近应用</span>
+          <span class="frp-hero__metric-value">{{ formatDate(status.last_reloaded_at) || '尚未应用' }}</span>
+          <span class="frp-hero__metric-sub">配置最近一次生效</span>
+        </div>
       </div>
     </section>
 
@@ -102,10 +140,16 @@
         <div class="rule-pane__head">
           <div class="rule-pane__intro">
             <h3 class="rule-pane__title">穿透规则</h3>
-            <span class="rule-pane__sub">{{ selectedServer?.name || '未选择服务端' }} · {{ serverProxies.length }} 条</span>
+            <span class="rule-pane__sub">
+              <template v-if="selectedServer">
+                {{ selectedServer.name }} ·
+                <span class="rule-pane__state" :class="`rule-pane__state--${selectedServer.boot_status}`">{{ serverBootLabel(selectedServer) }}</span>
+                <template v-if="selectedServerHealthText"> · {{ selectedServerHealthText }}</template>
+              </template>
+              <template v-else>未选择服务端</template>
+            </span>
           </div>
           <div class="rule-pane__actions">
-            <n-button size="small" @click="showExport = true; loadExport()">查看脱敏配置</n-button>
             <router-link v-if="selectedServerId" :to="{ name: 'frp-agent', query: { server: String(selectedServerId) } }">
               <n-button size="small" quaternary>管理该服务端</n-button>
             </router-link>
@@ -125,8 +169,8 @@
             :columns="columns"
             :data="serverProxies"
             :bordered="false"
-            :single-line="false"
-            :scroll-x="1890"
+            size="small"
+            :scroll-x="1520"
             :row-key="(row: FrpProxy) => row.id"
           />
         </div>
@@ -158,39 +202,72 @@
         <div class="proxy-modal__scroll">
           <n-form label-placement="top" class="proxy-modal__pane" @submit.prevent="saveProxy">
             <div v-show="proxyFormTab === 'basic'" class="frp-proxy-modal__basic">
-      <div class="form-grid">
-        <n-form-item label="公网服务端" required><n-select v-model:value="proxyForm.server_id" :options="proxyServerOptions" placeholder="选择 FRP 服务端" /></n-form-item>
-        <n-form-item label="规则名称" required><n-input v-model:value="proxyForm.name" placeholder="例如：nas-web" /></n-form-item>
-        <n-form-item label="类型" required><n-select v-model:value="proxyForm.type" :options="proxyTypeOptions" /></n-form-item>
-        <n-form-item v-if="!proxyForm.plugin_type" label="内网地址" required><n-input v-model:value="proxyForm.local_ip" placeholder="127.0.0.1" /></n-form-item>
-        <n-form-item v-if="!proxyForm.plugin_type" label="内网端口" required><n-input-number v-model:value="proxyForm.local_port" :min="1" :max="65535" /></n-form-item>
-        <n-form-item v-if="['tcp', 'udp'].includes(proxyForm.type)" label="公网远程端口" required><n-input-number v-model:value="proxyForm.remote_port" :min="1" :max="65535" /></n-form-item>
-        <n-form-item v-if="['http', 'https', 'tcpmux'].includes(proxyForm.type)" label="自定义域名"><n-input v-model:value="proxyForm.domains_text" type="textarea" :rows="2" placeholder="nas.example.com&#10;app.example.com" /></n-form-item>
-      </div>
-      <section class="proxy-form-section" v-if="['http', 'https'].includes(proxyForm.type)">
-        <h4>HTTP / HTTPS 配置</h4>
-        <div class="form-grid">
-          <n-form-item label="Subdomain"><n-input v-model:value="proxyForm.options.subdomain" placeholder="例如：nas" /></n-form-item>
-          <n-form-item label="公网反代选项" :show-feedback="true">
-            <span class="form-hint">WebSocket / 强制跳转 / IP 白名单 / Basic Auth 已移至「公网反代」页逐条规则的「部署设置」中配置；此处填写的值会保留。已填的 IP 白名单：{{ (proxyForm.options.allow_ips || []).join(', ') || '无' }}</span>
-          </n-form-item>
-          <n-form-item label="上游 Host 重写"><n-input v-model:value="proxyForm.host_header_rewrite" placeholder="例如：nas.example.com" /></n-form-item>
-          <n-form-item label="路径匹配（Locations）"><n-input v-model:value="proxyForm.locations_text" placeholder="多个路径用逗号或换行分隔" /></n-form-item>
-          <n-form-item label="按 HTTP 用户路由"><n-input v-model:value="proxyForm.options.route_by_http_user" placeholder="可选" /></n-form-item>
-          <n-form-item label="HTTP 基础认证用户名"><n-input v-model:value="proxyForm.options.http_user" placeholder="可选" /></n-form-item>
-          <n-form-item label="HTTP 基础认证密码"><n-input v-model:value="proxyForm.options.http_password" type="password" show-password-on="click" placeholder="可选" /></n-form-item>
-        </div>
-      </section>
-      <section class="proxy-form-section" v-if="proxyForm.type === 'tcpmux'">
-        <h4>TCPMUX 配置</h4>
-        <div class="form-grid"><n-form-item label="多路复用器" required><n-select v-model:value="proxyForm.options.multiplexer" :options="[{ label: 'HTTP CONNECT', value: 'httpconnect' }]" /></n-form-item><n-form-item label="按 HTTP 用户路由"><n-input v-model:value="proxyForm.options.route_by_http_user" placeholder="可选" /></n-form-item></div>
-      </section>
-      <section class="proxy-form-section" v-if="['stcp', 'sudp', 'xtcp'].includes(proxyForm.type)">
-        <h4>访问控制</h4>
-        <div class="form-grid"><n-form-item label="访问密钥" required><n-input v-model:value="proxyForm.options.secret_key" type="password" show-password-on="click" placeholder="与访客端保持一致" /></n-form-item><n-form-item label="允许的用户"><n-input v-model:value="proxyForm.allow_users_text" placeholder="多个用户用逗号分隔，* 表示全部" /></n-form-item></div>
-      </section>
-      <n-form-item label="备注"><n-input v-model:value="proxyForm.remark" placeholder="可选" /></n-form-item>
-      <div class="switch-row"><span>启用规则</span><n-switch v-model:value="proxyForm.enabled" /></div>
+              <!-- ① 归属与类型：决定规则写到哪台服务端 -->
+              <section class="proxy-form-section proxy-form-section--first">
+                <h4>归属与类型</h4>
+                <div class="form-grid">
+                  <n-form-item label="公网服务端" required><n-select v-model:value="proxyForm.server_id" :options="proxyServerOptions" placeholder="选择 FRP 服务端" /></n-form-item>
+                  <n-form-item label="规则名称" required><n-input v-model:value="proxyForm.name" placeholder="例如：nas-web" /></n-form-item>
+                  <n-form-item label="类型" required><n-select v-model:value="proxyForm.type" :options="proxyTypeOptions" /></n-form-item>
+                </div>
+              </section>
+
+              <!-- ② 内网目标：启用插件后由插件接管，地址与端口不生效 -->
+              <section class="proxy-form-section">
+                <h4>内网目标</h4>
+                <div class="form-grid">
+                  <template v-if="!proxyForm.plugin_type">
+                    <n-form-item label="内网地址" required><n-input v-model:value="proxyForm.local_ip" placeholder="127.0.0.1" /></n-form-item>
+                    <n-form-item label="内网端口" required><n-input-number v-model:value="proxyForm.local_port" :min="1" :max="65535" /></n-form-item>
+                  </template>
+                  <n-form-item v-else label="内网目标" class="form-item--full">
+                    <span class="form-hint">已启用插件，内网地址与端口不生效；插件参数在「高级配置 → 插件与 NAT 穿透」中设置。</span>
+                  </n-form-item>
+                </div>
+              </section>
+
+              <!-- ③ 公网入口：按类型只显示需要的字段 -->
+              <section class="proxy-form-section">
+                <h4>公网入口</h4>
+                <div class="form-grid">
+                  <template v-if="['tcp', 'udp'].includes(proxyForm.type)">
+                    <n-form-item label="公网远程端口" required><n-input-number v-model:value="proxyForm.remote_port" :min="1" :max="65535" /></n-form-item>
+                  </template>
+                  <template v-else-if="['http', 'https', 'tcpmux'].includes(proxyForm.type)">
+                    <n-form-item label="自定义域名" class="form-item--full"><n-input v-model:value="proxyForm.domains_text" type="textarea" :rows="2" placeholder="nas.example.com&#10;app.example.com" /></n-form-item>
+                    <n-form-item label="Subdomain"><n-input v-model:value="proxyForm.options.subdomain" placeholder="例如：nas" /></n-form-item>
+                    <n-form-item v-if="['http', 'https'].includes(proxyForm.type)" label="上游 Host 重写"><n-input v-model:value="proxyForm.host_header_rewrite" placeholder="例如：nas.example.com" /></n-form-item>
+                  </template>
+                  <template v-else>
+                    <n-form-item label="访问密钥" required><n-input v-model:value="proxyForm.options.secret_key" type="password" show-password-on="click" placeholder="与访客端保持一致" /></n-form-item>
+                    <n-form-item label="允许的用户"><n-input v-model:value="proxyForm.allow_users_text" placeholder="多个用户用逗号分隔，* 表示全部" /></n-form-item>
+                  </template>
+                </div>
+                <div v-if="['http', 'https'].includes(proxyForm.type)" class="proxy-form-note">
+                  <n-icon :component="InformationCircleOutline" class="proxy-form-note__icon" />
+                  <span>WebSocket / 强制跳转 / IP 白名单 / Basic Auth 在「公网反代」页的「部署设置」里配置；此处已填写的值会保留。已填的 IP 白名单：{{ (proxyForm.options.allow_ips || []).join(', ') || '无' }}</span>
+                </div>
+              </section>
+
+              <!-- ④ TCPMUX 专属：多路复用器 -->
+              <section v-if="proxyForm.type === 'tcpmux'" class="proxy-form-section">
+                <h4>TCPMUX 配置</h4>
+                <div class="form-grid">
+                  <n-form-item label="多路复用器" required><n-select v-model:value="proxyForm.options.multiplexer" :options="[{ label: 'HTTP CONNECT', value: 'httpconnect' }]" /></n-form-item>
+                </div>
+              </section>
+
+              <!-- ⑤ 备注与启用 -->
+              <section class="proxy-form-section">
+                <div class="form-grid">
+                  <n-form-item label="备注" class="form-item--full"><n-input v-model:value="proxyForm.remark" placeholder="可选" /></n-form-item>
+                </div>
+                <div class="switch-row proxy-switch-row">
+                  <n-switch v-model:value="proxyForm.enabled" />
+                  <span>启用规则</span>
+                  <span class="form-hint">停用后该规则不会写入 frpc 配置</span>
+                </div>
+              </section>
             </div>
             <div v-show="proxyFormTab === 'advanced'" class="frp-proxy-modal__advanced">
       <n-collapse class="advanced-collapse proxy-advanced-collapse">
@@ -210,18 +287,31 @@
         <n-collapse-item title="负载均衡与请求头" name="proxy-advanced">
           <div class="form-grid"><n-form-item label="负载均衡组"><n-input v-model:value="proxyForm.options.load_balancer.group" placeholder="同组规则共享流量" /></n-form-item><n-form-item label="负载均衡组密钥"><n-input v-model:value="proxyForm.options.load_balancer.group_key" type="password" show-password-on="click" /></n-form-item><n-form-item label="元数据"><n-input v-model:value="proxyForm.metadatas_text" type="textarea" :rows="2" placeholder="每行 key=value" /></n-form-item><n-form-item label="请求头（set）"><n-input v-model:value="proxyForm.request_headers_text" type="textarea" :rows="2" placeholder="每行 key=value" /></n-form-item><n-form-item label="响应头（set）"><n-input v-model:value="proxyForm.response_headers_text" type="textarea" :rows="2" placeholder="每行 key=value" /></n-form-item></div>
         </n-collapse-item>
+        <!-- HTTP 低频项：路径匹配、按用户路由与基础认证从基础页下沉到这里 -->
+        <n-collapse-item v-if="['http', 'https', 'tcpmux'].includes(proxyForm.type)" title="HTTP 匹配与鉴权" name="proxy-http">
+          <div class="form-grid">
+            <n-form-item v-if="['http', 'https'].includes(proxyForm.type)" label="路径匹配（Locations）"><n-input v-model:value="proxyForm.locations_text" placeholder="多个路径用逗号或换行分隔" /></n-form-item>
+            <n-form-item label="按 HTTP 用户路由"><n-input v-model:value="proxyForm.options.route_by_http_user" placeholder="可选" /></n-form-item>
+            <n-form-item v-if="['http', 'https'].includes(proxyForm.type)" label="HTTP 基础认证用户名"><n-input v-model:value="proxyForm.options.http_user" placeholder="可选" /></n-form-item>
+            <n-form-item v-if="['http', 'https'].includes(proxyForm.type)" label="HTTP 基础认证密码"><n-input v-model:value="proxyForm.options.http_password" type="password" show-password-on="click" placeholder="可选" /></n-form-item>
+          </div>
+        </n-collapse-item>
         <n-collapse-item title="插件与 NAT 穿透" name="proxy-plugin">
           <div class="form-grid"><n-form-item label="插件类型"><n-select v-model:value="proxyForm.plugin_type" clearable :options="pluginTypeOptions" /></n-form-item><n-form-item v-if="proxyForm.plugin_type" label="插件本地地址"><n-input v-model:value="proxyForm.plugin_local_addr" placeholder="127.0.0.1:80" /></n-form-item><n-form-item v-if="proxyForm.plugin_type === 'unix_domain_socket'" label="Unix Socket 路径"><n-input v-model:value="proxyForm.plugin_unix_path" /></n-form-item><n-form-item v-if="proxyForm.plugin_type === 'static_file'" label="静态文件目录"><n-input v-model:value="proxyForm.plugin_local_path" /></n-form-item><n-form-item v-if="proxyForm.plugin_type" label="插件用户名"><n-input v-model:value="proxyForm.plugin_username" /></n-form-item><n-form-item v-if="proxyForm.plugin_type" label="插件密码"><n-input v-model:value="proxyForm.plugin_password" type="password" show-password-on="click" /></n-form-item></div>
           <div class="switch-row"><span>禁用 NAT 辅助地址</span><n-switch v-model:value="proxyForm.options.nat_traversal.disable_assisted_addrs" /></div>
         </n-collapse-item>
       </n-collapse>
             </div>
-            <div class="modal-actions"><n-button @click="showProxyModal = false">取消</n-button><n-button type="primary" :loading="savingProxy" @click="saveProxy">保存</n-button></div>
           </n-form>
+        </div>
+        <!-- 操作栏固定在弹窗底部，长表单滚动时仍可随时保存 -->
+        <div class="proxy-modal__footer">
+          <n-button @click="showProxyModal = false">取消</n-button>
+          <n-button type="primary" :loading="savingProxy" :disabled="savingProxy" @click="saveProxy">保存</n-button>
         </div>
       </div>
       <div class="proxy-modal__help">
-        <h4>{{ proxyFormTab === 'basic' ? '配置说明' : '高级配置说明' }}</h4>
+        <h4>{{ proxyFormTab === 'basic' ? `${proxyTypeLabel} 配置说明` : '高级配置说明' }}</h4>
         <ol>
           <li v-for="item in proxyHelpItems" :key="item.title"><strong>{{ item.title }}</strong>：{{ item.text }}</li>
         </ol>
@@ -568,73 +658,109 @@
         <h3 class="modal-title">FRP 应用配置</h3>
         <n-button size="small" quaternary @click="showRuntimeModal = false">关闭</n-button>
       </div>
-      <div class="proxy-modal__scroll">
-    <div class="runtime-actions">
-      <n-button size="small" :loading="runtimeLoading" @click="loadRuntimeConfig">
-        <template #icon><n-icon :component="RefreshOutline" /></template>
-        刷新
-      </n-button>
-      <n-button size="small" type="primary" :loading="actionLoading === 'reload'" @click="applyRuntimeConfig">
-        校验并应用配置
-      </n-button>
-    </div>
-
-    <section class="runtime-section">
-      <h3>本机运行环境</h3>
-      <n-descriptions :column="1" label-placement="left" bordered size="small">
-        <n-descriptions-item label="系统架构">{{ runtime.platform || '检测中' }}</n-descriptions-item>
-        <n-descriptions-item label="当前 frpc">{{ runtime.active_bin || '未检测到' }}</n-descriptions-item>
-        <n-descriptions-item label="检测版本">{{ runtime.detected_version || '未检测到' }}</n-descriptions-item>
-        <n-descriptions-item label="配置文件"><span v-if="runtime.config_paths?.length">{{ runtime.config_paths.join('、') }}</span><span v-else>{{ runtime.config_path }}</span>{{ runtime.config_exists ? '（已生成）' : '（尚未生成）' }}</n-descriptions-item>
-      </n-descriptions>
-    </section>
-
-    <section class="runtime-section">
-      <div class="runtime-section__title"><h3>下载加速代理</h3><span>仅代理 FRP 官方 Release 下载地址</span></div>
-      <div class="download-proxy-form">
-        <n-select v-model:value="downloadProxy" :options="downloadProxyOptions" placeholder="选择下载方式" />
-        <n-button type="primary" :loading="savingDownloadProxy" @click="saveDownloadProxy">保存</n-button>
-      </div>
-    </section>
-
-    <section class="runtime-section">
-      <div class="runtime-section__title"><h3>已下载客户端</h3><span>{{ binaries.length }} 个版本</span></div>
-      <n-empty v-if="!runtimeLoading && binaries.length === 0" size="small" description="尚未下载 FRP 客户端" />
-      <div v-else class="binary-list">
-        <div v-for="binary in binaries" :key="binary.version" class="binary-row">
-          <div><strong>{{ binary.version }}</strong><div class="binary-row__meta">{{ formatBinarySize(binary.size) }} · {{ formatDate(binary.installed_at) }}</div></div>
-          <div class="binary-row__actions">
-            <n-tag v-if="binary.active" size="small" type="success" :bordered="false">当前使用</n-tag>
-            <n-button v-else size="small" :loading="activatingVersion === binary.version" @click="confirmActivate(binary.version)">启用</n-button>
-            <n-button v-if="!binary.active" size="small" quaternary type="error" :loading="deletingVersion === binary.version" @click="confirmDeleteBinary(binary)">删除</n-button>
-          </div>
+      <!-- 顶部摘要：不展开折叠项也能确认当前运行状态 -->
+      <div class="runtime-summary">
+        <div class="runtime-summary__item">
+          <span class="runtime-summary__label">当前 frpc</span>
+          <span class="runtime-summary__value">{{ runtime.detected_version || '未检测到' }}</span>
+        </div>
+        <div class="runtime-summary__item">
+          <span class="runtime-summary__label">运行平台</span>
+          <span class="runtime-summary__value">{{ runtime.platform || '检测中' }}</span>
+        </div>
+        <div class="runtime-summary__item">
+          <span class="runtime-summary__label">配置文件</span>
+          <n-tag size="small" :bordered="false" :type="runtime.config_exists ? 'success' : 'warning'">
+            {{ runtime.config_exists ? '已生成' : '尚未生成' }}
+          </n-tag>
         </div>
       </div>
-    </section>
 
-    <section class="runtime-section">
-      <div class="runtime-section__title"><h3>FRP 官方下载</h3><span>仅显示当前系统 {{ runtime.platform || '' }} 可用的稳定版本</span></div>
-      <n-empty v-if="!runtimeLoading && releases.length === 0" size="small" description="未获取到官方版本列表" />
-      <div v-else class="release-list">
-        <div v-for="release in visibleReleases" :key="release.version" class="release-row">
-          <div class="release-row__info"><strong>{{ release.version }}</strong><div class="binary-row__meta">{{ release.asset_name }} · {{ formatBinarySize(release.size) }}</div></div>
-          <div v-if="downloadTask.version === release.version && downloadTask.status !== 'idle'" class="release-progress" :class="`release-progress--${downloadTask.status}`" :title="downloadTask.error || downloadTask.message">
-            <span class="release-progress__message">{{ downloadTask.error || downloadTask.message }}</span>
-            <n-progress v-if="downloadTask.status !== 'failed'" class="release-progress__bar" type="line" :percentage="downloadPercent" :status="downloadProgressStatus" :show-indicator="false" />
-            <span v-if="downloadTask.status !== 'failed'" class="release-progress__value">{{ downloadTask.total > 0 ? `${downloadPercent}%` : '...' }}</span>
-          </div>
-          <div v-else class="release-progress-placeholder" />
-          <n-button size="small" :loading="downloadingVersion === release.version" :disabled="isDownloaded(release.version) || downloadInProgress" @click="confirmDownload(release)">
-            {{ isDownloaded(release.version) ? '已下载' : '下载' }}
-          </n-button>
-        </div>
-      </div>
-      <div v-if="releases.length > releaseLimit" class="release-list__more">
-        <n-button text type="primary" @click="releasesExpanded = !releasesExpanded">
-          {{ releasesExpanded ? '收起列表' : `显示更多（剩余 ${releases.length - releaseLimit} 条）` }}
+      <!-- 操作栏固定在滚动区之外，滚动版本列表时仍可刷新 / 应用 -->
+      <div class="runtime-toolbar">
+        <n-button size="small" :loading="runtimeLoading" @click="loadRuntimeConfig">
+          <template #icon><n-icon :component="RefreshOutline" /></template>
+          刷新
+        </n-button>
+        <n-button size="small" type="primary" :loading="actionLoading === 'reload'" @click="applyRuntimeConfig">
+          校验并应用配置
         </n-button>
       </div>
-    </section>
+
+      <div class="proxy-modal__scroll">
+        <!-- 三个折叠分组：运行环境 / 版本管理 / 下载代理，默认只展开版本管理 -->
+        <n-collapse :default-expanded-names="['versions']" class="runtime-collapse">
+          <n-collapse-item name="environment">
+            <template #header>
+              <span class="runtime-collapse__title"><n-icon :component="TerminalOutline" />运行环境</span>
+            </template>
+            <n-descriptions :column="1" label-placement="left" bordered size="small">
+              <n-descriptions-item label="系统架构">{{ runtime.platform || '检测中' }}</n-descriptions-item>
+              <n-descriptions-item label="当前 frpc">{{ runtime.active_bin || '未检测到' }}</n-descriptions-item>
+              <n-descriptions-item label="检测版本">{{ runtime.detected_version || '未检测到' }}</n-descriptions-item>
+              <n-descriptions-item label="配置文件"><span v-if="runtime.config_paths?.length">{{ runtime.config_paths.join('、') }}</span><span v-else>{{ runtime.config_path }}</span>{{ runtime.config_exists ? '（已生成）' : '（尚未生成）' }}</n-descriptions-item>
+            </n-descriptions>
+          </n-collapse-item>
+
+          <n-collapse-item name="versions">
+            <template #header>
+              <span class="runtime-collapse__title">
+                <n-icon :component="LayersOutline" />版本管理
+                <span class="runtime-collapse__meta">{{ binaries.length }} 个已下载</span>
+              </span>
+            </template>
+
+            <div class="runtime-subsection">
+              <div class="runtime-section__title"><h3>已下载客户端</h3><span>点击启用可切换当前运行版本</span></div>
+              <n-empty v-if="!runtimeLoading && binaries.length === 0" size="small" description="尚未下载 FRP 客户端" />
+              <div v-else class="binary-list">
+                <div v-for="binary in binaries" :key="binary.version" class="binary-row">
+                  <div><strong>{{ binary.version }}</strong><div class="binary-row__meta">{{ formatBinarySize(binary.size) }} · {{ formatDate(binary.installed_at) }}</div></div>
+                  <div class="binary-row__actions">
+                    <n-tag v-if="binary.active" size="small" type="success" :bordered="false">当前使用</n-tag>
+                    <n-button v-else size="small" :loading="activatingVersion === binary.version" @click="confirmActivate(binary.version)">启用</n-button>
+                    <n-button v-if="!binary.active" size="small" quaternary type="error" :loading="deletingVersion === binary.version" @click="confirmDeleteBinary(binary)">删除</n-button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="runtime-subsection">
+              <div class="runtime-section__title"><h3>FRP 官方下载</h3><span>仅显示当前系统 {{ runtime.platform || '' }} 可用的稳定版本</span></div>
+              <n-empty v-if="!runtimeLoading && releases.length === 0" size="small" description="未获取到官方版本列表" />
+              <div v-else class="release-list">
+                <div v-for="release in visibleReleases" :key="release.version" class="release-row">
+                  <div class="release-row__info"><strong>{{ release.version }}</strong><div class="binary-row__meta">{{ release.asset_name }} · {{ formatBinarySize(release.size) }}</div></div>
+                  <div v-if="downloadTask.version === release.version && downloadTask.status !== 'idle'" class="release-progress" :class="`release-progress--${downloadTask.status}`" :title="downloadTask.error || downloadTask.message">
+                    <span class="release-progress__message">{{ downloadTask.error || downloadTask.message }}</span>
+                    <n-progress v-if="downloadTask.status !== 'failed'" class="release-progress__bar" type="line" :percentage="downloadPercent" :status="downloadProgressStatus" :show-indicator="false" />
+                    <span v-if="downloadTask.status !== 'failed'" class="release-progress__value">{{ downloadTask.total > 0 ? `${downloadPercent}%` : '...' }}</span>
+                  </div>
+                  <div v-else class="release-progress-placeholder" />
+                  <n-button size="small" :loading="downloadingVersion === release.version" :disabled="isDownloaded(release.version) || downloadInProgress" @click="confirmDownload(release)">
+                    {{ isDownloaded(release.version) ? '已下载' : '下载' }}
+                  </n-button>
+                </div>
+              </div>
+              <div v-if="releases.length > releaseLimit" class="release-list__more">
+                <n-button text type="primary" @click="releasesExpanded = !releasesExpanded">
+                  {{ releasesExpanded ? '收起列表' : `显示更多（剩余 ${releases.length - releaseLimit} 条）` }}
+                </n-button>
+              </div>
+            </div>
+          </n-collapse-item>
+
+          <n-collapse-item name="proxy">
+            <template #header>
+              <span class="runtime-collapse__title"><n-icon :component="FlashOutline" />下载代理</span>
+            </template>
+            <div class="runtime-section__title"><h3>下载加速代理</h3><span>仅代理 FRP 官方 Release 下载地址</span></div>
+            <div class="download-proxy-form">
+              <n-select v-model:value="downloadProxy" :options="downloadProxyOptions" placeholder="选择下载方式" />
+              <n-button type="primary" :loading="savingDownloadProxy" @click="saveDownloadProxy">保存</n-button>
+            </div>
+          </n-collapse-item>
+        </n-collapse>
       </div>
       <div class="modal-footer"><n-button @click="showRuntimeModal = false">关闭</n-button></div>
     </div>
@@ -645,17 +771,19 @@
 import { computed, h, onMounted, reactive, ref, type VNode } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import type { FrpProxyTraffic, FrpProxiesTraffic } from '../api/types'
-import { NButton, NIcon, NSpace, NSwitch, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NIcon, NSwitch, NTag, useDialog, useMessage } from 'naive-ui'
 import {
-  AddOutline, CloseOutline, DocumentTextOutline, FlashOutline, GitNetworkOutline, InformationCircleOutline,
-  LayersOutline, PeopleOutline, PlayOutline, RefreshOutline, SettingsOutline, StopOutline, TerminalOutline, TimeOutline,
+  AddOutline, CloseOutline, CopyOutline, DocumentTextOutline, FlashOutline, GitNetworkOutline, InformationCircleOutline,
+  LayersOutline, OpenOutline, PeopleOutline, PlayOutline, PulseOutline, RefreshOutline, SettingsOutline, StopOutline,
+  TerminalOutline,
 } from '@vicons/ionicons5'
 import { RouterLink } from 'vue-router'
 import { api, asList } from '../api/client'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
-import { formatBytes, formatDate, formatRate } from '../utils/format'
+import { formatBytes, formatDate, formatRate, formatRelativeTime } from '../utils/format'
+import { copyText } from '../utils/clipboard'
 
-import type { FrpBinary, FrpDownloadTask, FrpProxy, FrpProxyOptions, FrpProxyPayload, FrpRelease, FrpRuntimeInfo, FrpServer, FrpStatus } from '../api/types'
+import type { FrpBinary, FrpDownloadTask, FrpProxy, FrpProxyOptions, FrpProxyPayload, FrpRelease, FrpRuntimeInfo, FrpServer, FrpServerDiagnostics, FrpStatus } from '../api/types'
 import HavlineCard from '../components/HavlineCard.vue'
 import EmptyState from '../components/EmptyState.vue'
 import LoadError from '../components/LoadError.vue'
@@ -667,6 +795,7 @@ const message = useMessage()
 const dialog = useDialog()
 const status = ref<FrpStatus>({ status: 'unknown', configured: false, enabled_proxies: 0 })
 const servers = ref<FrpServer[]>([])
+const serverDiagnostics = ref<Record<number, FrpServerDiagnostics>>({})
 const proxies = ref<FrpProxy[]>([])
 const proxyTraffic = ref<Record<number, FrpProxyTraffic>>({})
 const proxyTrafficErrors = ref<Record<number, string>>({})
@@ -732,6 +861,8 @@ const proxyQuickExamples: Record<FrpProxy['type'], {
   xtcp: { title: 'XTCP P2P 穿透', description: '通过访客端和服务端建立点对点连接。', lines: ['name = "ssh-xtcp"', 'type = "xtcp"', 'localPort = 22', 'secretKey = "请替换为强密钥"'], name: 'ssh-xtcp', localPort: 22, remotePort: 0, domains: '', remark: 'P2P SSH 服务', secretKey: '请替换为强密钥', multiplexer: '' },
 }
 const proxyQuickExample = computed(() => proxyQuickExamples[proxyForm.type])
+// 右侧说明栏标题带上当前类型名，避免只看“配置说明”不知道在讲哪种规则
+const proxyTypeLabel = computed(() => proxyTypeOptions.find((item) => item.value === proxyForm.type)?.label ?? '规则')
 const pluginTypeOptions = [
   { label: 'Unix Domain Socket', value: 'unix_domain_socket' }, { label: 'HTTP Proxy', value: 'http_proxy' }, { label: 'Socks5', value: 'socks5' }, { label: 'Static File', value: 'static_file' },
   { label: 'HTTP 转 HTTPS', value: 'http2https' }, { label: 'HTTPS 转 HTTP', value: 'https2http' }, { label: 'HTTPS 转 HTTPS', value: 'https2https' }, { label: 'HTTP 转 HTTP', value: 'http2http' }, { label: 'TLS 转 Raw', value: 'tls2raw' },
@@ -792,46 +923,75 @@ const frpTypeTagType: Record<FrpProxy['type'], 'info' | 'success' | 'warning' | 
   tcp: 'info', udp: 'default', http: 'success', https: 'success', tcpmux: 'info', stcp: 'warning', sudp: 'warning', xtcp: 'warning',
 }
 
-// 穿透规则表格：列宽固定，各行列天然对齐（单元格由 render 创建，样式必须 :deep()）
+// 穿透规则台账：版式对齐「公网反代 → 规则台账」，列宽固定、逐行对齐（单元格由 render 创建，样式必须 :deep()）
 const columns = computed<DataTableColumns<FrpProxy>>(() => [
-  { title: '名称', key: 'name', minWidth: 150, render: (row) => h('div', [h('strong', row.name), row.remark ? h('div', { class: 'table-muted' }, row.remark) : null]) },
-  { title: '类型', key: 'type', width: 92, render: (row) => h(NTag, { size: 'small', type: frpTypeTagType[row.type], bordered: false, round: true }, () => row.type.toUpperCase()) },
-  { title: '内网目标', key: 'local', minWidth: 170, render: (row) => h('code', proxyLocalTarget(row)) },
-  { title: '公网入口', key: 'public', minWidth: 200, render: (row) => h('code', proxyPublicEndpoint(row)) },
-  { title: '传输', key: 'transport', width: 150, render: (row) => {
-      const tags = proxyTransportTags(row)
-      return tags.length ? h(NSpace, { size: 4, wrap: false }, () => tags) : h('span', { class: 'table-muted' }, '标准传输')
-    } },
-  { title: '健康检查', key: 'health_check', width: 96, render: (row) => {
-      const checkType = row.options?.health_check?.type
-      return checkType
-        ? h(NTag, { size: 'small', type: 'success', bordered: false, round: true }, () => checkType.toUpperCase())
-        : h('span', { class: 'table-muted' }, '—')
-    } },
-  { title: '负载均衡', key: 'load_balancer', width: 104, render: (row) => {
+  {
+    title: '规则', key: 'name', width: 240,
+    render: (row) => h('div', { class: 'cell-name' }, [
+      h('div', { class: 'cell-name__head' }, [
+        h('strong', row.name),
+        h(NTag, { size: 'small', type: frpTypeTagType[row.type], bordered: false, round: true }, () => row.type.toUpperCase()),
+        row.enabled ? null : h('span', { class: 'cell-muted' }, '已停用'),
+      ]),
+      h('div', { class: 'cell-domains' }, proxyEntriesOf(row).map((entry) => h('div', { class: 'cell-domain' }, [
+        h('span', { class: 'mono cell-wrap' }, entry.text),
+        h(NButton, { size: 'tiny', quaternary: true, title: `复制 ${entry.text}`, onClick: () => copyEntry(entry.text) },
+          { icon: () => h(NIcon, { component: CopyOutline }) }),
+        entry.url ? h(NButton, { size: 'tiny', quaternary: true, title: `打开 ${entry.text}`, onClick: () => openEntry(entry.url) },
+          { icon: () => h(NIcon, { component: OpenOutline }) }) : null,
+      ]))),
+      row.remark ? h('span', { class: 'cell-muted cell-wrap' }, row.remark) : null,
+    ]),
+  },
+  {
+    title: '内网目标', key: 'local', width: 190,
+    render: (row) => h('div', { class: 'cell-upstream' }, [
+      h('span', { class: 'mono cell-wrap' }, `${row.local_ip}:${row.local_port}`),
+      row.options?.plugin?.type ? h('span', { class: 'mono cell-wrap cell-muted' }, `插件 · ${row.options.plugin.type}`) : null,
+    ]),
+  },
+  {
+    title: '传输 · 健康', key: 'transport', width: 210,
+    render: (row) => {
+      const items = [...proxyTransportTags(row)]
       const group = row.options?.load_balancer?.group
-      return group
-        ? h(NTag, { size: 'small', type: 'info', bordered: false, round: true }, () => group)
-        : h('span', { class: 'table-muted' }, '—')
-    } },
-  { title: '状态', key: 'enabled', width: 100, render: (row) => h('div', { onClick: (event: MouseEvent) => event.stopPropagation() }, h(NSwitch, { value: row.enabled, size: 'small', onUpdateValue: (value: boolean) => toggleProxy(row, value) })) },
-  { title: '当前连接', key: 'cur_conns', width: 88, render: (row) => h('span', { class: 'mono' }, String(proxyTraffic.value[row.id]?.cur_conns ?? 0)) },
-  { title: '当前上传', key: 'traffic_in_rate', width: 96, render: (row) => h('span', { class: 'mono text-secondary' }, formatRate(proxyTraffic.value[row.id]?.traffic_in_rate ?? 0)) },
-  { title: '当前下载', key: 'traffic_out_rate', width: 96, render: (row) => h('span', { class: 'mono text-secondary' }, formatRate(proxyTraffic.value[row.id]?.traffic_out_rate ?? 0)) },
-  { title: '总上传', key: 'traffic_in', width: 96, render: (row) => h('span', { class: 'mono' }, formatBytes(proxyTraffic.value[row.id]?.traffic_in ?? 0)) },
-  { title: '总下载', key: 'traffic_out', width: 96, render: (row) => h('span', { class: 'mono' }, formatBytes(proxyTraffic.value[row.id]?.traffic_out ?? 0)) },
-  { title: '更新时间', key: 'updated_at', width: 110, render: (row) => h('span', { class: 'table-muted' }, formatDate(row.updated_at)) },
-  { title: '操作', key: 'actions', width: 200, render: (row) => h(NSpace, { size: 2, wrap: false }, () => [
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyDetail(row) }, () => '详情'),
-    h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyModal(row) }, () => '编辑'),
-    h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => confirmDeleteProxy(row) }, () => '删除'),
-  ]) },
+      if (group) items.push(h(NTag, { size: 'small', type: 'info', bordered: false, round: true }, () => `LB ${group}`))
+      if (row.options?.health_check?.type) items.push(h(NTag, { size: 'small', type: 'success', bordered: false, round: true }, () => `健康 ${row.options.health_check.type?.toUpperCase()}`))
+      return items.length ? h('div', { class: 'cell-health' }, items) : h('span', { class: 'cell-muted' }, '标准传输')
+    },
+  },
+  {
+    title: '状态', key: 'enabled', width: 84, align: 'center',
+    render: (row) => h('div', { class: 'cell-switch', onClick: (event: MouseEvent) => event.stopPropagation() },
+      h(NSwitch, { value: row.enabled, size: 'small', onUpdateValue: (value: boolean) => toggleProxy(row, value) })),
+  },
+  { title: '连接', key: 'cur_conns', width: 80, align: 'right', render: (row) => h('span', { class: 'mono' }, String(proxyTraffic.value[row.id]?.cur_conns ?? 0)) },
+  { title: '当前上传', key: 'traffic_in_rate', width: 100, align: 'right', render: (row) => h('span', { class: 'mono' }, formatRate(proxyTraffic.value[row.id]?.traffic_in_rate ?? 0)) },
+  { title: '当前下载', key: 'traffic_out_rate', width: 100, align: 'right', render: (row) => h('span', { class: 'mono' }, formatRate(proxyTraffic.value[row.id]?.traffic_out_rate ?? 0)) },
+  { title: '总上传', key: 'traffic_in', width: 95, align: 'right', render: (row) => h('span', { class: 'mono' }, formatBytes(proxyTraffic.value[row.id]?.traffic_in ?? 0)) },
+  { title: '总下载', key: 'traffic_out', width: 95, align: 'right', render: (row) => h('span', { class: 'mono' }, formatBytes(proxyTraffic.value[row.id]?.traffic_out ?? 0)) },
+  {
+    title: '更新时间', key: 'updated_at', width: 155,
+    render: (row) => h('div', { class: 'cell-time' }, [
+      h('span', { class: 'mono' }, formatDate(row.updated_at)),
+      h('span', { class: 'cell-muted' }, formatRelativeTime(row.updated_at)),
+    ]),
+  },
+  {
+    title: '操作', key: 'actions', width: 170, align: 'right',
+    render: (row) => h('div', { class: 'cell-actions' }, [
+      h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyDetail(row) }, () => '详情'),
+      h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyModal(row) }, () => '编辑'),
+      h(NButton, { size: 'small', quaternary: true, type: 'error', onClick: () => confirmDeleteProxy(row) }, () => '删除'),
+    ]),
+  },
 ])
 
 // 左侧选中服务端 → 右侧只列该服务端的规则；存 id 而不是对象，避免列表刷新后指向旧快照
 const selectedServerId = ref<number | null>(null)
 const selectedServer = computed(() => servers.value.find((item) => item.id === selectedServerId.value) ?? null)
 const serverProxies = computed(() => proxies.value.filter((item) => item.server_id === selectedServerId.value))
+const selectedServerEnabledCount = computed(() => serverProxies.value.filter((item) => item.enabled).length)
 
 const showProxyDetail = ref(false)
 const detailProxy = ref<FrpProxy | null>(null)
@@ -860,6 +1020,56 @@ function serverRuleCount(serverID: number) {
 function serverEnabledRuleCount(serverID: number) {
   return proxies.value.filter((item) => item.server_id === serverID && item.enabled).length
 }
+
+// 全局指标卡：服务端统计
+const serverRunningCount = computed(() => servers.value.filter((item) => item.boot_status === 'running').length)
+const serverAbnormalCount = computed(() => servers.value.filter((item) => item.boot_status === 'error').length)
+const serverSummaryText = computed(() => {
+  if (servers.value.length === 0) return '尚未添加服务端'
+  const parts = [`${serverRunningCount.value} 台运行中`]
+  if (serverAbnormalCount.value > 0) parts.push(`${serverAbnormalCount.value} 台异常`)
+  return parts.join(' · ')
+})
+
+// 全局指标卡：健康检查（取自服务端诊断的可达性与延迟）
+const probedDiagnostics = computed(() =>
+  servers.value.map((item) => serverDiagnostics.value[item.id]).filter((item): item is FrpServerDiagnostics => Boolean(item)))
+const reachableServerCount = computed(() => probedDiagnostics.value.filter((item) => item.available).length)
+const averageLatency = computed(() => {
+  const values = probedDiagnostics.value.filter((item) => item.available && typeof item.latency_ms === 'number').map((item) => item.latency_ms as number)
+  if (values.length === 0) return null
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+})
+const healthValue = computed(() => {
+  if (servers.value.length === 0) return '未配置'
+  if (probedDiagnostics.value.length === 0) return '检测中'
+  return `${reachableServerCount.value}/${probedDiagnostics.value.length} 可达`
+})
+const healthSub = computed(() => {
+  if (servers.value.length === 0) return '添加服务端后可检测'
+  if (probedDiagnostics.value.length === 0) return '正在探测服务端连通性'
+  const pending = servers.value.length - probedDiagnostics.value.length
+  if (pending > 0) return `另有 ${pending} 台待检测`
+  if (averageLatency.value === null) return '暂无可达服务端'
+  return `平均延迟 ${averageLatency.value} ms`
+})
+const healthIconClass = computed(() => {
+  if (servers.value.length === 0 || probedDiagnostics.value.length === 0) return 'stat-card__icon--blue'
+  if (reachableServerCount.value === 0) return 'stat-card__icon--red'
+  if (reachableServerCount.value < probedDiagnostics.value.length) return 'stat-card__icon--amber'
+  return 'stat-card__icon--green'
+})
+
+// 当前选中服务端的探测结果，与全局状态并列展示，避免两级状态脱节
+const selectedServerHealthText = computed(() => {
+  const server = selectedServer.value
+  if (!server) return ''
+  const diagnostics = serverDiagnostics.value[server.id]
+  if (!diagnostics) return ''
+  if (!diagnostics.available) return diagnostics.error || '不可达'
+  return diagnostics.latency_ms ? `延迟 ${diagnostics.latency_ms} ms` : '可达'
+})
+
 const proxyLogLines = ref<string[]>([])
 const proxyLogsLoading = ref(false)
 
@@ -971,6 +1181,7 @@ async function load() {
       selectedServerId.value = servers.value[0]?.id ?? null
     }
     void loadProxyTraffic()
+    void loadServerDiagnostics()
   } catch (error) {
     loadError.value = error instanceof Error ? error.message : '加载 FRP 配置失败'
   }
@@ -1148,10 +1359,46 @@ async function loadExport() {
   catch (error) { message.error(error instanceof Error ? error.message : '导出失败') }
 }
 
+// 公网入口条目：TCP/UDP 补全「服务端地址:远程端口」，域名类逐条给出可跳转的完整地址
+function proxyEntriesOf(proxy: FrpProxy): Array<{ text: string; url: string }> {
+  if (proxy.type === 'tcp' || proxy.type === 'udp') {
+    const host = servers.value.find((item) => item.id === proxy.server_id)?.server_addr ?? ''
+    const port = proxy.remote_port
+    if (!host || !port) return [{ text: '未设置公网入口', url: '' }]
+    return [{ text: `${host}:${port}`, url: `http://${host}:${port}` }]
+  }
+  if (proxy.type === 'stcp' || proxy.type === 'sudp' || proxy.type === 'xtcp') return [{ text: '密钥访问（无公网端口）', url: '' }]
+  const domains = proxy.custom_domains.length ? proxy.custom_domains : (proxy.options?.subdomain ? [proxy.options.subdomain] : [])
+  if (domains.length === 0) return [{ text: '未设置公网入口', url: '' }]
+  const scheme = proxy.type === 'https' ? 'https' : 'http'
+  return domains.map((domain) => ({ text: domain, url: `${scheme}://${domain}` }))
+}
+
 function proxyPublicEndpoint(proxy: FrpProxy) {
-  if (proxy.type === 'tcp' || proxy.type === 'udp') return `:${proxy.remote_port ?? '-'}`
-  if (proxy.type === 'stcp' || proxy.type === 'sudp' || proxy.type === 'xtcp') return '密钥访问'
-  return proxy.custom_domains.join(', ') || proxy.options?.subdomain || '未设置入口'
+  return proxyEntriesOf(proxy).map((entry) => entry.text).join('、')
+}
+
+// 入口快捷操作：复制完整地址 / 新窗口打开（复制文字来自上层 tooltip，见列渲染）
+async function copyEntry(text: string) {
+  if (await copyText(text)) message.success(`已复制 ${text}`)
+  else message.error('复制失败，请手动选择文本复制')
+}
+
+function openEntry(url: string) {
+  window.open(url, '_blank', 'noopener')
+}
+
+// 服务端健康检查：探测各服务端 TCP 可达与延迟，30 秒内不重复探测（与服务端页同一策略）
+let diagnosticsFetchedAt = 0
+async function loadServerDiagnostics() {
+  if (servers.value.length === 0) { serverDiagnostics.value = {}; return }
+  if (Date.now() - diagnosticsFetchedAt < 30_000) return
+  diagnosticsFetchedAt = Date.now()
+  const results = await Promise.all(servers.value.map(async (server) => {
+    try { return await api.getFrpServerDiagnostics(server.id) }
+    catch { return { server_id: server.id, available: false, error: '不可达' } as FrpServerDiagnostics }
+  }))
+  serverDiagnostics.value = Object.fromEntries(results.map((item) => [item.server_id, item]))
 }
 
 /** 拉取穿透流量快照并按规则 ID 展开;失败的服务端错误记录到 proxyTrafficErrors */
@@ -1203,7 +1450,7 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 
 <style scoped>
 /* 统计区：对齐标准页（CertificatesView）的 .stats-row / .stat-card 规格 */
-.stats-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
+.stats-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
 .stat-card { background: var(--havline-surface); border: 1px solid var(--havline-border); border-radius: var(--havline-radius); box-shadow: var(--havline-shadow); padding: var(--havline-space-4) var(--havline-space-5); min-height: 118px; }
 .stat-card__icon { font-size: 18px; margin-bottom: 4px; }
 .stat-card__icon--blue { color: var(--havline-info); }
@@ -1216,6 +1463,40 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 .stat-card__value--sm { font-size: 18px; }
 .stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--havline-text); }
 .stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); }
+/* FRP 状态 Hero：把全局 frpc 状态与当前选中服务端放进同一结论区，解决两级状态脱节 */
+.frp-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--havline-space-4);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  margin-bottom: var(--havline-space-4);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+}
+.frp-hero__top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--havline-space-4); }
+.frp-hero__status { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-3); min-width: 0; }
+.frp-hero__icon { font-size: 26px; flex-shrink: 0; color: var(--havline-text-muted); }
+.frp-hero__icon--running { color: var(--havline-brand); }
+.frp-hero__icon--stopped { color: var(--havline-disabled); }
+.frp-hero__icon--unknown { color: var(--havline-warning); }
+.frp-hero__headline { min-width: 0; }
+.frp-hero__title { display: flex; align-items: center; gap: var(--havline-space-2); }
+.frp-hero__title-label { font-size: 13px; font-weight: 600; color: var(--havline-text-secondary); }
+.frp-hero__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
+.frp-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--havline-space-4);
+  padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
+}
+.frp-hero__metric { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.frp-hero__metric-label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--havline-text-muted); }
+.frp-hero__metric-icon { font-size: 14px; }
+.frp-hero__metric-value { font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--havline-text); overflow-wrap: anywhere; }
+.frp-hero__metric-sub { font-size: 12px; color: var(--havline-text-muted); }
 /* 公网服务端列表：n-data-table（与规则表一致）；单元格由 render 创建，样式必须 :deep() */
 .rule-detail__logs { max-height: 420px; }
 .rule-detail__log-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--havline-space-3); }
@@ -1331,8 +1612,16 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 .frp-proxy-modal .proxy-modal__tab--active { color: var(--havline-brand-text); font-weight: 600; border-bottom-color: var(--havline-brand); }
 .frp-proxy-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .frp-proxy-modal .proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--havline-space-4) var(--havline-space-5) 0; }
-.frp-proxy-modal .proxy-modal__pane > .modal-actions { padding-bottom: var(--havline-space-5); }
-.frp-proxy-modal__basic .form-grid { grid-template-columns: 1fr; }
+/* 基础页分组：两列排布，长字段用 .form-item--full 跨列 */
+.frp-proxy-modal__basic .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.frp-proxy-modal .form-item--full { grid-column: 1 / -1; }
+/* 保存栏固定在弹窗底部（滚动区之外） */
+.frp-proxy-modal .proxy-modal__footer { display: flex; justify-content: flex-end; gap: var(--havline-space-3); padding: var(--havline-space-4) var(--havline-space-5); border-top: 1px solid var(--havline-border); flex-shrink: 0; }
+/* 公网反代提示：替代原来占一整格的说明项 */
+.frp-proxy-modal .proxy-form-note { display: flex; align-items: flex-start; gap: 8px; margin-top: var(--havline-space-2); padding: 10px 12px; border-radius: 8px; background: var(--havline-info-soft); color: var(--havline-info); font-size: 12px; line-height: 1.6; }
+.frp-proxy-modal .proxy-form-note__icon { flex-shrink: 0; margin-top: 2px; font-size: 15px; }
+.frp-proxy-modal .proxy-switch-row { padding-bottom: 0; }
+.frp-proxy-modal .proxy-form-section--first { margin-top: 0; padding-top: 0; border-top: 0; }
 .frp-server-modal__basic .form-grid { grid-template-columns: 1fr; }
 .frp-proxy-modal .proxy-form-section { margin-top: var(--havline-space-2); padding: var(--havline-space-4) 0 0; border-top: 1px solid var(--havline-border); }
 .frp-proxy-modal .proxy-form-section h4 { margin: 0 0 var(--havline-space-4); font-size: 14px; font-weight: 600; color: var(--havline-text); }
@@ -1366,7 +1655,39 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 .frp-card-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; color: var(--havline-text); }
 .frp-card-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--havline-space-4) var(--havline-space-5) 0; }
 .frp-card-modal .modal-footer { display: flex; justify-content: flex-end; gap: var(--havline-space-3); padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5); border-top: 1px solid var(--havline-border); margin-top: var(--havline-space-2); flex-shrink: 0; }
-.frp-runtime-modal { width: min(880px, 92vw); }
+.frp-runtime-modal { width: min(780px, 92vw); }
+.frp-runtime-modal .proxy-modal__scroll { padding-bottom: var(--havline-space-4); }
+/* FRP 应用配置弹窗：顶部摘要 + 固定操作栏 + 折叠分组，替代原来一整列平铺的分段 */
+.runtime-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--havline-space-5);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  border-bottom: 1px solid var(--havline-border);
+  background: var(--havline-bg-muted);
+  flex-shrink: 0;
+}
+.runtime-summary__item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.runtime-summary__label { font-size: 12px; color: var(--havline-text-muted); }
+.runtime-summary__value { font-size: 14px; font-weight: 600; color: var(--havline-text); }
+.runtime-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-3) var(--havline-space-5);
+  border-bottom: 1px solid var(--havline-border);
+  flex-shrink: 0;
+}
+.runtime-collapse { border: 1px solid var(--havline-border); border-radius: 10px; overflow: hidden; background: var(--havline-surface); }
+.runtime-collapse :deep(.n-collapse-item) { margin: 0 !important; border: 0 !important; border-radius: 0 !important; }
+.runtime-collapse :deep(.n-collapse-item + .n-collapse-item) { border-top: 1px solid var(--havline-border) !important; }
+.runtime-collapse :deep(.n-collapse-item__header) { min-height: 46px; padding: 0 16px !important; background: var(--havline-bg); font-weight: 600; box-sizing: border-box; }
+.runtime-collapse :deep(.n-collapse-item__content-inner) { padding: 14px 16px 16px; }
+.runtime-collapse__title { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--havline-text); }
+.runtime-collapse__meta { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--havline-text-muted); }
+.runtime-collapse h3 { margin: 0; font-size: 15px; }
+.runtime-subsection + .runtime-subsection { margin-top: var(--havline-space-5); padding-top: var(--havline-space-4); border-top: 1px dashed var(--havline-border); }
 /* 服务端详情弹窗（仍用 naive-ui preset=card）：排版对齐 .proxy-modal */
 
 .frp-guide-modal { display: flex; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
@@ -1465,10 +1786,33 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 .rule-pane__intro { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--havline-space-3); min-width: 0; }
 .rule-pane__title { margin: 0; font-size: 15px; font-weight: 600; color: var(--havline-text); }
 .rule-pane__sub { font-size: 12.5px; color: var(--havline-text-secondary); }
+/* 当前服务端运行状态按状态着色，与左侧列表标签一致 */
+.rule-pane__state { font-weight: 600; }
+.rule-pane__state--running { color: var(--havline-success); }
+.rule-pane__state--starting { color: var(--havline-warning); }
+.rule-pane__state--error { color: var(--havline-error); }
+.rule-pane__state--stopped { color: var(--havline-text-muted); }
 .rule-pane__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
-.rule-table-wrap { border: 1px solid var(--havline-border); border-radius: var(--havline-radius); background: var(--havline-surface); box-shadow: var(--havline-shadow); overflow: hidden; padding: var(--havline-space-2) 0; }
+.rule-table-wrap { border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-surface); box-shadow: var(--havline-shadow); overflow: hidden; }
+/* 穿透规则台账：版式对齐「公网反代 → 规则台账」；单元格由 render 创建，必须 :deep() 才能命中 */
 .frp-rules-table :deep(.table-muted) { color: var(--havline-text-muted); font-size: 12px; }
 .frp-rules-table :deep(.mono) { font-family: var(--havline-mono); font-size: 13px; }
 .frp-rules-table :deep(.text-secondary) { color: var(--havline-text-secondary); }
+.frp-rules-table :deep(.cell-name) { display: grid; gap: 4px; align-content: center; }
+.frp-rules-table :deep(.cell-name__head) { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.frp-rules-table :deep(.cell-name strong) { font-size: 13.5px; color: var(--havline-text); }
+.frp-rules-table :deep(.cell-muted) { font-size: 12px; color: var(--havline-text-muted); }
+.frp-rules-table :deep(.cell-wrap) { overflow-wrap: anywhere; }
+.frp-rules-table :deep(.cell-upstream) { display: grid; gap: 2px; }
+.frp-rules-table :deep(.cell-domains) { display: grid; gap: 2px; }
+.frp-rules-table :deep(.cell-domain) { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* 地址不撑满整格：复制 / 跳转按钮紧跟地址，不贴近右侧列 */
+.frp-rules-table :deep(.cell-domain .mono) { flex: 0 1 auto; min-width: 0; }
+.frp-rules-table :deep(.cell-health) { display: flex; align-items: center; gap: var(--havline-space-2); flex-wrap: wrap; }
+.frp-rules-table :deep(.cell-switch) { display: flex; justify-content: center; }
+.frp-rules-table :deep(.cell-time) { display: grid; gap: 2px; }
+.frp-rules-table :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+/* 行高被多行内容撑高时，单元格内容保持上下居中 */
+.frp-rules-table :deep(.n-data-table-td) { vertical-align: middle; }
 @media (max-width: 1100px) { .frp-layout { grid-template-columns: 1fr; } .server-sidebar__list { max-height: none; } }
 </style>

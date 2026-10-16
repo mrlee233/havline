@@ -90,6 +90,20 @@ const router = createRouter({
           meta: { title: '日志中心', description: '查看系统、访问与 Nginx 错误日志' },
         },
         {
+          path: 'terminal',
+          name: 'terminal',
+          // 懒加载：xterm 体积不小，只有真正打开终端时才下载
+          component: () => import('../views/TerminalView.vue'),
+          meta: { title: 'SSH 终端', description: '在浏览器里直接连接公网服务端的 SSH 终端' },
+        },
+        {
+          path: 'terminal/audits',
+          name: 'terminal-audits',
+          // 终端页面里的「审计记录」入口，同样懒加载
+          component: () => import('../views/TerminalAuditView.vue'),
+          meta: { title: '终端审计', description: '查看 SSH 会话审计记录' },
+        },
+        {
           path: 'settings',
           name: 'settings',
           component: SettingsView,

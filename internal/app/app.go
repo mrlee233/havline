@@ -35,6 +35,7 @@ import (
 	"github.com/havline/havline/internal/secret"
 	"github.com/havline/havline/internal/service"
 	"github.com/havline/havline/internal/settings"
+	"github.com/havline/havline/internal/terminal"
 	"github.com/havline/havline/internal/traffic"
 	"github.com/havline/havline/internal/updater"
 )
@@ -135,26 +136,46 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
 	updaterClient := updater.NewClient(cfg.UpdaterSocket, updaterToken)
+	// 内置 SSH 终端：会话管理借用 frp 的 SSH 凭据与 known_hosts；开关默认关闭，见 settings.KeyTerminalEnabled
+	// 会话审计落 SQLite：谁、何时、连了哪台、多久、为什么断开
+	terminalAuditStore := terminal.NewAuditStore(conn)
+	// 常用命令：右侧面板的快捷命令，落库后换浏览器也在
+	terminalCommandStore := terminal.NewCommandStore(conn)
+	terminalManager := terminal.NewManager(logger, frpMultiSvc.OpenSSHTerminal, terminal.Options{})
+	terminalManager.SetAuditSink(terminalAuditStore)
+	// 会话录制：默认关闭，开启后按 asciinema v2 把输出写进 logs/terminal
+	terminalRecordingStore := terminal.NewRecordingStore(filepath.Join(cfg.LogsDir(), "terminal"))
+	if err := terminalRecordingStore.EnsureDir(); err != nil {
+		logger.Warn("终端录制目录创建失败", "module", "TERMINAL", "error", err.Error())
+	}
+	terminalManager.SetRecorderFactory(func(sessionID string, opts terminal.CreateOptions) (terminal.OutputRecorder, error) {
+		title := fmt.Sprintf("服务端 #%d", opts.ServerID)
+		return terminal.NewCastRecorder(terminalRecordingStore, sessionID, title, opts.Cols, opts.Rows, time.Now())
+	})
 
 	handler := api.NewRouter(api.Deps{
-		Config:     cfg,
-		Logger:     logger,
-		Auth:       authSvc,
-		Proxy:      proxySvc,
-		DDNS:       ddnsSvc,
-		ACME:       acmeSvc,
-		Settings:   settingsStore,
-		Notify:     notifySvc,
-		ChinaCIDR:  chinaCIDRSvc,
-		Backup:     backupSvc,
-		Metrics:    metricsStore,
-		Discovery:  discoverySvc,
-		FRPMulti:   frpMultiSvc,
-		Cloudflare: cloudflareSvc,
-		Traffic:    trafficCollector,
-		Updater:    updaterClient,
-		StaticFS:   staticFS,
-		StartedAt:  startedAt,
+		Config:             cfg,
+		Logger:             logger,
+		Auth:               authSvc,
+		Proxy:              proxySvc,
+		DDNS:               ddnsSvc,
+		ACME:               acmeSvc,
+		Settings:           settingsStore,
+		Notify:             notifySvc,
+		ChinaCIDR:          chinaCIDRSvc,
+		Backup:             backupSvc,
+		Metrics:            metricsStore,
+		Discovery:          discoverySvc,
+		FRPMulti:           frpMultiSvc,
+		Cloudflare:         cloudflareSvc,
+		Traffic:            trafficCollector,
+		Updater:            updaterClient,
+		StaticFS:           staticFS,
+		StartedAt:          startedAt,
+		Terminal:           terminalManager,
+		TerminalAudits:     terminalAuditStore,
+		TerminalCommands:   terminalCommandStore,
+		TerminalRecordings: terminalRecordingStore,
 	})
 	if prefix := strings.TrimSpace(cfg.GatewayPrefix); prefix != "" {
 		handler = stripPrefixIfPresent(prefix, handler)
@@ -169,6 +190,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// 终端会话回收：空闲超时、超长会话与已结束会话都靠它清理
+	terminalManager.StartSweeper(ctx, time.Minute)
 	frpMultiSvc.SetBaseContext(ctx)
 	go frpMultiSvc.StartAgentTunnels(ctx)
 	go frpMultiSvc.StartAgentCertificateRenewal(ctx)
@@ -211,6 +234,27 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 			Interval: backup.AutoInterval,
 			Run:      backupRunner.Run,
 		},
+		scheduler.Job{
+			Name:     "terminal_audit",
+			Interval: 24 * time.Hour,
+			// 审计只留 90 天：清理比会话回收慢得多，单独挂一个日任务即可
+			Run: func(ctx context.Context) {
+				deleted, err := terminalAuditStore.PruneAudits(ctx)
+				if err != nil {
+					logger.Warn("终端审计清理失败", "module", "TERMINAL", "error", err.Error())
+				}
+				if deleted > 0 {
+					logger.Info("终端审计清理完成", "module", "TERMINAL", "deleted", deleted)
+				}
+				removed, err := terminalRecordingStore.Prune(time.Now().Add(-terminal.AuditRetention))
+				if err != nil {
+					logger.Warn("终端录制清理失败", "module", "TERMINAL", "error", err.Error())
+				}
+				if removed > 0 {
+					logger.Info("终端录制清理完成", "module", "TERMINAL", "deleted", removed)
+				}
+			},
+		},
 	)
 	sched.Start(ctx)
 	trafficCollector.Start(ctx)
@@ -238,7 +282,11 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		logger.Warn("initial frp autostart skipped", "module", "FRP", "error", err.Error())
 	}
 
-	logger.Info("application started", "module", "SYSTEM", "listen", cfg.ListenAddr)
+	listen := strings.TrimSpace(cfg.ListenAddr)
+	if listen == "" {
+		listen = strings.TrimSpace(cfg.GatewaySocket)
+	}
+	logger.Info("application started", "module", "SYSTEM", "listen", listen)
 	return app, nil
 }
 
@@ -250,31 +298,40 @@ func (a *App) bootstrapNginx(ctx context.Context, proxySvc *service.ProxyService
 }
 
 func (a *App) Run() error {
-	if strings.TrimSpace(a.cfg.GatewaySocket) == "" {
+	socket := strings.TrimSpace(a.cfg.GatewaySocket)
+	if socket == "" {
 		return a.server.ListenAndServe()
 	}
-	// 先准备两端监听，任何一端失败都不留下半启动的服务。
-	tcp, err := net.Listen("tcp", a.server.Addr)
-	if err != nil {
-		return err
+
+	listeners := make([]net.Listener, 0, 2)
+	// 原生版显式把 TCP 地址置空，只保留 Unix Socket，避免和 Docker 版抢 6893。
+	if addr := strings.TrimSpace(a.server.Addr); addr != "" {
+		tcp, err := net.Listen("tcp", addr)
+		if err != nil {
+			return err
+		}
+		defer tcp.Close()
+		listeners = append(listeners, tcp)
 	}
-	defer tcp.Close()
-	socket := strings.TrimSpace(a.cfg.GatewaySocket)
+
 	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	listener, err := net.Listen("unix", socket)
+	unixListener, err := net.Listen("unix", socket)
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer unixListener.Close()
 	defer os.Remove(socket)
 	if err := os.Chmod(socket, 0o660); err != nil {
 		return err
 	}
-	errCh := make(chan error, 2)
-	go func() { errCh <- a.server.Serve(tcp) }()
-	go func() { errCh <- a.server.Serve(listener) }()
+	listeners = append(listeners, unixListener)
+
+	errCh := make(chan error, len(listeners))
+	for _, listener := range listeners {
+		go func(l net.Listener) { errCh <- a.server.Serve(l) }(listener)
+	}
 	return <-errCh
 }
 

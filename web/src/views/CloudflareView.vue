@@ -1,27 +1,78 @@
 <template>
   <PageHeader title="Cloudflare 隧道" description="通过 cloudflared 把内网 Web 服务发布到 Cloudflare 边缘，无需公网 IP">
     <template #actions>
-      <n-button :loading="preflightLoading" @click="openPreflight">接入向导</n-button>
+      <!-- 应用配置是常用入口，放在外面直接可见；接入向导与反向代理入口留在「更多」里 -->
       <n-button :loading="settingsLoading" @click="openSettings">应用配置</n-button>
-      <n-button type="primary" @click="openCreate">新建隧道</n-button>
+      <n-button type="primary" @click="openCreate">
+        <template #icon><n-icon :component="AddOutline" /></template>
+        新建隧道
+      </n-button>
+      <n-dropdown trigger="click" :options="headerMenuOptions" @select="handleHeaderMenu">
+        <n-button>
+          <template #icon><n-icon :component="EllipsisHorizontalOutline" /></template>
+          更多
+        </n-button>
+      </n-dropdown>
     </template>
   </PageHeader>
 
-  <div class="cf-global" :class="{ 'cf-global--off': !appSettings.enabled }">
-    <div class="cf-global__text">
-      <strong>全局托管</strong>
-      <span>{{ appSettings.enabled ? '已启用：开启时和下次启动 Havline 时都会启动全部隧道' : '已停用：所有隧道已停止，应用重启后也不会自动拉起' }}</span>
+  <!-- 状态 Hero：合并原来的「全局托管条 + 二进制状态提示」，首屏直接给出就绪情况与隧道汇总 -->
+  <section class="cf-hero" aria-label="Cloudflare 隧道概览">
+    <div class="cf-hero__top">
+      <div class="cf-hero__status">
+        <n-icon
+          :component="CloudOutline"
+          class="cf-hero__icon"
+          :class="binaryVersion ? 'cf-hero__icon--ok' : 'cf-hero__icon--warn'"
+          aria-hidden="true"
+        />
+        <div class="cf-hero__headline">
+          <div class="cf-hero__title">
+            <span class="cf-hero__title-label">cloudflared</span>
+            <StatusBadge v-if="binaryVersion" kind="success" :text="displayBinaryVersion(binaryVersion)" />
+            <StatusBadge v-else kind="warning" text="未安装" />
+          </div>
+          <div class="cf-hero__sub">
+            {{ binaryVersion ? '已就绪，可用于创建与运行隧道' : '尚未安装：点右侧「下载安装」，装好后再创建隧道' }}
+          </div>
+        </div>
+      </div>
+      <div class="cf-hero__actions">
+        <n-button v-if="!binaryVersion" size="small" type="primary" :loading="settingsLoading" @click="openSettings">下载安装</n-button>
+        <div class="cf-hero__managed">
+          <span class="cf-hero__managed-label">全局托管</span>
+          <n-switch :value="appSettings.enabled" :loading="globalLoading" @update:value="toggleGlobal" />
+        </div>
+      </div>
     </div>
-    <n-switch :value="appSettings.enabled" :loading="globalLoading" @update:value="toggleGlobal" />
-  </div>
 
-  <n-alert v-if="binaryVersion" type="info" :bordered="false" class="cf-alert">
-    已安装：<span class="mono">{{ displayBinaryVersion(binaryVersion) }}</span>
-  </n-alert>
-  <n-alert v-else type="warning" :bordered="false" class="cf-alert">
-    尚未安装 cloudflared。请先点右上角「cloudflared 二进制」下载，再创建隧道。
-  </n-alert>
-  <n-alert type="info" :bordered="false" class="cf-alert">
+    <div class="cf-hero__metrics">
+      <div class="cf-hero__metric">
+        <span class="cf-hero__metric-label">隧道</span>
+        <span class="cf-hero__metric-value">{{ tunnels.length }}</span>
+        <span class="cf-hero__metric-sub">{{ managedTunnelCount ? `含 ${managedTunnelCount} 条自动托管` : '暂无自动托管' }}</span>
+      </div>
+      <div class="cf-hero__metric">
+        <span class="cf-hero__metric-label">已连接</span>
+        <span class="cf-hero__metric-value">{{ connectedTunnelCount }}</span>
+        <span class="cf-hero__metric-sub">cloudflared 已连到边缘</span>
+      </div>
+      <div class="cf-hero__metric">
+        <span class="cf-hero__metric-label">待修复</span>
+        <span class="cf-hero__metric-value">{{ driftTunnelCount }}</span>
+        <span class="cf-hero__metric-sub">{{ driftTunnelCount ? '与 Cloudflare 云端不一致' : '云端与本地一致' }}</span>
+      </div>
+    </div>
+
+    <div class="cf-hero__foot" :class="{ 'cf-hero__foot--off': !appSettings.enabled }">
+      {{ appSettings.enabled
+        ? '全局托管已启用：开启时和下次启动 Havline 时都会启动全部隧道。'
+        : '全局托管已停用：所有隧道已停止，应用重启后也不会自动拉起。' }}
+    </div>
+  </section>
+
+  <!-- 免费套餐说明属于一次性认知信息，允许关闭（本地记住） -->
+  <n-alert v-if="showFreeTierHint" type="info" :bordered="false" class="cf-alert" closable @close="dismissFreeTierHint">
     Cloudflare Tunnel 适合 NAS 面板、相册和小型 Web 服务。免费套餐不适合持续大文件或视频分发，请不要把它当作大流量媒体出口。
   </n-alert>
 
@@ -157,33 +208,89 @@
           <pre class="cf-pre">{{ detailConfig || '暂无配置' }}</pre>
         </n-tab-pane>
         <n-tab-pane name="logs" tab="日志">
-          <div class="cf-code-toolbar"><n-button size="tiny" :loading="detailLoading" @click="refreshDetail">刷新</n-button></div>
+          <div class="cf-code-toolbar cf-code-toolbar--split">
+            <!-- 默认不自动刷新：原来每 3 秒无条件替换内容，读日志时会被打断 -->
+            <div class="cf-switch-inline">
+              <n-switch v-model:value="logAutoRefresh" size="small" />
+              <!-- 文字也可点：不用去精确点那个小开关（switch 自身已绑定，这里只负责文字区） -->
+              <span @click="logAutoRefresh = !logAutoRefresh">自动刷新（每 3 秒）</span>
+            </div>
+            <n-button size="tiny" :loading="detailLoading" @click="refreshDetail">刷新</n-button>
+          </div>
+          <p class="cf-hint cf-hint--tight">需要盯实时输出时再打开自动刷新；默认关闭，避免阅读时内容被替换。</p>
           <pre class="cf-pre">{{ detailLogs || '暂无日志' }}</pre>
         </n-tab-pane>
-        <n-tab-pane name="diagnostics" tab="漂移与诊断">
-          <div class="cf-code-toolbar">
-            <n-button size="tiny" :loading="driftLoading" @click="loadDrift">检测漂移</n-button>
-            <n-button size="tiny" :disabled="!detailDrift?.has_drift" :loading="driftSyncing" @click="syncDrift">以本地覆盖</n-button>
-            <n-button size="tiny" :loading="diagnosticsLoading" @click="loadDiagnostics">运行诊断</n-button>
-            <n-button size="tiny" :loading="accessLoading" @click="loadAccessStatus">检查 Access</n-button>
-            <n-button size="tiny" :loading="credentialLoading" @click="refreshCredentials">刷新凭据</n-button>
+        <!-- 原来 5 个按钮平铺 + 3 块结果混在一起，改为按「漂移 / 连通性 / Access / 凭据」分组 -->
+        <n-tab-pane name="diagnostics" tab="诊断">
+          <div class="cf-diag-groups">
+            <section class="cf-diag-group">
+              <div class="cf-diag-group__head">
+                <div class="cf-diag-group__text">
+                  <div class="cf-diag-group__title">云端漂移</div>
+                  <p class="cf-diag-group__desc">对比本地 config.yml 与 Cloudflare 上实际生效的路由，不一致时可用本地覆盖。</p>
+                </div>
+                <div class="cf-diag-group__actions">
+                  <n-button size="tiny" :loading="driftLoading" @click="loadDrift">检测漂移</n-button>
+                  <n-button size="tiny" type="primary" :disabled="!detailDrift?.has_drift" :loading="driftSyncing" @click="syncDrift">以本地覆盖</n-button>
+                </div>
+              </div>
+              <n-alert v-if="detailDrift" :type="detailDrift.has_drift ? 'warning' : 'success'" :bordered="false" class="cf-mode-alert">
+                <template v-if="detailDrift.has_drift">
+                  发现 {{ detailDrift.items.length }} 项云端漂移：
+                  <div v-for="item in detailDrift.items" :key="item" class="mono">{{ item }}</div>
+                </template>
+                <template v-else>本地规则与 Cloudflare 云端配置一致。</template>
+              </n-alert>
+              <p v-else class="cf-diag-group__empty">还没有检测结果，点「检测漂移」开始。</p>
+            </section>
+
+            <section class="cf-diag-group">
+              <div class="cf-diag-group__head">
+                <div class="cf-diag-group__text">
+                  <div class="cf-diag-group__title">连通性诊断</div>
+                  <p class="cf-diag-group__desc">检查本机进程、metrics 端口，以及到 Cloudflare 边缘的连通情况。</p>
+                </div>
+                <div class="cf-diag-group__actions">
+                  <n-button size="tiny" :loading="diagnosticsLoading" @click="loadDiagnostics">运行诊断</n-button>
+                </div>
+              </div>
+              <div v-if="detailDiagnostics" class="cf-diagnostics">
+                <div v-for="check in detailDiagnostics.checks" :key="check.name" class="cf-diagnostic-row">
+                  <n-tag size="small" :type="diagnosticTag(check.status)" :bordered="false">{{ check.name }}</n-tag>
+                  <span>{{ check.message }}</span>
+                </div>
+              </div>
+              <p v-else class="cf-diag-group__empty">还没有诊断结果。</p>
+            </section>
+
+            <section class="cf-diag-group">
+              <div class="cf-diag-group__head">
+                <div class="cf-diag-group__text">
+                  <div class="cf-diag-group__title">Access 保护（只读）</div>
+                  <p class="cf-diag-group__desc">检测首个主机名是否被 Cloudflare Access 覆盖；Havline 只读检测，不代配策略。</p>
+                </div>
+                <div class="cf-diag-group__actions">
+                  <n-button size="tiny" :loading="accessLoading" @click="loadAccessStatus">检查 Access</n-button>
+                </div>
+              </div>
+              <n-alert v-if="detailAccess" type="info" :bordered="false" class="cf-mode-alert">
+                {{ detailAccess.enabled ? `已启用 Cloudflare Access${detailAccess.name ? '：' + detailAccess.name : ''}` : '未检测到 Cloudflare Access 保护。' }}
+              </n-alert>
+              <p v-else class="cf-diag-group__empty">还没有检测结果。</p>
+            </section>
+
+            <section class="cf-diag-group">
+              <div class="cf-diag-group__head">
+                <div class="cf-diag-group__text">
+                  <div class="cf-diag-group__title">凭据维护</div>
+                  <p class="cf-diag-group__desc">重新从 Cloudflare 下载该隧道的凭据文件；凭据失效或换账号后使用。</p>
+                </div>
+                <div class="cf-diag-group__actions">
+                  <n-button size="tiny" :loading="credentialLoading" @click="refreshCredentials">刷新凭据</n-button>
+                </div>
+              </div>
+            </section>
           </div>
-          <n-alert v-if="detailDrift" :type="detailDrift.has_drift ? 'warning' : 'success'" :bordered="false" class="cf-mode-alert">
-            <template v-if="detailDrift.has_drift">
-              发现 {{ detailDrift.items.length }} 项云端漂移：
-              <div v-for="item in detailDrift.items" :key="item" class="mono">{{ item }}</div>
-            </template>
-            <template v-else>本地规则与 Cloudflare 云端配置一致。</template>
-          </n-alert>
-          <div v-if="detailDiagnostics" class="cf-diagnostics">
-            <div v-for="check in detailDiagnostics.checks" :key="check.name" class="cf-diagnostic-row">
-              <n-tag size="small" :type="diagnosticTag(check.status)" :bordered="false">{{ check.name }}</n-tag>
-              <span>{{ check.message }}</span>
-            </div>
-          </div>
-          <n-alert v-if="detailAccess" type="info" :bordered="false" class="cf-mode-alert">
-            {{ detailAccess.enabled ? `已启用 Cloudflare Access${detailAccess.name ? '：' + detailAccess.name : ''}` : '未检测到 Cloudflare Access 保护。Havline 只做只读检测，不代配策略。' }}
-          </n-alert>
         </n-tab-pane>
       </n-tabs>
     </div>
@@ -195,59 +302,69 @@
     </template>
   </n-modal>
 
-  <n-modal v-model:show="settingsVisible" preset="card" :style="{ width: 'min(640px, 96vw)' }" title="Cloudflare 应用配置">
+  <n-modal v-model:show="settingsVisible" preset="card" :style="{ width: 'min(680px, 96vw)' }" title="Cloudflare 应用配置">
     <div class="cf-modal__body">
-      <n-divider title-placement="left">程序安装</n-divider>
-      <div class="cf-binary">
-        <div><label>当前版本</label><strong class="mono">{{ displayBinaryVersion(binaryVersion) || '未安装' }}</strong></div>
-        <div><label>检测到的最新版本</label><strong class="mono">{{ latestBinaryVersion || '未检查' }}</strong></div>
-        <div><label>目标文件</label><strong class="mono">cloudflared</strong></div>
-      </div>
-      <n-form label-placement="top">
-        <n-form-item label="下载镜像">
-          <n-select v-model:value="settingsForm.mirror" :options="mirrorOptions" />
-        </n-form-item>
-      </n-form>
-      <div class="cf-code-toolbar">
-        <n-button size="small" :loading="binaryChecking" @click="checkLatestBinary">检查更新</n-button>
-        <n-button size="small" :loading="binaryLoading" @click="downloadBinary">下载并安装</n-button>
-        <n-button size="small" :loading="binaryRollbackLoading" @click="rollbackBinary">回滚上一版</n-button>
-      </div>
-      <p class="cf-hint">下载后会校验文件大小与可执行性，并原子替换现有二进制。国内环境推荐 gh-proxy 镜像。</p>
+      <!-- 三段原是纵向平铺的长表单，改为 Tab：每段各自一屏，不用来回滚动 -->
+      <n-tabs v-model:value="settingsTab" type="line" animated>
+        <n-tab-pane name="binary" tab="程序安装">
+          <div class="cf-binary">
+            <div><label>当前版本</label><strong class="mono">{{ displayBinaryVersion(binaryVersion) || '未安装' }}</strong></div>
+            <div><label>检测到的最新版本</label><strong class="mono">{{ latestBinaryVersion || '未检查' }}</strong></div>
+            <div><label>目标文件</label><strong class="mono">cloudflared</strong></div>
+          </div>
+          <n-form label-placement="top">
+            <n-form-item label="下载镜像">
+              <n-select v-model:value="settingsForm.mirror" :options="mirrorOptions" />
+            </n-form-item>
+          </n-form>
+          <div class="cf-code-toolbar">
+            <n-button size="small" :loading="binaryChecking" @click="checkLatestBinary">检查更新</n-button>
+            <n-button size="small" type="primary" :loading="binaryLoading" @click="downloadBinary">下载并安装</n-button>
+            <n-button size="small" :loading="binaryRollbackLoading" @click="rollbackBinary">回滚上一版</n-button>
+          </div>
+          <p class="cf-hint">
+            下载后会校验文件大小与可执行性，并原子替换现有二进制。国内环境推荐 gh-proxy 镜像；<strong>镜像选择要点右下角「保存配置」才会长期记住</strong>，「下载并安装」会立即使用当前选择。
+          </p>
+        </n-tab-pane>
 
-      <n-divider title-placement="left">Cloudflare 账号</n-divider>
-      <n-form label-placement="top">
-        <n-form-item label="Account ID">
-          <n-input v-model:value="settingsForm.account_id" :placeholder="appSettings.account_id || '例如 b590ee0f16701d36f2819b0e3c938e81'" />
-        </n-form-item>
-        <n-form-item label="API Token">
-          <n-input
-            v-model:value="settingsForm.api_token"
-            type="password"
-            show-password-on="click"
-            :placeholder="appSettings.api_token_configured ? `已配置 ${appSettings.api_token_masked}，留空保留` : 'cfat_...'"
-          />
-        </n-form-item>
-      </n-form>
-      <div class="cf-code-toolbar">
-        <n-button size="small" :loading="tokenTesting" @click="testToken">测试连接</n-button>
-        <n-button size="small" tag="a" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">获取 API Token</n-button>
-      </div>
-      <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
-        {{ tokenTestResult }}
-      </n-alert>
-      <p class="cf-hint">Havline 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道与 DNS。API Token 需要 Account: Cloudflare Tunnel: Edit、Zone: Zone: Read、Zone: DNS: Edit 权限，且 Zone Resources 要包含所有要发布的根域名。</p>
+        <n-tab-pane name="account" tab="Cloudflare 账号">
+          <n-form label-placement="top">
+            <n-form-item label="Account ID">
+              <n-input v-model:value="settingsForm.account_id" :placeholder="appSettings.account_id || '例如 b590ee0f16701d36f2819b0e3c938e81'" />
+            </n-form-item>
+            <n-form-item label="API Token">
+              <n-input
+                v-model:value="settingsForm.api_token"
+                type="password"
+                show-password-on="click"
+                :placeholder="appSettings.api_token_configured ? `已配置 ${appSettings.api_token_masked}，留空保留` : 'cfat_...'"
+              />
+            </n-form-item>
+          </n-form>
+          <div class="cf-code-toolbar">
+            <n-button size="small" :loading="tokenTesting" @click="testToken">测试连接</n-button>
+            <n-button size="small" tag="a" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener">获取 API Token</n-button>
+          </div>
+          <n-alert v-if="tokenTestResult" :type="tokenTestOk ? 'success' : 'error'" :bordered="false" class="cf-mode-alert">
+            {{ tokenTestResult }}
+          </n-alert>
+          <p class="cf-hint">Havline 使用 Account ID + API Token 调用 Cloudflare API 创建和管理隧道与 DNS。API Token 需要 Account: Cloudflare Tunnel: Edit、Zone: Zone: Read、Zone: DNS: Edit 权限，且 Zone Resources 要包含所有要发布的根域名。</p>
+        </n-tab-pane>
 
-      <n-divider title-placement="left">默认网络设置</n-divider>
-      <n-form label-placement="top">
-        <n-form-item label="传输协议"><n-select v-model:value="settingsForm.network.transport_protocol" :options="protocolOptions" /></n-form-item>
-        <n-form-item label="边缘地址族"><n-select v-model:value="settingsForm.network.edge_ip_version" :options="edgeOptions" /></n-form-item>
-        <n-form-item label="HA 连接数"><n-input-number v-model:value="settingsForm.network.ha_connections" :min="1" :max="4" /></n-form-item>
-        <n-form-item label="代理模式"><n-select v-model:value="settingsForm.network.proxy_mode" :options="proxyOptions" /></n-form-item>
-      </n-form>
+        <n-tab-pane name="network" tab="网络设置">
+          <n-form label-placement="top">
+            <n-form-item label="传输协议"><n-select v-model:value="settingsForm.network.transport_protocol" :options="protocolOptions" /></n-form-item>
+            <n-form-item label="边缘地址族"><n-select v-model:value="settingsForm.network.edge_ip_version" :options="edgeOptions" /></n-form-item>
+            <n-form-item label="HA 连接数"><n-input-number v-model:value="settingsForm.network.ha_connections" :min="1" :max="4" /></n-form-item>
+            <n-form-item label="代理模式"><n-select v-model:value="settingsForm.network.proxy_mode" :options="proxyOptions" /></n-form-item>
+          </n-form>
+          <p class="cf-hint">这些是新建隧道的默认值：保存后只影响之后创建的隧道，已存在的隧道不受影响。</p>
+        </n-tab-pane>
+      </n-tabs>
     </div>
     <template #footer>
       <div class="cf-modal__footer">
+        <span class="cf-modal__foot-hint">程序安装是即时操作，其余两项点「保存配置」生效</span>
         <n-button @click="settingsVisible = false">取消</n-button>
         <n-button type="primary" :loading="settingsSaving" @click="saveSettings">保存配置</n-button>
       </div>
@@ -277,7 +394,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NAlert, NButton, NDivider, NForm, NFormItem, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, NTabPane, NTabs, useMessage } from 'naive-ui'
+import { NAlert, NButton, NDivider, NDropdown, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NPopconfirm, NSelect, NSwitch, NTabPane, NTabs, useMessage, type DropdownOption } from 'naive-ui'
+import { AddOutline, CloudOutline, EllipsisHorizontalOutline } from '@vicons/ionicons5'
 import { api, asList } from '../api/client'
 import type { CfAccessStatus, CfAppSettings, CfAppSettingsInput, CfDiagnosticsResult, CfDriftResult, CfMirror, CfPreflightResult, CfRuntimeStatus, CfTunnel, CfTunnelPayload, CfZone } from '../api/types'
 import HavlineCard from '../components/HavlineCard.vue'
@@ -305,9 +423,37 @@ const globalLoading = ref(false)
 const settingsVisible = ref(false)
 const settingsLoading = ref(false)
 const settingsSaving = ref(false)
+// 应用配置弹窗的当前 Tab：binary / account / network
+const settingsTab = ref<string>('account')
 const tokenTesting = ref(false)
 const tokenTestResult = ref('')
 const tokenTestOk = ref(false)
+
+// Header「更多」：应用配置已移出为常驻按钮，这里保留接入向导与反向代理入口
+const headerMenuOptions = computed<DropdownOption[]>(() => [
+  { label: '接入向导（环境预检）', key: 'preflight', disabled: preflightLoading.value },
+  { type: 'divider', key: 'divider' },
+  { label: '前往反向代理页（托管隧道来源）', key: 'proxies' },
+])
+
+function handleHeaderMenu(key: string | number) {
+  if (key === 'preflight') return void openPreflight()
+  if (key === 'proxies') return void router.push({ name: 'proxies' })
+}
+
+// 免费套餐说明可关闭，并记在本地：这是固定不变的认知信息，不该每次都占首屏
+const FREE_TIER_HINT_KEY = 'havline.cloudflare.freeTierHintDismissed'
+const showFreeTierHint = ref(readFreeTierHintVisible())
+
+function readFreeTierHintVisible() {
+  try { return localStorage.getItem(FREE_TIER_HINT_KEY) !== '1' } catch { return true }
+}
+
+function dismissFreeTierHint() {
+  showFreeTierHint.value = false
+  try { localStorage.setItem(FREE_TIER_HINT_KEY, '1') } catch { /* 隐私模式下忽略写入失败 */ }
+}
+
 const appSettings = ref<CfAppSettings>({
   account_id: '',
   enabled: true,
@@ -321,6 +467,9 @@ const appSettings = ref<CfAppSettings>({
 const settingsForm = ref<CfAppSettingsInput>({ account_id: '', token: '', api_token: '', mirror: 'official', network: emptyNetwork() })
 const editorVisible = ref(false)
 const detailVisible = ref(false)
+// 详情弹窗的日志自动刷新：默认关闭，由日志页签里的开关显式打开
+const logAutoRefresh = ref(false)
+const logAutoRefreshEnabled = computed(() => detailVisible.value && logAutoRefresh.value)
 const detailTunnel = ref<CfTunnel | null>(null)
 const detailStatus = ref<CfRuntimeStatus | null>(null)
 const detailConfig = ref('')
@@ -425,6 +574,11 @@ function runtimeStatus(item: CfTunnel): CfRuntimeStatus {
     transport: '',
   }
 }
+
+// Hero 汇总：隧道总数里的已连接条数、自动托管条数，以及检测到云端漂移的条数
+const connectedTunnelCount = computed(() => tunnels.value.filter((item) => runtimeStatus(item).status === 'connected').length)
+const managedTunnelCount = computed(() => tunnels.value.filter((item) => item.managed).length)
+const driftTunnelCount = computed(() => Object.values(driftByTunnel.value).filter((item) => item.has_drift).length)
 
 function replicaCount(item: CfTunnel): number {
   return runtimeStatus(item).connections || 0
@@ -615,6 +769,8 @@ async function openDetail(item: CfTunnel) {
   detailDrift.value = null
   detailDiagnostics.value = null
   detailAccess.value = null
+  // 每次打开都回到「不自动刷新」：否则上次开过会让人以为是默认行为
+  logAutoRefresh.value = false
   detailVisible.value = true
   await refreshDetail()
 }
@@ -730,6 +886,8 @@ async function copyConfig() {
 
 async function openSettings() {
   preflightVisible.value = false
+  // 未安装 cloudflared 时先落到「程序安装」，否则默认停在最常改的「Cloudflare 账号」
+  settingsTab.value = binaryVersion.value ? 'account' : 'binary'
   settingsVisible.value = true
   await loadAppSettings()
 }
@@ -862,24 +1020,56 @@ onMounted(() => {
 })
 
 useVisibilityPolling(() => load(), 5000)
-useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
+// 只有用户显式打开「自动刷新」才轮询详情，默认不打扰阅读
+useVisibilityPolling(refreshDetail, 3000, { enabled: logAutoRefreshEnabled })
 </script>
 
 <style scoped>
-.cf-global {
+/* 状态 Hero：cloudflared 就绪情况 + 全局托管 + 隧道汇总（原来是两条并列的常驻区块） */
+.cf-hero {
+  display: flex;
+  flex-direction: column;
+  gap: var(--havline-space-4);
+  padding: var(--havline-space-4) var(--havline-space-5);
+  margin-bottom: var(--havline-space-4);
+  background: var(--havline-surface);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius);
+  box-shadow: var(--havline-shadow);
+}
+.cf-hero__top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--havline-space-4); }
+.cf-hero__status { display: flex; align-items: center; gap: var(--havline-space-3); min-width: 0; }
+.cf-hero__icon { font-size: 26px; flex-shrink: 0; }
+.cf-hero__icon--ok { color: var(--havline-success); }
+.cf-hero__icon--warn { color: var(--havline-warning); }
+.cf-hero__headline { min-width: 0; }
+.cf-hero__title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
+.cf-hero__title-label { font-size: 13px; font-weight: 600; color: var(--havline-text-secondary); }
+.cf-hero__sub { margin-top: 6px; font-size: 13px; color: var(--havline-text-secondary); }
+.cf-hero__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-3); }
+.cf-hero__managed {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--havline-space-4);
-  padding: 12px var(--havline-space-5);
-  margin-bottom: var(--havline-space-4);
+  gap: 10px;
+  padding: 6px 12px;
   border: 1px solid var(--havline-border);
   border-radius: var(--havline-radius-sm);
-  background: var(--havline-surface);
+  background: var(--havline-bg);
 }
-.cf-global--off { border-color: var(--havline-warning); background: var(--havline-bg); }
-.cf-global__text { display: grid; gap: 4px; font-size: 13px; }
-.cf-global__text span { color: var(--havline-text-secondary); }
+.cf-hero__managed-label { font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.cf-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--havline-space-4);
+  padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
+}
+.cf-hero__metric { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cf-hero__metric-label { font-size: 12px; color: var(--havline-text-muted); }
+.cf-hero__metric-value { font-size: 22px; font-weight: 700; line-height: 1.15; color: var(--havline-text); letter-spacing: -0.02em; }
+.cf-hero__metric-sub { font-size: 12px; color: var(--havline-text-muted); }
+.cf-hero__foot { font-size: 12.5px; color: var(--havline-text-secondary); }
+.cf-hero__foot--off { color: var(--havline-warning); }
 .cf-alert { margin-bottom: var(--havline-space-4); }
 .cf-empty { padding: 24px 0; color: var(--havline-text-muted); }
 .cf-table { width: 100%; overflow-x: auto; }
@@ -916,6 +1106,7 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
 .cf-meta { font-size: 12px; color: var(--havline-text-secondary); }
 .cf-modal__body { max-height: 68vh; overflow: auto; padding-right: 4px; }
 .cf-modal__footer { display: flex; justify-content: flex-end; gap: 8px; }
+.cf-modal__foot-hint { margin-right: auto; align-self: center; font-size: 12px; color: var(--havline-text-muted); }
 .cf-mode-alert { margin-bottom: 4px; }
 .cf-preflight { display: grid; gap: 10px; }
 .cf-preflight__row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); }
@@ -950,6 +1141,21 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
 .cf-binary > div { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-bg); }
 .cf-binary label { font-size: 12px; color: var(--havline-text-muted); }
 .cf-hint { font-size: 12px; color: var(--havline-text-muted); }
+.cf-hint--tight { margin: 0 0 8px; }
+.cf-code-toolbar--split { justify-content: space-between; align-items: center; }
+.cf-switch-inline { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--havline-text-secondary); }
+.cf-switch-inline span { cursor: pointer; }
+/* 详情弹窗「诊断」页：按检查项分组，每组标题 + 说明 + 动作 + 结果 */
+.cf-diag-groups { display: grid; gap: var(--havline-space-3); }
+.cf-diag-group { padding: 12px 14px; border: 1px solid var(--havline-border); border-radius: var(--havline-radius-sm); background: var(--havline-surface); }
+.cf-diag-group__head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: var(--havline-space-3); }
+.cf-diag-group__text { min-width: 0; }
+.cf-diag-group__title { font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.cf-diag-group__desc { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--havline-text-muted); }
+.cf-diag-group__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; flex-shrink: 0; }
+.cf-diag-group__empty { margin: 10px 0 0; font-size: 12px; color: var(--havline-text-muted); }
+.cf-diag-group .cf-mode-alert,
+.cf-diag-group .cf-diagnostics { margin-top: 10px; }
 .cf-pre {
   max-height: 240px;
   overflow: auto;
@@ -961,5 +1167,10 @@ useVisibilityPolling(refreshDetail, 3000, { enabled: detailVisible })
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .cf-hero__top { flex-direction: column; align-items: flex-start; }
+  .cf-hero__actions { width: 100%; }
 }
 </style>

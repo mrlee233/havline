@@ -135,6 +135,39 @@ func (s *Service) AdminIDForSession(ctx context.Context, sessionID string) (int,
 	return adminID, nil
 }
 
+// AdminUsername 反查管理员用户名：审计记录要写清「谁」操作的。
+func (s *Service) AdminUsername(ctx context.Context, adminID int) (string, error) {
+	var username string
+	err := s.db.QueryRowContext(ctx, `SELECT username FROM admins WHERE id = ?`, adminID).Scan(&username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrUnauthorized
+		}
+		return "", err
+	}
+	return username, nil
+}
+
+// VerifyPassword 校验管理员密码，供终端二次认证使用。
+// 复用登录密码的 bcrypt hash，不新增任何存储；密码本身不落日志、不落盘。
+func (s *Service) VerifyPassword(ctx context.Context, adminID int, password string) error {
+	if adminID <= 0 || password == "" {
+		return ErrUnauthorized
+	}
+	var hash string
+	err := s.db.QueryRowContext(ctx, `SELECT password_hash FROM admins WHERE id = ?`, adminID).Scan(&hash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUnauthorized
+		}
+		return err
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err != nil {
+		return ErrUnauthorized
+	}
+	return nil
+}
+
 func (s *Service) ChangePassword(ctx context.Context, adminID int, oldPassword, newPassword, keepSessionID string) error {
 	if err := validate.Password(newPassword); err != nil {
 		return err

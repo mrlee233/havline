@@ -192,6 +192,7 @@
 
         <p class="field-hint data-note">恢复配置将覆盖当前数据，操作前请确保已备份。</p>
       </HavlineCard>
+
         </div>
       </n-tab-pane>
 
@@ -569,6 +570,30 @@
           </n-button>
         </div>
       </HavlineCard>
+
+      <HavlineCard title="SSH 终端" subtitle="在浏览器里直接连到公网服务端（默认关闭）">
+        <p class="field-hint">
+          开启后「SSH 终端」页面可用「公网服务端」里已保存的 SSH 凭据登录 VPS。凭据不会下发到浏览器，
+          主机密钥仍按首次信任记录校验；会话空闲 10 分钟自动断开。
+        </p>
+        <div class="form-switch-row">
+          <div class="form-switch-row__text">
+            <div class="form-switch-row__label">启用内置终端</div>
+            <div class="form-switch-row__hint">关闭时终端接口一律返回 403，页面只显示提示</div>
+          </div>
+          <n-switch v-model:value="terminalEnabled" />
+        </div>
+        <div class="form-switch-row">
+          <div class="form-switch-row__text">
+            <div class="form-switch-row__label">录制会话内容</div>
+            <div class="form-switch-row__hint">
+              开启后把终端输出写入 logs/terminal（asciinema v2 格式，可在「SSH 终端 → 录像审计」里回放）。
+              录像包含屏幕上出现的一切，包括在远端提示符下输入的口令，请按需开启；默认关闭，保留 90 天。
+            </div>
+          </div>
+          <n-switch v-model:value="terminalRecordingEnabled" />
+        </div>
+      </HavlineCard>
         </div>
       </n-tab-pane>
 
@@ -895,6 +920,9 @@ const backupError = ref('')
 
 // 公开状态页：开关与访问码走设置项（访问码按「掩码往返」处理）
 const statusPageEnabled = ref(false)
+// 内置 SSH 终端总开关：默认关闭，开启后才允许从浏览器连 VPS
+const terminalEnabled = ref(false)
+const terminalRecordingEnabled = ref(false)
 const statusPageCode = ref('')
 const statusPageConfigured = ref(false)
 
@@ -1135,6 +1163,8 @@ function applySettingsToForm(settings: Record<string, string>) {
   backupAutoEnabled.value = settings.backup_auto_enabled !== '0'
   backupKeepCount.value = Number(settings.backup_keep_count || DEFAULT_BACKUP_KEEP_COUNT)
   statusPageEnabled.value = settings.status_page_enabled === '1'
+  terminalEnabled.value = settings.terminal_enabled === '1'
+    terminalRecordingEnabled.value = settings.terminal_recording_enabled === '1'
   statusPageCode.value = settings.status_page_code ?? ''
   statusPageConfigured.value = statusPageCode.value === MASKED_SECRET
   acmeEmail.value = settings.acme_email ?? ''
@@ -1580,6 +1610,8 @@ function buildSavePayload() {
     backup_auto_enabled: backupAutoEnabled.value ? '1' : '0',
     backup_keep_count: String(backupKeepCount.value || DEFAULT_BACKUP_KEEP_COUNT),
     status_page_enabled: statusPageEnabled.value ? '1' : '0',
+    terminal_enabled: terminalEnabled.value ? '1' : '0',
+    terminal_recording_enabled: terminalRecordingEnabled.value ? '1' : '0',
     status_page_code: statusPageCode.value.trim(),
     notify_cpu_threshold: String(notifyCPUThreshold.value || DEFAULT_CPU_THRESHOLD),
     notify_memory_threshold: String(notifyMemoryThreshold.value || DEFAULT_MEMORY_THRESHOLD),

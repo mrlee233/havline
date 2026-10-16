@@ -17,6 +17,8 @@ services:
         UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     image: havline:${HAVLINE_VERSION:-local}
+    # 本地源码部署直接构建，跳过无意义的 Docker Hub 拉取和超时警告。
+    pull_policy: build
     container_name: havline
     restart: unless-stopped
     depends_on:
@@ -54,6 +56,7 @@ services:
         UPDATER_IMAGE: ${UPDATER_IMAGE:-docker.m.daocloud.io/library/docker:27-cli}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     image: havline-updater:${HAVLINE_VERSION:-local}
+    pull_policy: build
     container_name: havline-updater
     restart: unless-stopped
     volumes:

@@ -12,6 +12,8 @@ services:
         RUNTIME_IMAGE: ${RUNTIME_IMAGE:-docker.m.daocloud.io/library/debian:bookworm-slim}
         GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
     image: havline:${HAVLINE_VERSION:-local}
+    # 本地源码部署直接构建，跳过无意义的 Docker Hub 拉取和超时警告。
+    pull_policy: build
     container_name: havline
     restart: unless-stopped
     network_mode: host

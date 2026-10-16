@@ -86,6 +86,10 @@ const (
 	KeyFRPLastError          = "frp_last_error"
 	KeyFRPStartedAt          = "frp_started_at"
 	KeyNginxGlobalMode       = "nginx_global_mode"
+	// KeyTerminalEnabled 内置 SSH 终端总开关：默认关闭，shell 入口必须显式打开
+	KeyTerminalEnabled = "terminal_enabled"
+	// KeyTerminalRecording 会话录制开关：默认关闭，开启后把终端输出写入 logs/terminal
+	KeyTerminalRecording = "terminal_recording_enabled"
 )
 
 var Defaults = map[string]string{

@@ -20,6 +20,12 @@
       </div>
     </div>
 
+    <!-- 名称用于区分同一服务商下的多条配置（如「家庭」「公司」），留空则列表显示服务商名 -->
+    <div class="provider-form__field">
+      <label class="provider-form__label">名称</label>
+      <n-input v-model:value="form.name" size="small" placeholder="可选，例如：家庭 / 公司 / 主域名" />
+    </div>
+
     <div v-if="form.provider === 'dnspod'" class="provider-form__field">
       <label class="provider-form__label">Token ID</label>
       <n-input v-model:value="form.api_token_id" placeholder="DNSPod ID" size="small" />
@@ -66,11 +72,27 @@
         <span>IPv6</span>
         <n-switch v-model:value="form.ipv6_enabled" size="small" />
       </div>
+      <!-- 自定义 IP：填了就用填的地址，不填仍自动检测本机公网 IP -->
+      <n-button size="tiny" quaternary :type="customIPOpen || hasCustomIP ? 'primary' : 'default'" @click="customIPOpen = !customIPOpen">
+        {{ customIPOpen ? '收起自定义 IP' : '自定义 IP' }}
+      </n-button>
       <div class="settings-switch">
         <span>启用</span>
         <n-switch v-model:value="form.enabled" size="small" />
       </div>
     </div>
+
+    <template v-if="customIPOpen">
+      <div class="provider-form__field">
+        <label class="provider-form__label">自定义 IPv4（可选）</label>
+        <n-input v-model:value="form.custom_ipv4" size="small" placeholder="留空则自动检测本机公网 IPv4" />
+      </div>
+      <div class="provider-form__field">
+        <label class="provider-form__label">自定义 IPv6（可选）</label>
+        <n-input v-model:value="form.custom_ipv6" size="small" placeholder="留空则自动检测本机公网 IPv6" />
+      </div>
+      <p class="provider-form__hint">填写后更新解析记录会直接使用该 IP（如 VPS 的公网 IP），不再检测本机出口 IP。</p>
+    </template>
 
     <div class="provider-form__actions">
       <n-button size="small" quaternary @click="emit('cancel')">取消</n-button>
@@ -81,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { NButton, NInput, NSelect, NSwitch, NTag } from 'naive-ui'
 import { CONFIGURED_SECRET_PLACEHOLDER, CONFIGURED_SECRET_TAG } from '../constants/secretField'
 import aliyunIcon from '../assets/brand/dns/aliyun.png'
@@ -93,6 +115,7 @@ import type { DDNSConfig } from '../api/types'
 
 export type ProviderForm = {
   provider: string
+  name: string
   api_token: string
   api_token_id: string
   api_secret: string
@@ -123,6 +146,10 @@ const providerOptions = [
   { label: '腾讯云 DNS', value: 'tencentcloud' },
   { label: '火山引擎 DNS', value: 'volcengine' },
 ]
+
+// 编辑已有配置时若已设置自定义 IP，默认展开输入区，避免用户以为没保存
+const customIPOpen = ref(!!(props.form.custom_ipv4.trim() || props.form.custom_ipv6.trim()))
+const hasCustomIP = computed(() => !!(props.form.custom_ipv4.trim() || props.form.custom_ipv6.trim()))
 
 const providerMap: Record<string, { label: string; icon: string }> = {
   cloudflare: { label: 'Cloudflare', icon: cloudflareIcon },
@@ -245,6 +272,13 @@ function providerIcon(v: string) {
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.provider-form__hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--havline-text-muted);
 }
 
 .provider-secret-label {

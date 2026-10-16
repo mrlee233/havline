@@ -44,6 +44,24 @@ func TestLoadUpdaterTokenFile(t *testing.T) {
 	}
 }
 
+func TestLoadListenAddrAllowsExplicitEmpty(t *testing.T) {
+	t.Setenv("HAVLINE_LISTEN", "")
+
+	cfg := Load()
+	if cfg.ListenAddr != "" {
+		t.Fatalf("listen addr %q, want empty for unix-socket-only mode", cfg.ListenAddr)
+	}
+}
+
+func TestLoadUpdaterTokenFileAllowsExplicitEmpty(t *testing.T) {
+	t.Setenv("HAVLINE_UPDATER_TOKEN_FILE", "")
+
+	cfg := Load()
+	if cfg.UpdaterTokenFile != "" {
+		t.Fatalf("updater token file %q, want empty", cfg.UpdaterTokenFile)
+	}
+}
+
 func TestSSHKnownHostsPathForServer(t *testing.T) {
 	cfg := Config{DataDir: "/data"}
 	want := filepath.Join("/data", "ssh_known_hosts", "server-3")

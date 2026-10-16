@@ -1854,6 +1854,19 @@ func (s *Service) DeployAgentRoute(ctx context.Context, proxyID int64) error {
 	if privilegedVhostPorts(server.Options) {
 		return errPrivilegedVhostNoPublicProxy()
 	}
+	// 本机 frpc 配置里没有该域名，说明规则改动后还没应用：先自动应用这台服务端的配置并等隧道注册，
+	// 否则 VPS 上部署完只会得到「隧道未注册」，用户还得手动回「内网穿透」页点应用。
+	if !s.frpcConfigHasDomains(server.ID, proxy.CustomDomains) {
+		if err := s.applyServerConfig(ctx, server.ID); err != nil {
+			return fmt.Errorf("该域名还没有下发给本机 frpc，自动应用配置又失败：%w；请到「内网穿透」页手动点「校验并应用配置」后再部署", err)
+		}
+		s.logger.Info("部署公网反代前自动应用 frpc 配置", "server_id", server.ID, "domains", strings.Join(proxy.CustomDomains, "、"))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 	client, ok := s.agentClient(ctx, proxy.ServerID)
 	if !ok {
 		return fmt.Errorf("公网 agent 未配置或 Token 未保存")
@@ -1919,12 +1932,70 @@ func (s *Service) DeployAgentRoute(ctx context.Context, proxyID int64) error {
 			case code == 0:
 				return fmt.Errorf("反代已部署，但回源自检失败（连接不上 frps vhost :%d）：检查 frps 是否运行、vhostHTTPPort 是否与表单一致", vhostPort)
 			case code == 404:
-				return fmt.Errorf("反代已部署，frps 正常但没有找到域名 %s 的隧道注册：请确认内网穿透里存在绑定该域名的 http 规则、类型为 http 且已启用，并已应用配置", domain)
+				return fmt.Errorf("反代已部署，frps 正常但没有找到域名 %s 的隧道注册（%s）", domain, s.frpcTunnelHint(server.ID, domain))
 			case code >= 500:
 				return fmt.Errorf("反代已部署，隧道已连通但内网服务异常（HTTP %.0f）：请检查内网服务 %s 是否存活", code, upstream)
 			}
 		}
 	}
+	return nil
+}
+
+// frpcTunnelHint 解释「frps 里查不到这条隧道」最可能的原因，并给出下一步动作：
+// 先看最近一次应用过的 frpc 配置里有没有该域名，再看进程是否在跑，最后才怀疑 frpc↔frps 的连接。
+func (s *Service) frpcTunnelHint(serverID int64, domain string) string {
+	if !s.frpcConfigHasDomains(serverID, []string{domain}) {
+		return "本机 frpc 配置里还没有这个域名，请到「内网穿透」页点「校验并应用配置」"
+	}
+	if s.managerForServer(serverID).Status().Status != "running" {
+		return "配置里有该域名，但本机 frpc 没有运行，请到「内网穿透」页启动"
+	}
+	return "配置里有该域名且 frpc 正在运行，说明 frpc 没有成功注册到 frps（多为登录失败或代理名冲突），请到「内网穿透 → 服务端详情 → 日志」看 frpc 报错"
+}
+
+// frpcConfigHasDomains 检查最近一次应用过的 frpc 配置里是否包含这些域名；
+// 文件由 Reload/启动流程写入，内容即「已经下发给 frpc 的规则」。
+func (s *Service) frpcConfigHasDomains(serverID int64, domains []string) bool {
+	data, err := os.ReadFile(s.serverConfigPath(serverID))
+	if err != nil {
+		return false
+	}
+	content := string(data)
+	for _, domain := range domains {
+		if !strings.Contains(content, domain) {
+			return false
+		}
+	}
+	return true
+}
+
+// applyServerConfig 重新生成配置文件并只重启这台服务端的 frpc，
+// 用于「规则改了但没应用配置」的自动补救（不碰其他服务端的进程）。
+func (s *Service) applyServerConfig(ctx context.Context, serverID int64) error {
+	s.applyMu.Lock()
+	defer s.applyMu.Unlock()
+	if err := s.persistConfigsLocked(ctx); err != nil {
+		return err
+	}
+	manager := s.managerForServer(serverID)
+	hasProxies, err := s.hasEnabledProxies(ctx, serverID)
+	if err != nil {
+		return err
+	}
+	if !hasProxies {
+		_ = manager.Stop(ctx)
+		s.recordProcessState(ctx, serverID, manager, "")
+		return nil
+	}
+	if err := manager.Verify(ctx, s.serverConfigPath(serverID)); err != nil {
+		s.recordProcessState(ctx, serverID, manager, err.Error())
+		return err
+	}
+	if err := manager.Restart(ctx); err != nil {
+		s.recordProcessState(ctx, serverID, manager, err.Error())
+		return err
+	}
+	s.recordProcessState(ctx, serverID, manager, "")
 	return nil
 }
 

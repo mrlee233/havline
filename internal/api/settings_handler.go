@@ -102,6 +102,8 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		settings.KeyChinaCIDRUpdateHours:        true,
 		settings.KeyChinaCIDRSourceV4:           true,
 		settings.KeyChinaCIDRSourceV6:           true,
+		settings.KeyTerminalEnabled:             true,
+		settings.KeyTerminalRecording:           true,
 	}
 	filtered := map[string]string{}
 	for key, value := range req {

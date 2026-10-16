@@ -17,6 +17,7 @@ import (
 	"github.com/havline/havline/internal/notify"
 	"github.com/havline/havline/internal/service"
 	"github.com/havline/havline/internal/settings"
+	"github.com/havline/havline/internal/terminal"
 	"github.com/havline/havline/internal/traffic"
 	"github.com/havline/havline/internal/updater"
 )
@@ -40,4 +41,12 @@ type Deps struct {
 	Updater    *updater.Client
 	StaticFS   fs.FS
 	StartedAt  string
+	// Terminal 是内置 SSH 终端的会话管理器；为 nil 时相关接口不注册
+	Terminal *terminal.Manager
+	// TerminalAudits 是终端会话审计存储；为 nil 时不注册审计接口
+	TerminalAudits *terminal.AuditStore
+	// TerminalCommands 是终端常用命令存储；为 nil 时常用命令接口返回空
+	TerminalCommands *terminal.CommandStore
+	// TerminalRecordings 是会话录制存储；为 nil 时录制接口返回空
+	TerminalRecordings *terminal.RecordingStore
 }

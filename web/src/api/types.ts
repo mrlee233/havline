@@ -141,6 +141,8 @@ export interface UpdateStatus {
 
 export interface ApiError {
   error: string
+  // 稳定错误码（如 terminal_locked），用于前端分支判断
+  code?: string
 }
 
 export interface DashboardStatus {
@@ -187,6 +189,7 @@ export interface DDNSDomainRecord {
 export interface DDNSConfig {
   id: number
   provider: string
+  name?: string
   root_domain: string
   record_name: string
   record_names?: string[]
@@ -323,6 +326,7 @@ export interface DiscoveredService {
 
 export interface DDNSSavePayload {
   provider?: string
+  name?: string
   root_domain?: string
   record_name?: string
   record_names?: string[]
@@ -1159,4 +1163,72 @@ export interface CfRouteTestResult {
 export interface CfAccessStatus {
   enabled: boolean
   name?: string
+}
+
+// ===== 内置 SSH 终端（/terminal）=====
+
+export interface TerminalTarget {
+  value: string
+  label: string
+  detail: string
+  ready: boolean
+  disabled_reason?: string
+}
+
+export interface TerminalSessionInfo {
+  id: string
+  label: string
+  server_id: number
+  closed: boolean
+  reason?: string
+  created_at: string
+  last_seen: string
+}
+
+export interface TerminalCreateResult {
+  session_id: string
+  label: string
+}
+
+// 终端二次认证状态：unlocked 为 true 时带到期时间
+export interface TerminalUnlockStatus {
+  unlocked: boolean
+  expires_at?: string
+}
+
+// 终端解锁结果：票据到期时间（RFC3339）
+export interface TerminalUnlockResult {
+  expires_at: string
+}
+
+// 常用命令：右侧面板保存的快捷命令
+export interface TerminalCommand {
+  id: number
+  name: string
+  command: string
+  created_at: string
+}
+
+// 会话录制文件（asciinema v2），用于「录像审计」列表与回放
+export interface TerminalRecording {
+  session_id: string
+  size: number
+  started_at: string
+  ended_at: string
+}
+
+// 终端会话审计：谁、何时、连了哪台、多久、为什么断开
+export interface TerminalAuditEntry {
+  id?: number
+  session_id: string
+  server_id: number
+  target: string
+  user: string
+  client_ip: string
+  started_at: string
+  ended_at: string
+  duration_ms: number
+  reason?: string
+  bytes_in: number
+  bytes_out: number
 }

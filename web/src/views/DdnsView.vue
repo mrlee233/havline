@@ -131,7 +131,8 @@
                 <span class="provider-logo">
                   <img :src="providerIcon(providerDraft.provider)" :alt="providerLabel(providerDraft.provider)" />
                 </span>
-                <span class="task-item__name">{{ providerLabel(providerDraft.provider) }}</span>
+                <span class="task-item__name">{{ providerDraft.name || providerLabel(providerDraft.provider) }}</span>
+                <span v-if="providerDraft.name" class="task-item__provider">{{ providerLabel(providerDraft.provider) }}</span>
               </div>
               <span class="task-item__draft-tag">待添加记录</span>
             </div>
@@ -166,7 +167,8 @@
                   <span class="provider-logo">
                     <img :src="providerIcon(cfg.provider)" :alt="providerLabel(cfg.provider)" />
                   </span>
-                  <span class="task-item__name">{{ providerLabel(cfg.provider) }}</span>
+                  <span class="task-item__name">{{ cfg.name || providerLabel(cfg.provider) }}</span>
+                  <span v-if="cfg.name" class="task-item__provider">{{ providerLabel(cfg.provider) }}</span>
                 </div>
                 <StatusBadge :value="taskStatusKind(cfg)" :text="taskStatusText(cfg)" />
               </div>
@@ -207,7 +209,7 @@
               <img :src="providerIcon(selectedTask.provider)" :alt="providerLabel(selectedTask.provider)" />
             </span>
             <div>
-              <h3 class="task-detail__title">{{ providerLabel(selectedTask.provider) }}</h3>
+              <h3 class="task-detail__title">{{ selectedTask.name || providerLabel(selectedTask.provider) }}</h3>
               <div class="task-detail__meta">
                 <StatusBadge
                   v-if="!isDraftSelected"
@@ -567,6 +569,7 @@ const providerMap: Record<string, { label: string; icon: string }> = {
 
 const taskForm = reactive<ProviderForm>({
   provider: 'cloudflare',
+  name: '',
   api_token: '',
   api_token_id: '',
   api_secret: '',
@@ -593,12 +596,15 @@ const draftAsConfig = computed((): DDNSConfig | null => {
   return {
     id: -1,
     provider: providerDraft.value.provider,
+    name: providerDraft.value.name,
     root_domain: '',
     record_name: '@',
     ipv4_enabled: providerDraft.value.ipv4_enabled,
     ipv6_enabled: providerDraft.value.ipv6_enabled,
     enabled: providerDraft.value.enabled,
     has_token: !!providerDraft.value.api_token,
+    custom_ipv4: providerDraft.value.custom_ipv4,
+    custom_ipv6: providerDraft.value.custom_ipv6,
   }
 })
 
@@ -643,7 +649,7 @@ const detailError = computed(() => {
     }
   }
   if (cfg.enabled && cfg.last_status === 'error' && cfg.last_error) {
-    return { title: `${providerLabel(cfg.provider)} 同步失败`, text: cfg.last_error }
+    return { title: `${cfg.name || providerLabel(cfg.provider)} 同步失败`, text: cfg.last_error }
   }
   return null
 })
@@ -764,6 +770,7 @@ function normalizeRecordDomain(input: string, rootDomain?: string): string {
 function resetTaskForm() {
   Object.assign(taskForm, {
     provider: 'cloudflare',
+    name: '',
     api_token: '',
     api_token_id: '',
     api_secret: '',
@@ -811,6 +818,7 @@ function startEditTask(cfg: DDNSConfig) {
   selectedKey.value = String(cfg.id)
   Object.assign(taskForm, {
     provider: cfg.provider || 'cloudflare',
+    name: cfg.name ?? '',
     api_token: '',
     api_token_id: '',
     api_secret: '',
@@ -858,6 +866,7 @@ async function saveCustomIP() {
   try {
     const updated = await api.updateDDNS(task.id, {
       provider: task.provider,
+      name: task.name ?? '',
       domains: domainsOf(task),
       enabled: task.enabled,
       ipv4_enabled: task.ipv4_enabled,
@@ -949,6 +958,7 @@ async function saveTask() {
     try {
       const updated = await api.updateDDNS(editingId, {
         provider: taskForm.provider,
+        name: taskForm.name,
         domains: domainsOf(existing),
         ipv4_enabled: taskForm.ipv4_enabled,
         ipv6_enabled: taskForm.ipv6_enabled,
@@ -1045,6 +1055,7 @@ async function saveRecord() {
       const domains = [...new Set([...domainsOf(task), domain])]
       const updated = await api.updateDDNS(task.id, {
         provider: task.provider,
+        name: task.name ?? '',
         domains,
         enabled: task.enabled,
         ipv4_enabled: task.ipv4_enabled,
@@ -1060,6 +1071,7 @@ async function saveRecord() {
       const unique = [...new Set(domains)]
       const updated = await api.updateDDNS(task.id, {
         provider: task.provider,
+        name: task.name ?? '',
         domains: unique,
         enabled: task.enabled,
         ipv4_enabled: task.ipv4_enabled,
@@ -1087,6 +1099,7 @@ async function patchTaskFlags(
   try {
     const updated = await api.updateDDNS(row.id, {
       provider: row.provider,
+      name: row.name ?? '',
       domains: domainsOf(row),
       enabled: flags.enabled ?? row.enabled,
       ipv4_enabled: flags.ipv4_enabled ?? row.ipv4_enabled,
@@ -1177,7 +1190,7 @@ async function saveInterval() {
 function confirmDelete(row: DDNSConfig) {
   dialog.warning({
     title: '删除 DDNS 配置',
-    content: `确定删除 ${providerLabel(row.provider)} 的 DDNS 配置吗？`,
+    content: `确定删除 ${row.name || providerLabel(row.provider)} 的 DDNS 配置吗？`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -1203,6 +1216,7 @@ function confirmDeleteRecord(row: DDNSConfig, record: DDNSDomainRecord) {
       } else {
         const updated = await api.updateDDNS(row.id, {
           provider: row.provider,
+          name: row.name ?? '',
           domains,
           enabled: row.enabled,
           ipv4_enabled: row.ipv4_enabled,
@@ -1368,12 +1382,15 @@ onMounted(init)
   flex-direction: column;
   gap: 10px;
   padding: var(--havline-space-3);
-  max-height: 720px;
+  /* 高度跟着视口走：编辑态表单较长，避免出现「表单被截断」或必须整页滚动才能点到保存 */
+  max-height: max(420px, calc(100vh - 340px));
   overflow: auto;
 }
 
 .task-item {
   width: 100%;
+  /* 列表是 max-height 的纵向 flex：不禁止收缩的话，编辑态表单会被压扁并裁掉底部 */
+  flex-shrink: 0;
   text-align: left;
   border: 1px solid var(--havline-border);
   border-radius: 12px;
@@ -1443,6 +1460,13 @@ onMounted(init)
   font-size: 14px;
   font-weight: 600;
   color: var(--havline-text);
+}
+
+/* 设了名称时，旁边补一个灰字服务商名，避免只看名字不知道用的是哪家 DNS */
+.task-item__provider {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--havline-text-muted);
 }
 
 .task-item__row {

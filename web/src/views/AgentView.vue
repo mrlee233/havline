@@ -74,14 +74,64 @@
             <div class="server-toolbar__actions">
               <n-button v-if="server.boot_status === 'running'" size="small" type="error" ghost :loading="serverStartingId === server.id" @click="stopServer(server)">停止</n-button>
               <n-button v-else size="small" type="success" ghost :loading="serverStartingId === server.id" @click="startServer(server)">启动</n-button>
-              <n-button size="small" quaternary @click="openServerDetail(server)">查看</n-button>
-              <n-button size="small" quaternary @click="openServerLogs(server)">日志</n-button>
-              <n-button size="small" quaternary :loading="measuringId === server.id" @click="measureServer(server)">测速</n-button>
-              <n-button size="small" quaternary :loading="testingId === server.id" @click="testServer(server)">校验</n-button>
-              <n-button size="small" quaternary @click="openServerModal(server)">编辑</n-button>
-              <n-button size="small" quaternary type="error" @click="confirmDeleteServer(server)">删除</n-button>
+              <n-button size="small" @click="openServerModal(server)">编辑</n-button>
+              <n-dropdown trigger="click" :options="serverMoreOptions" @select="handleServerMoreSelect">
+                <n-button size="small" quaternary>
+                  <template #icon><n-icon :component="EllipsisHorizontalOutline" /></template>
+                  更多
+                </n-button>
+              </n-dropdown>
             </div>
           </div>
+
+          <!-- 状态总览：参考内网穿透页的状态卡，先回答“Agent 是否连通、frps 是否正常” -->
+          <HavlineCard class="section-card agent-hero-card" title="Agent 状态">
+            <div class="agent-hero" :class="agentHeroClass">
+              <div class="agent-hero__main">
+                <div class="agent-hero__icon">
+                  <n-icon :component="CloudOutline" />
+                </div>
+                <div class="agent-hero__text">
+                  <div class="agent-hero__title">{{ agentHeroTitle }}</div>
+                  <div class="agent-hero__sub">{{ agentHeroSubtitle }}</div>
+                </div>
+              </div>
+              <div class="agent-hero__aside">
+                <StatusBadge :kind="agentStatusOk ? 'success' : 'warning'" :text="agentStatusOk ? '在线' : agentConnectionText" />
+                <span class="agent-hero__time">
+                  {{ agentStatus?.checked_at ? `检查于 ${formatRelativeTime(agentStatus.checked_at)}` : '尚未检测' }}
+                </span>
+              </div>
+            </div>
+            <div class="agent-hero__flow">
+              <span class="agent-hero__flow-step"><n-icon :component="ServerOutline" /> 本地 Havline</span>
+              <span class="agent-hero__flow-arrow">→</span>
+              <span class="agent-hero__flow-step agent-hero__flow-step--accent"><n-icon :component="SwapHorizontalOutline" /> {{ agentTransportText(server) }}</span>
+              <span class="agent-hero__flow-arrow">→</span>
+              <span class="agent-hero__flow-step"><n-icon :component="CloudOutline" /> VPS Agent</span>
+              <span class="agent-hero__flow-arrow">→</span>
+              <span class="agent-hero__flow-step"><n-icon :component="GitNetworkOutline" /> frps / Nginx</span>
+            </div>
+            <div class="agent-hero__metrics">
+              <div><span>Agent 连接</span><strong>{{ agentConnectionText }}</strong></div>
+              <div><span>frps 服务</span><strong>{{ frpsStateText }}</strong></div>
+              <div><span>反代路由</span><strong>{{ routesCount }} 条</strong></div>
+              <div><span>frps 版本</span><strong>{{ installedFrpsVersion || '未安装' }}</strong></div>
+            </div>
+            <div class="agent-hero__ports">
+              <span class="agent-hero__ports-label">端口监听</span>
+              <span
+                v-for="port in watchedPorts"
+                :key="port"
+                class="port-item"
+                :class="{ 'port-item--on': portOn(port) }"
+                :title="portMeaning(port)"
+              >
+                {{ port }}
+                <n-icon :component="portOn(port) ? CheckmarkCircleOutline : CloseCircleOutline" />
+              </span>
+            </div>
+          </HavlineCard>
 
       <!-- 状态提示：互斥，最多一条 -->
       <n-alert v-if="statusAlert" :type="statusAlert.type" :bordered="false" class="page-alert">
@@ -101,8 +151,10 @@
         <router-link to="/public-proxy"><n-button size="small" type="primary">前往公网反代</n-button></router-link>
       </div>
 
-      <!-- ① 运行状态 -->
-      <section class="stats-row" aria-label="运行状态">
+      <!-- 主区页签：概览 / 环境与依赖 / 运行控制 / 日志与输出 -->
+      <n-tabs v-model:value="activeTab" type="line" animated class="agent-tabs">
+        <n-tab-pane name="overview" tab="概览">
+          <section class="stats-row" aria-label="运行状态">
         <div class="stat-card">
           <n-icon :component="CloudOutline" class="stat-card__icon" :class="stateClass(agentStatusOk, statusLoaded)" aria-hidden="true" />
           <div class="stat-card__value stat-card__value--sm">{{ agentConnectionText }}</div>
@@ -131,12 +183,15 @@
               :class="{ 'port-item--on': portOn(port) }"
               :title="portMeaning(port)"
             >
-              {{ port }} {{ portOn(port) ? '✓' : '✗' }}
+              {{ port }}
+              <n-icon :component="portOn(port) ? CheckmarkCircleOutline : CloseCircleOutline" />
             </span>
           </div>
           <div class="stat-card__label">端口监听</div>
           <div class="stat-card__sub">frps 运行所需端口</div>
         </div>
+          </section>
+          <section class="overview-grid" aria-label="VPS 资源与证书">
         <HavlineCard class="section-card vps-resource-card" title="VPS 资源">
           <div class="section-body">
             <p v-if="metricsError" class="form-hint">{{ metricsError }}</p>
@@ -182,8 +237,10 @@
           </div>
         </HavlineCard>
       </section>
+        </n-tab-pane>
 
       <!-- ② 环境与依赖 -->
+        <n-tab-pane name="deps" tab="环境与依赖">
       <section class="dep-grid" aria-label="环境与依赖">
         <HavlineCard class="section-card" title="Havline Agent">
           <div class="section-body">
@@ -254,8 +311,10 @@
           </div>
         </HavlineCard>
       </section>
+        </n-tab-pane>
 
       <!-- ④ Agent 生命周期（SSH） + ③ frps 控制：两列并排（生命周期在左） -->
+        <n-tab-pane name="control" tab="运行控制">
       <div class="control-grid">
       <HavlineCard class="section-card" title="Agent 生命周期（SSH）">
         <div class="section-body">
@@ -348,8 +407,10 @@
       </HavlineCard>
 
       </div>
+        </n-tab-pane>
 
       <!-- ⑤ 输出与日志 -->
+        <n-tab-pane name="logs" tab="日志与输出">
       <HavlineCard class="section-card" title="输出与日志">
         <template #header>
           <n-button size="small" quaternary :disabled="!opOutput.length" @click="opOutput = []">清空操作输出</n-button>
@@ -376,6 +437,8 @@
           </n-tabs>
         </div>
       </HavlineCard>
+        </n-tab-pane>
+      </n-tabs>
         </div>
       </div>
 
@@ -411,7 +474,7 @@
     :mask-closable="false"
     transform-origin="center"
   >
-    <div class="proxy-modal frp-proxy-modal">
+    <div class="proxy-modal frp-proxy-modal" :class="{ 'frp-proxy-modal--creating': isCreatingServer }">
       <div class="proxy-modal__form">
         <div class="proxy-modal__header">
           <h3 class="modal-title">{{ editingServer ? '编辑服务端' : '添加服务端' }}</h3>
@@ -419,14 +482,140 @@
             <template #icon><n-icon :component="CloseOutline" /></template>
           </n-button>
         </div>
-        <div class="proxy-modal__tabbar">
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'basic' }" @click="serverFormTab = 'basic'">基础配置</button>
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'advanced' }" @click="serverFormTab = 'advanced'">高级配置</button>
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'server' }" @click="serverFormTab = 'server'">服务端配置</button>
-          <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'remote' }" @click="serverFormTab = 'remote'">远程管理</button>
-        </div>
-        <div class="proxy-modal__scroll">
-          <n-form label-placement="top" class="proxy-modal__pane" @submit.prevent="saveServer">
+        <template v-if="isCreatingServer">
+          <div class="server-wizard">
+            <n-steps :current="addStep" size="small" class="server-wizard__steps">
+              <n-step title="连接 frps" description="名称、地址与认证" />
+              <n-step title="接入方式" description="可选安装 Agent" />
+              <n-step title="确认保存" description="检查摘要并保存" />
+            </n-steps>
+
+            <div v-if="addStep === 1" class="server-wizard__body">
+              <n-form label-placement="top" class="server-wizard__form" @submit.prevent="addNextStep">
+                <n-form-item label="快速预设">
+                  <n-select :value="serverPreset" :options="serverPresetOptions" @update:value="applyServerPreset" />
+                </n-form-item>
+                <div class="form-grid form-grid--wide">
+                  <n-form-item label="服务端名称" required><n-input v-model:value="serverForm.name" placeholder="例如：东京 VPS" /></n-form-item>
+                  <n-form-item label="主机地址" required><n-input v-model:value="serverForm.server_addr" placeholder="例如：frps.example.com" /></n-form-item>
+                  <n-form-item label="控制端口" required><n-input-number v-model:value="serverForm.server_port" :min="1" :max="65535" /></n-form-item>
+                </div>
+                <n-form-item label="认证方式" required>
+                  <n-radio-group v-model:value="serverForm.options.auth_method" name="add-auth-method">
+                    <n-radio-button value="none">无</n-radio-button>
+                    <n-radio-button value="token">令牌</n-radio-button>
+                    <n-radio-button value="oidc">OIDC</n-radio-button>
+                  </n-radio-group>
+                </n-form-item>
+                <div v-if="serverForm.options.auth_method === 'token'" class="form-grid server-wizard__grid">
+                  <n-form-item label="用户" required>
+                    <n-input v-model:value="serverForm.options.user" placeholder="与 frps auth.user 一致" />
+                  </n-form-item>
+                  <n-form-item label="令牌" required>
+                    <ConfiguredSecretField v-model="serverForm.token" label="令牌" :configured="false" placeholder="请输入与 frps 一致的令牌" hide-label />
+                  </n-form-item>
+                </div>
+                <n-form-item label="启用 TLS">
+                  <div class="server-wizard__switch-inline">
+                    <n-switch v-model:value="serverForm.tls_enabled" />
+                    <span>{{ serverForm.tls_enabled ? '默认开启' : '已关闭' }}</span>
+                  </div>
+                </n-form-item>
+                <template v-if="serverForm.options.auth_method === 'oidc'">
+                  <div class="form-grid">
+                    <n-form-item label="客户端 ID（Client ID）" required><n-input v-model:value="serverForm.options.oidc_client_id" placeholder="身份提供商分配的客户端标识" /></n-form-item>
+                    <n-form-item label="客户端密钥（Client Secret）" required>
+                      <ConfiguredSecretField v-model="serverForm.oidc_client_secret" label="客户端密钥（Client Secret）" :configured="false" placeholder="请输入客户端密钥" hide-label />
+                    </n-form-item>
+                    <n-form-item label="令牌端点（Token Endpoint）" required><n-input v-model:value="serverForm.options.oidc_token_endpoint_url" placeholder="https://issuer.example.com/token" /></n-form-item>
+                  </div>
+                </template>
+              </n-form>
+            </div>
+
+            <div v-else-if="addStep === 2" class="server-wizard__body">
+              <p class="form-hint">Agent 不是连接 frps 的必需条件，可以稍后在本页安装。</p>
+              <n-radio-group :value="agentSetupMode" class="server-wizard__agent-choice" @update:value="setAgentSetupMode">
+                <n-radio-button v-for="item in agentSetupOptions" :key="item.value" :value="item.value">{{ item.label }}</n-radio-button>
+              </n-radio-group>
+              <div v-if="agentSetupMode === 'ssh'" class="form-grid server-wizard__grid">
+                <n-form-item label="SSH 地址" required><n-input v-model:value="serverForm.ssh_host" placeholder="VPS 公网 IP 或域名" /></n-form-item>
+                <n-form-item label="SSH 端口"><n-input-number v-model:value="serverForm.ssh_port" :min="1" :max="65535" /></n-form-item>
+                <n-form-item label="SSH 用户" required><n-input v-model:value="serverForm.ssh_user" placeholder="root 或具备 sudo 权限的用户" /></n-form-item>
+                <n-form-item label="SSH 认证"><n-select v-model:value="serverForm.ssh_auth" :options="[{ label: '私钥', value: 'key' }, { label: '密码', value: 'password' }]" /></n-form-item>
+                <n-form-item :show-label="false" :show-feedback="false" class="form-grid__wide">
+                  <ConfiguredSecretField
+                    v-model="serverForm.ssh_secret"
+                    :label="serverForm.ssh_auth === 'key' ? 'SSH 私钥' : 'SSH 密码'"
+                    :configured="false"
+                    :placeholder="serverForm.ssh_auth === 'key' ? '粘贴私钥内容' : '输入 SSH 密码'"
+                  />
+                </n-form-item>
+              </div>
+              <div v-else-if="agentSetupMode === 'existing'" class="form-grid server-wizard__grid">
+                <n-form-item label="Agent API 地址" required><n-input v-model:value="serverForm.agent_url" placeholder="安装后自动回填；隧道模式可用 127.0.0.1 地址" /></n-form-item>
+                <n-form-item label="Agent Token">
+                  <ConfiguredSecretField v-model="serverForm.agent_token" label="Agent Token" :configured="false" placeholder="留空保持不变" hide-label />
+                </n-form-item>
+              </div>
+              <n-alert v-else type="info" :bordered="false">暂不安装 Agent 时，只保存 frps 连接信息；之后可在本页补装 Agent。</n-alert>
+            </div>
+
+            <div v-else class="server-wizard__body">
+              <div class="server-wizard__summary">
+                <div v-for="item in addSummary" :key="item.label"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>
+              </div>
+              <n-collapse class="server-wizard__advanced">
+                <n-collapse-item title="高级服务端参数（可选）" name="advanced">
+                  <div class="form-grid">
+                    <n-form-item label="HTTP 回源端口"><n-input-number v-model:value="serverForm.options.vhost_http_port" :min="1" :max="65535" /></n-form-item>
+                    <n-form-item label="HTTPS 回源端口"><n-input-number v-model:value="serverForm.options.vhost_https_port" :min="1" :max="65535" /></n-form-item>
+                    <n-form-item label="端口白名单（allowPorts）"><n-input v-model:value="serverForm.options.allow_ports" placeholder="如 6000,6005-6010；留空不限制" /></n-form-item>
+                    <n-form-item label="管理地址">
+                      <n-input v-model:value="serverForm.options.dashboard_addr" placeholder="留空则不采集流量">
+                        <template #suffix><n-button size="tiny" quaternary @click="serverForm.options.dashboard_addr = serverForm.server_addr">用主机地址</n-button></template>
+                      </n-input>
+                    </n-form-item>
+                    <n-form-item label="管理端口"><n-input-number v-model:value="serverForm.options.dashboard_port" :min="0" :max="65535" placeholder="例如 7500" /></n-form-item>
+                  </div>
+                </n-collapse-item>
+              </n-collapse>
+            </div>
+
+            <div class="server-wizard__footer">
+              <n-button v-if="addStep > 1" @click="addPrevStep">上一步</n-button>
+              <div class="server-wizard__footer-right">
+                <n-button @click="showServerModal = false">取消</n-button>
+                <n-button v-if="addStep < 3" type="primary" :disabled="(addStep === 1 && !canProceedAddStep1) || (addStep === 2 && !canProceedAddStep2)" @click="addNextStep">下一步</n-button>
+                <template v-else>
+                  <n-button v-if="agentSetupMode === 'existing'" :loading="savingServer" @click="saveServer(true)">保存并下发</n-button>
+                  <n-button type="primary" :loading="savingServer" @click="saveServer(false)">保存</n-button>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else>
+          <div class="proxy-modal__tabbar">
+            <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'basic' }" @click="serverFormTab = 'basic'">连接</button>
+            <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'server' }" @click="serverFormTab = 'server'">服务端参数</button>
+            <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'remote' }" @click="serverFormTab = 'remote'">Agent 与远程</button>
+            <button type="button" class="proxy-modal__tab" :class="{ 'proxy-modal__tab--active': serverFormTab === 'advanced' }" @click="serverFormTab = 'advanced'">高级</button>
+          </div>
+          <div v-if="editingServer" class="server-edit-summary">
+            <div class="server-edit-summary__identity">
+              <strong>{{ editingServer.name }}</strong>
+              <span class="mono">{{ serverForm.server_addr }}:{{ serverForm.server_port }}</span>
+            </div>
+            <div class="server-edit-summary__badges">
+              <StatusBadge :kind="serverForm.tls_enabled ? 'success' : 'warning'" :text="serverForm.tls_enabled ? 'TLS 已启用' : 'TLS 未启用'" />
+              <StatusBadge :kind="editingServer.agent_configured ? 'success' : 'disabled'" :text="editingServer.agent_configured ? 'Agent 已配置' : 'Agent 未配置'" />
+              <StatusBadge :kind="editingServer.ssh_configured ? 'success' : 'disabled'" :text="editingServer.ssh_configured ? 'SSH 已配置' : 'SSH 未配置'" />
+            </div>
+          </div>
+          <div class="proxy-modal__scroll">
+            <n-form label-placement="top" class="proxy-modal__pane" @submit.prevent="saveServer">
             <div v-show="serverFormTab === 'basic'" class="frp-server-modal__basic">
       <section class="form-section">
         <h3><n-icon :component="InformationCircleOutline" /> 基本信息</h3>
@@ -447,33 +636,57 @@
             <n-radio-button value="oidc">OIDC（开放身份连接）</n-radio-button>
           </n-radio-group>
         </n-form-item>
-        <n-form-item label="用户"><n-input v-model:value="serverForm.options.user" placeholder="例如：admin" /></n-form-item>
-        <n-form-item v-if="serverForm.options.auth_method === 'token'" :show-label="false" :show-feedback="false">
-          <ConfiguredSecretField
-            v-model="serverForm.token"
-            label="令牌"
-            :configured="!!editingServer?.has_token"
-            placeholder="请输入与 frps 一致的令牌"
-          />
-        </n-form-item>
+        <div v-if="serverForm.options.auth_method === 'token'" class="form-grid">
+          <n-form-item label="用户"><n-input v-model:value="serverForm.options.user" placeholder="例如：admin" /></n-form-item>
+          <n-form-item>
+            <template #label>
+              <span class="configured-secret-form-label">
+                <span>令牌</span>
+                <n-tag v-if="editingServer?.has_token" size="small" type="success" :bordered="false">{{ CONFIGURED_SECRET_TAG }}</n-tag>
+              </span>
+            </template>
+            <ConfiguredSecretField
+              v-model="serverForm.token"
+              label="令牌"
+              :configured="!!editingServer?.has_token"
+              placeholder="请输入与 frps 一致的令牌"
+              hide-label
+            />
+          </n-form-item>
+        </div>
+        <n-form-item v-else label="用户"><n-input v-model:value="serverForm.options.user" placeholder="例如：admin" /></n-form-item>
         <template v-if="serverForm.options.auth_method === 'oidc'">
           <p class="form-hint">OIDC（OpenID Connect，开放身份连接）会向身份提供商申请访问令牌，再用于连接 FRP 服务端。</p>
           <div class="form-grid">
             <n-form-item label="客户端 ID（Client ID）" required><n-input v-model:value="serverForm.options.oidc_client_id" placeholder="身份提供商分配的客户端标识" /></n-form-item>
-            <n-form-item :show-label="false" :show-feedback="false">
+            <n-form-item>
+              <template #label>
+                <span class="configured-secret-form-label">
+                  <span>客户端密钥（Client Secret）</span>
+                  <n-tag v-if="editingServer?.has_oidc_client_secret" size="small" type="success" :bordered="false">{{ CONFIGURED_SECRET_TAG }}</n-tag>
+                </span>
+              </template>
               <ConfiguredSecretField
                 v-model="serverForm.oidc_client_secret"
                 label="客户端密钥（Client Secret）"
                 :configured="!!editingServer?.has_oidc_client_secret"
                 placeholder="请输入客户端密钥"
+                hide-label
               />
             </n-form-item>
-            <n-form-item label="令牌端点（Token Endpoint）" required><n-input v-model:value="serverForm.options.oidc_token_endpoint_url" placeholder="https://issuer.example.com/token" /></n-form-item>
-            <n-form-item label="受众（Audience）"><n-input v-model:value="serverForm.options.oidc_audience" placeholder="可选，用于限定令牌的目标服务" /></n-form-item>
-            <n-form-item label="额外权限范围（Scope）"><n-input v-model:value="serverForm.options.oidc_scope" placeholder="例如：openid profile" /></n-form-item>
-            <n-form-item label="OIDC 请求代理地址"><n-input v-model:value="serverForm.options.oidc_proxy_url" placeholder="http://user:pass@192.168.1.1:8080" /></n-form-item>
+            <n-form-item label="令牌端点（Token Endpoint）" required class="form-grid__wide"><n-input v-model:value="serverForm.options.oidc_token_endpoint_url" placeholder="https://issuer.example.com/token" /></n-form-item>
           </div>
-          <div class="switch-row"><span>跳过 OIDC TLS 校验</span><n-switch v-model:value="serverForm.options.oidc_insecure_skip_verify" /></div>
+          <n-collapse class="oidc-advanced-collapse">
+            <n-collapse-item name="oidc-advanced">
+              <template #header>OIDC 高级选项</template>
+              <div class="form-grid">
+                <n-form-item label="受众（Audience）"><n-input v-model:value="serverForm.options.oidc_audience" placeholder="可选，用于限定令牌的目标服务" /></n-form-item>
+                <n-form-item label="额外权限范围（Scope）"><n-input v-model:value="serverForm.options.oidc_scope" placeholder="例如：openid profile" /></n-form-item>
+                <n-form-item label="OIDC 请求代理地址" class="form-grid__wide"><n-input v-model:value="serverForm.options.oidc_proxy_url" placeholder="http://user:pass@192.168.1.1:8080" /></n-form-item>
+              </div>
+              <div class="switch-row"><span>跳过 OIDC TLS 校验</span><n-switch v-model:value="serverForm.options.oidc_insecure_skip_verify" /></div>
+            </n-collapse-item>
+          </n-collapse>
         </template>
       </section>
 
@@ -483,8 +696,13 @@
       </section>
             </div>
             <div v-show="serverFormTab === 'server'" class="frp-server-modal__server">
+      <n-alert type="info" :bordered="false" class="server-config-notice">
+        frps 参数修改后需保存并「下发 frps 配置」，再重启 frps 才会生效。
+      </n-alert>
+      <n-collapse class="server-config-collapse" :default-expanded-names="['vhost']">
+        <n-collapse-item name="vhost">
+          <template #header><n-icon :component="SwapHorizontalOutline" /> frps vhost 与域名反代</template>
       <section class="form-section">
-        <h3><n-icon :component="SwapHorizontalOutline" /> frps vhost 与域名反代</h3>
         <p class="form-hint">frps 的 vhostHTTPPort / vhostHTTPSPort 是 Nginx 反代的回源端口（proxy_pass http://127.0.0.1:端口），同时包含 subDomainHost、tcpmux 等域名入口配置。修改后需「下发 frps 配置」并重启 frps，且重新部署各规则的反代。留空用默认 8080 / 8443。</p>
         <n-alert
           v-if="serverForm.options.vhost_http_port === 80 || serverForm.options.vhost_https_port === 443"
@@ -509,18 +727,22 @@
         <div class="switch-row"><span>frps 写文件日志（/var/log/frps.log）</span><n-switch v-model:value="serverForm.options.frps_log_to_file" /></div>
         <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" class="narrow-input" /></n-form-item>
       </section>
+        </n-collapse-item>
 
+        <n-collapse-item name="ports">
+          <template #header><n-icon :component="GitNetworkOutline" /> TCP/UDP 端口分配</template>
       <section class="form-section">
-        <h3><n-icon :component="GitNetworkOutline" /> TCP/UDP 端口分配</h3>
         <p class="form-hint">allowPorts 只限制 tcp / udp 规则使用的 remotePort，不控制 HTTP/HTTPS 的 vhost 回源端口。留空表示不限制，但实际远程端口仍需在云安全组和 VPS 主机防火墙放行。</p>
         <div class="form-grid">
           <n-form-item label="端口白名单（allowPorts）"><n-input v-model:value="serverForm.options.allow_ports" placeholder="如 6000,6005-6010,7000-8000；留空不限制" /></n-form-item>
           <n-form-item label="每客户端端口上限"><n-input-number v-model:value="serverForm.options.max_ports_per_client" :min="0" :max="65535" placeholder="0 表示不限" /></n-form-item>
         </div>
       </section>
+        </n-collapse-item>
 
+        <n-collapse-item name="dashboard">
+          <template #header><n-icon :component="ServerOutline" /> frps 管理接口</template>
       <section class="form-section">
-        <h3><n-icon :component="ServerOutline" /> frps 管理接口</h3>
         <p class="form-hint">用于 Havline 拉取穿透规则的实时连接与流量信息；需在 frps 的 frps.toml 中开启 webServer（dashboard），与 frpc 连接用的令牌无关。</p>
         <div class="form-grid">
           <n-form-item label="管理地址"><n-input v-model:value="serverForm.options.dashboard_addr" placeholder="frps 机器的 IP 或域名，留空则不采集流量" /></n-form-item>
@@ -528,17 +750,26 @@
         </div>
         <div class="form-grid">
           <n-form-item label="管理用户"><n-input v-model:value="serverForm.options.dashboard_user" placeholder="webServer.user，未启用认证可留空" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false">
+          <n-form-item>
+            <template #label>
+              <span class="configured-secret-form-label">
+                <span>管理密码</span>
+                <n-tag v-if="editingServer?.dashboard_has_pwd" size="small" type="success" :bordered="false">{{ CONFIGURED_SECRET_TAG }}</n-tag>
+              </span>
+            </template>
             <ConfiguredSecretField
               v-model="serverForm.dashboard_password"
               label="管理密码"
               :configured="!!editingServer?.dashboard_has_pwd"
               placeholder="webServer.password"
+              hide-label
             />
           </n-form-item>
         </div>
         <n-button v-if="editingServer?.dashboard_has_pwd" size="small" quaternary type="error" @click="serverForm.clear_dashboard_password = true">清除管理密码</n-button>
       </section>
+        </n-collapse-item>
+      </n-collapse>
             </div>
             <div v-show="serverFormTab === 'remote'" class="frp-server-modal__remote">
       <section class="form-section">
@@ -546,20 +777,47 @@
         <p class="form-hint">Agent 部署在公网 VPS 上，保存 HTTP/HTTPS 规则后可由 Agent 自动生成反代；「公网 Agent」页提供完整管理面板。首次安装/升级需要 SSH，日常管理走 Agent API。Agent 地址通常由 SSH 隧道或 HTTPS 固定自动回填，不建议将 7700 明文暴露到公网。</p>
         <div class="form-grid">
           <n-form-item label="Agent API 地址"><n-input v-model:value="serverForm.agent_url" placeholder="安装后自动回填；也可填 http://127.0.0.1:7700（SSH 隧道）" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.agent_token" label="Agent Token" :configured="!!editingServer?.agent_configured" placeholder="留空保持不变" /></n-form-item>
-          <n-form-item label="SSH 地址"><n-input v-model:value="serverForm.ssh_host" placeholder="用于安装/升级/卸载 agent" /></n-form-item>
-          <n-form-item label="SSH 端口"><n-input-number v-model:value="serverForm.ssh_port" :min="1" :max="65535" /></n-form-item>
-          <n-form-item label="SSH 用户"><n-input v-model:value="serverForm.ssh_user" placeholder="root 或具备 sudo 权限的用户" /></n-form-item>
-          <n-form-item label="SSH 认证"><n-select v-model:value="serverForm.ssh_auth" :options="[{ label: '私钥', value: 'key' }, { label: '密码', value: 'password' }]" /></n-form-item>
-          <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.ssh_secret" :label="serverForm.ssh_auth === 'key' ? 'SSH 私钥' : 'SSH 密码'" :configured="!!editingServer?.ssh_configured" :placeholder="serverForm.ssh_auth === 'key' ? '粘贴私钥内容，用于 Agent 安装与升级' : '输入 SSH 密码，用于 Agent 安装与升级'" /></n-form-item>
+          <n-form-item>
+            <template #label>
+              <span class="configured-secret-form-label">
+                <span>Agent Token</span>
+                <n-tag v-if="editingServer?.agent_configured" size="small" type="success" :bordered="false">{{ CONFIGURED_SECRET_TAG }}</n-tag>
+              </span>
+            </template>
+            <ConfiguredSecretField v-model="serverForm.agent_token" label="Agent Token" :configured="!!editingServer?.agent_configured" placeholder="留空保持不变" hide-label />
+          </n-form-item>
         </div>
-        <div class="switch-row"><span>启用 Agent 日常管理</span><n-switch v-model:value="serverForm.mgmt_enabled" /></div>
-        <div v-if="editingServer?.agent_configured" class="agent-actions">
-          <n-button size="small" :loading="agentActionId === editingServer.id" @click="testAgent(editingServer)">测试连接</n-button>
-          <n-button size="small" :loading="busy === 'push-config'" :disabled="busy !== null && busy !== 'push-config'" @click="pushAgentConfig(editingServer)">下发 frps 配置</n-button>
-          <n-button size="small" quaternary @click="showServerModal = false; selectedId = editingServer.id">查看服务端详情</n-button>
+        <div class="agent-mgmt-option">
+          <div class="agent-mgmt-option__text">
+            <div class="agent-mgmt-option__label">启用 Agent 日常管理</div>
+            <div class="agent-mgmt-option__hint">关闭后仅保留 SSH 生命周期管理，不通过 Agent API 管理 VPS。</div>
+          </div>
+          <n-switch v-model:value="serverForm.mgmt_enabled" />
         </div>
-        <p v-if="editingServer?.agent_configured" class="form-hint">「下发 frps 配置」使用已保存的配置；若刚修改了上方参数，请先保存再下发。</p>
+        <n-collapse class="agent-ssh-collapse" :default-expanded-names="editingServer?.ssh_configured ? ['ssh'] : []">
+          <n-collapse-item name="ssh">
+            <template #header><n-icon :component="ServerOutline" /> SSH 安装与升级（可选）</template>
+            <div class="form-grid">
+              <n-form-item label="SSH 地址"><n-input v-model:value="serverForm.ssh_host" placeholder="用于安装/升级/卸载 agent" /></n-form-item>
+              <n-form-item label="SSH 端口"><n-input-number v-model:value="serverForm.ssh_port" :min="1" :max="65535" /></n-form-item>
+              <n-form-item label="SSH 用户"><n-input v-model:value="serverForm.ssh_user" placeholder="root 或具备 sudo 权限的用户" /></n-form-item>
+              <n-form-item label="SSH 认证"><n-select v-model:value="serverForm.ssh_auth" :options="[{ label: '私钥', value: 'key' }, { label: '密码', value: 'password' }]" /></n-form-item>
+              <n-form-item :show-label="false" :show-feedback="false"><ConfiguredSecretField v-model="serverForm.ssh_secret" :label="serverForm.ssh_auth === 'key' ? 'SSH 私钥' : 'SSH 密码'" :configured="!!editingServer?.ssh_configured" :placeholder="serverForm.ssh_auth === 'key' ? '粘贴私钥内容，用于 Agent 安装与升级' : '输入 SSH 密码，用于 Agent 安装与升级'" /></n-form-item>
+            </div>
+          </n-collapse-item>
+        </n-collapse>
+        <div v-if="editingServer?.agent_configured" class="agent-action-panel">
+          <div class="agent-action-panel__head">
+            <div class="agent-action-panel__title">Agent 操作</div>
+            <div class="agent-action-panel__hint">验证连接，或把最新 frps 配置下发到 VPS</div>
+          </div>
+          <div class="agent-action-panel__buttons">
+            <n-button size="small" :loading="agentActionId === editingServer.id" @click="testAgent(editingServer)">测试连接</n-button>
+            <n-button size="small" type="primary" :loading="busy === 'push-config'" :disabled="busy !== null && busy !== 'push-config'" @click="pushAgentConfig(editingServer)">下发 frps 配置</n-button>
+            <n-button size="small" quaternary @click="showServerModal = false; selectedId = editingServer.id">查看服务端详情</n-button>
+          </div>
+          <p class="agent-action-panel__note">「下发 frps 配置」使用已保存的配置；若刚修改了上方参数，请先保存再下发。</p>
+        </div>
       </section>
             </div>
             <div v-show="serverFormTab === 'advanced'" class="frp-server-modal__advanced">
@@ -577,26 +835,31 @@
         <div class="switch-row"><span>启用 TLS</span><n-switch v-model:value="serverForm.tls_enabled" /><span>禁用自定义 TLS 首字节</span><n-switch v-model:value="serverForm.options.tls_disable_custom_first_byte" /></div>
         <div v-if="serverForm.tls_enabled" class="tls-panel">
           <n-form-item label="服务器名称（SNI）"><n-input v-model:value="serverForm.tls_server_name" placeholder="例如：frps.example.com" /></n-form-item>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>证书文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('certificate')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_certificate" type="textarea" :rows="3" placeholder="粘贴客户端证书 PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>密钥文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('key')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_key" type="textarea" :rows="3" placeholder="粘贴客户端私钥 PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
-          <div class="tls-file-field">
-            <div class="tls-file-field__head"><span>受信任的 CA 内容</span><n-button size="small" quaternary @click="openTLSFilePicker('ca')">从文件加载</n-button></div>
-            <n-input v-model:value="serverForm.tls_trusted_ca" type="textarea" :rows="3" placeholder="粘贴 CA PEM 内容或从文件加载；留空保持现有文件" />
-          </div>
+          <n-collapse class="tls-cert-collapse" :default-expanded-names="hasCustomTlsMaterial ? ['cert'] : []">
+            <n-collapse-item name="cert">
+              <template #header>自定义 TLS 证书（可选）</template>
+              <div class="tls-file-field">
+                <div class="tls-file-field__head"><span>证书文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('certificate')">从文件加载</n-button></div>
+                <n-input v-model:value="serverForm.tls_certificate" type="textarea" :rows="3" placeholder="粘贴客户端证书 PEM 内容或从文件加载；留空保持现有文件" />
+              </div>
+              <div class="tls-file-field">
+                <div class="tls-file-field__head"><span>密钥文件内容</span><n-button size="small" quaternary @click="openTLSFilePicker('key')">从文件加载</n-button></div>
+                <n-input v-model:value="serverForm.tls_key" type="textarea" :rows="3" placeholder="粘贴客户端私钥 PEM 内容或从文件加载；留空保持现有文件" />
+              </div>
+              <div class="tls-file-field">
+                <div class="tls-file-field__head"><span>受信任的 CA 内容</span><n-button size="small" quaternary @click="openTLSFilePicker('ca')">从文件加载</n-button></div>
+                <n-input v-model:value="serverForm.tls_trusted_ca" type="textarea" :rows="3" placeholder="粘贴 CA PEM 内容或从文件加载；留空保持现有文件" />
+              </div>
+              <div class="asset-actions">
+                <n-button v-if="editingServer?.options.tls_certificate_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_certificate = true">清除证书</n-button>
+                <n-button v-if="editingServer?.options.tls_key_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_key = true">清除密钥</n-button>
+                <n-button v-if="editingServer?.options.tls_trusted_ca_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_trusted_ca = true">清除 CA</n-button>
+              </div>
+            </n-collapse-item>
+          </n-collapse>
           <input ref="certificateFileInput" class="file-input" type="file" accept=".pem,.crt,.cer,.key,.txt" @change="loadTLSFile('certificate', $event)" />
           <input ref="keyFileInput" class="file-input" type="file" accept=".pem,.key,.txt" @change="loadTLSFile('key', $event)" />
           <input ref="caFileInput" class="file-input" type="file" accept=".pem,.crt,.cer,.ca,.txt" @change="loadTLSFile('ca', $event)" />
-          <div class="asset-actions">
-            <n-button v-if="editingServer?.options.tls_certificate_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_certificate = true">清除证书</n-button>
-            <n-button v-if="editingServer?.options.tls_key_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_key = true">清除密钥</n-button>
-            <n-button v-if="editingServer?.options.tls_trusted_ca_configured" size="small" quaternary type="error" @click="serverForm.clear_tls_trusted_ca = true">清除 CA</n-button>
-          </div>
         </div>
         <n-collapse class="advanced-collapse">
           <n-collapse-item title="高级连接设置" name="advanced">
@@ -616,9 +879,14 @@
         </n-collapse>
       </section>
             </div>
-            <div class="modal-actions"><n-button @click="showServerModal = false">取消</n-button><n-button type="primary" :loading="savingServer" @click="saveServer">保存</n-button></div>
+            <div class="modal-actions">
+              <n-button @click="showServerModal = false">取消</n-button>
+              <n-button v-if="editingServer?.agent_configured" :loading="savingServer" @click="saveServer(true)">保存并下发</n-button>
+              <n-button type="primary" :loading="savingServer" @click="saveServer(false)">保存</n-button>
+            </div>
           </n-form>
         </div>
+        </template>
       </div>
       <div class="proxy-modal__help">
         <h4>{{ serverHelpTitle }}</h4>
@@ -716,16 +984,17 @@
 import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NIcon, NTag, useDialog, useMessage } from 'naive-ui'
+import { NButton, NDropdown, NIcon, NTag, useDialog, useMessage } from 'naive-ui'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import { LineChart, ScatterChart } from 'echarts/charts'
 import { CanvasRenderer } from 'echarts/renderers'
 import {
-  AddOutline, CloseOutline, CloudOutline, DocumentOutline, DocumentTextOutline, FlashOutline, GitNetworkOutline,
-  InformationCircleOutline, LayersOutline, LocationOutline, LockClosedOutline, PlayOutline, RefreshOutline,
-  ServerOutline, StopOutline, SwapHorizontalOutline,
+  AddOutline, CheckmarkCircleOutline, CloseCircleOutline, CloseOutline, CloudOutline, DocumentOutline,
+  DocumentTextOutline, EllipsisHorizontalOutline, FlashOutline, GitNetworkOutline, InformationCircleOutline,
+  LayersOutline, LocationOutline, LockClosedOutline, PlayOutline, RefreshOutline, ServerOutline, StopOutline,
+  SwapHorizontalOutline,
 } from '@vicons/ionicons5'
 import EmptyState from '../components/EmptyState.vue'
 import ConfiguredSecretField from '../components/ConfiguredSecretField.vue'
@@ -733,6 +1002,7 @@ import HavlineCard from '../components/HavlineCard.vue'
 import LoadError from '../components/LoadError.vue'
 import PageHeader from '../components/PageHeader.vue'
 import StatusBadge from '../components/StatusBadge.vue'
+import { CONFIGURED_SECRET_TAG } from '../constants/secretField'
 import { api, asList } from '../api/client'
 import type {
   FrpAgentStatus, FrpProxy, FrpRelease, FrpRuntimeInfo, FrpServer, FrpServerDetail, FrpServerDiagnostics,
@@ -815,6 +1085,51 @@ const server = computed(() => servers.value.find((item) => item.id === selectedI
 const installedFrpsVersion = computed(() => (agentStatus.value?.frps_version || '').trim())
 const routesCount = computed(() => agentStatus.value?.routes?.length ?? 0)
 const frpsVersionOptions = computed(() => releases.value.map((release) => ({ label: release.version, value: release.version })))
+
+// 主区页签：只改变信息呈现顺序，不改变任何数据加载逻辑
+type AgentTab = 'overview' | 'deps' | 'control' | 'logs'
+const activeTab = ref<AgentTab>('overview')
+
+// 状态总览卡：先给结论，再给传输方式和地址，避免首屏需要在多张指标卡之间来回扫视
+const agentHeroClass = computed(() => {
+  if (!statusLoaded.value) return 'agent-hero--pending'
+  if (agentStatusOk.value) return 'agent-hero--on'
+  if (agentStatus.value?.configured === false || agentStatus.value?.mgmt_enabled === false) return 'agent-hero--warn'
+  return 'agent-hero--off'
+})
+const agentHeroTitle = computed(() => {
+  if (!server.value) return '未选择服务端'
+  if (!statusLoaded.value) return statusLoading.value ? '正在读取 Agent 状态' : '等待读取 Agent 状态'
+  if (agentStatus.value?.configured === false) return '尚未安装 Agent'
+  if (agentStatus.value?.mgmt_enabled === false) return 'Agent 管理未启用'
+  if (agentStatus.value?.token_mismatch) return 'Agent Token 不匹配'
+  return agentStatusOk.value ? 'Agent 已连接' : 'Agent 未连接'
+})
+const agentHeroSubtitle = computed(() => {
+  const current = server.value
+  if (!current) return ''
+  return `${agentTransportText(current)} · ${agentTransportStateText(current)} · ${current.agent_url || '未配置 Agent 地址'}`
+})
+
+// 更多操作菜单：把低频操作收进下拉，只保留启动/停止与编辑在主工具条
+const serverMoreOptions = computed(() => [
+  { label: '查看详情', key: 'detail' },
+  { label: '测速', key: 'measure' },
+  { label: '校验', key: 'test' },
+  { label: '运行日志', key: 'logs' },
+  { type: 'divider', key: 'divider' },
+  { label: '删除服务端', key: 'delete' },
+])
+
+function handleServerMoreSelect(key: string | number) {
+  const current = server.value
+  if (!current) return
+  if (key === 'detail') return openServerDetail(current)
+  if (key === 'measure') return void measureServer(current)
+  if (key === 'test') return void testServer(current)
+  if (key === 'logs') return openServerLogs(current)
+  if (key === 'delete') return confirmDeleteServer(current)
+}
 
 // O：最后检查时间（PageHeader 副标题，判断数据新鲜度）
 const headerDescription = computed(() => {
@@ -1233,6 +1548,7 @@ async function loadReleases() {
 
 // 切换服务端必须重置，避免上一台的状态与输出串台
 watch(selectedId, () => {
+  activeTab.value = 'overview'
   opOutput.value = []
   agentStatus.value = null
   agentStatusOk.value = false
@@ -1334,12 +1650,18 @@ let diagnosticsAt = 0
 
 function defaultServerOptions(): FrpServerOptions {
   return {
+    user: '',
+    location: '',
     auth_method: 'token', log_level: 'info', log_max_days: 3, protocol: 'tcp', dial_server_timeout: 10,
     dial_server_keepalive: 7200, pool_count: 0, tcp_mux: true, tcp_mux_keepalive_interval: 60,
     heartbeat_interval: 30, heartbeat_timeout: 90, login_fail_exit: true, tls_disable_custom_first_byte: false, auto_start: false,
-    dashboard_addr: '', dashboard_port: 0, dashboard_user: '',
-    sub_domain_host: '', custom_404_page: '', tls_force: false, allow_ports: '', max_ports_per_client: 0,
+    proxy_url: '', connect_server_local_ip: '', dns_server: '',
+    vhost_http_port: 8080, vhost_https_port: 8443, sub_domain_host: '', custom_404_page: '',
+    tls_force: false, allow_ports: '', max_ports_per_client: 0, tcpmux_http_connect_port: 0,
     frps_log_to_file: false, frps_log_max_days: 3,
+    dashboard_addr: '', dashboard_port: 0, dashboard_user: '',
+    oidc_client_id: '', oidc_audience: '', oidc_scope: '', oidc_token_endpoint_url: '',
+    oidc_insecure_skip_verify: false, oidc_proxy_url: '', remark: '',
   }
 }
 
@@ -1350,7 +1672,79 @@ const serverForm = reactive({
   clear_tls_key: false, clear_tls_trusted_ca: false, options: defaultServerOptions(),
 })
 
+type ServerAddStep = 1 | 2 | 3
+type AgentSetupMode = 'none' | 'ssh' | 'existing'
+type ServerPreset = 'standard' | 'public-proxy' | 'existing-agent'
+
+const addStep = ref<ServerAddStep>(1)
+const agentSetupMode = ref<AgentSetupMode>('none')
+const serverPreset = ref<ServerPreset>('standard')
+const isCreatingServer = computed(() => editingServer.value === null)
+
+const serverPresetOptions = [
+  { label: '标准 frps', value: 'standard' },
+  { label: '需要公网反代', value: 'public-proxy' },
+  { label: '已有 Agent', value: 'existing-agent' },
+]
+const agentSetupOptions = [
+  { label: '暂不安装 Agent', value: 'none' },
+  { label: '通过 SSH 安装 Agent', value: 'ssh' },
+  { label: '已有 Agent，手动填写地址', value: 'existing' },
+]
+
+const canProceedAddStep1 = computed(() => {
+  if (!serverForm.name.trim()) return false
+  if (!serverForm.server_addr.trim()) return false
+  if (!serverForm.server_port || serverForm.server_port < 1 || serverForm.server_port > 65535) return false
+  if (serverForm.options.auth_method === 'token' && !serverForm.token.trim()) return false
+  if (serverForm.options.auth_method === 'token' && !serverForm.options.user?.trim()) return false
+  if (serverForm.options.auth_method === 'oidc') {
+    if (!serverForm.options.oidc_client_id?.trim() || !serverForm.options.oidc_token_endpoint_url?.trim() || !serverForm.oidc_client_secret.trim()) return false
+  }
+  return true
+})
+
+const canProceedAddStep2 = computed(() => {
+  if (agentSetupMode.value === 'ssh') {
+    return !!serverForm.ssh_host.trim() && !!serverForm.ssh_user.trim() && !!serverForm.ssh_secret.trim()
+  }
+  if (agentSetupMode.value === 'existing') return !!serverForm.agent_url.trim()
+  return true
+})
+
+const addSummary = computed(() => [
+  { label: '服务端', value: `${serverForm.name || '未命名'} · ${serverForm.server_addr || '未填写地址'}:${serverForm.server_port || '—'}` },
+  { label: '认证', value: authMethodText(serverForm.options.auth_method) },
+  { label: '用户', value: serverForm.options.auth_method === 'token' ? (serverForm.options.user || '未填写') : '—' },
+  { label: 'TLS', value: serverForm.tls_enabled ? '已启用' : '未启用' },
+  { label: '接入方式', value: agentSetupMode.value === 'none' ? '暂不安装 Agent' : agentSetupMode.value === 'ssh' ? '通过 SSH 安装 Agent' : '已有 Agent' },
+])
+
+const hasCustomTlsMaterial = computed(() => Boolean(
+  editingServer.value?.options.tls_certificate_configured
+  || editingServer.value?.options.tls_key_configured
+  || editingServer.value?.options.tls_trusted_ca_configured,
+))
+
 const serverHelpItems = computed(() => {
+  if (isCreatingServer.value) {
+    if (addStep.value === 1) return [
+      { title: '连接信息', text: '服务端名称只用于 Havline 内部识别；主机地址和端口对应 frps 的 bindAddr / bindPort，默认端口通常是 7000。' },
+      { title: '认证方式', text: '必须与 frps 的 auth 配置一致；Token 模式填写 auth.user 和 auth.token，OIDC 模式填写客户端 ID、密钥和令牌端点。' },
+      { title: 'TLS', text: '默认开启，用于加密 frpc 与 frps 的连接；如果 frps 明确关闭了 TLS，再手动关闭。' },
+      { title: '快速预设', text: '标准 frps 适合只连接 frps；需要公网反代会保留 8080/8443 回源端口；已有 Agent 会直接进入 Agent 地址填写。' },
+    ]
+    if (addStep.value === 2) return [
+      { title: '暂不安装 Agent', text: '只保存 frps 连接信息。之后可在本页补填 SSH 或 Agent 地址并安装。' },
+      { title: '通过 SSH 安装 Agent', text: '需要 SSH 地址、用户和密码/私钥；安装成功后 Agent 地址和 Token 会自动回填。' },
+      { title: '已有 Agent', text: '适合 VPS 上已经运行 Agent 的场景；填写 Agent API 地址和 Token 即可。' },
+    ]
+    return [
+      { title: '摘要', text: '确认服务端地址、认证方式和接入方式无误后再保存。' },
+      { title: '高级服务端参数', text: 'vhost 回源端口、端口白名单和 dashboard 都是可选项；不需要可以保持折叠。' },
+      { title: '保存与下发', text: '已有 Agent 时可直接保存并下发 frps 配置；其它接入方式保存后再安装 Agent。' },
+    ]
+  }
   if (serverFormTab.value === 'advanced') return [
     { title: '日志', text: 'frpc 运行日志的级别与保留天数；排查连接问题时建议临时调到 debug。' },
     { title: '传输协议', text: 'TCP 兼容性最好；KCP/QUIC 在丢包链路上更流畅，WebSocket/WSS 适合经过反向代理或 CDN 的场景，需 frps 侧支持。' },
@@ -1373,8 +1767,18 @@ const serverHelpItems = computed(() => {
   if (serverForm.options.auth_method === 'oidc') return [...common, { title: 'OIDC', text: '客户端 ID、密钥和令牌端点由身份提供商提供；受众与权限范围需与 frps 的 OIDC 校验配置匹配。' }]
   return common
 })
-const serverHelpTitle = computed(() => ({ basic: '配置说明', advanced: '高级配置说明', server: '服务端配置说明', remote: '远程管理说明' }[serverFormTab.value]))
+const serverHelpTitle = computed(() => {
+  if (isCreatingServer.value) {
+    return ['连接 frps', '接入方式', '确认保存'][addStep.value - 1]
+  }
+  return { basic: '连接说明', advanced: '高级配置说明', server: '服务端参数说明', remote: 'Agent 与远程说明' }[serverFormTab.value]
+})
 const serverHelpTip = computed(() => {
+  if (isCreatingServer.value) {
+    if (addStep.value === 1) return '先填写最小连接信息即可继续，高级参数可以稍后在编辑服务端时调整。'
+    if (addStep.value === 2) return 'Agent 不是连接 frps 的必要条件；不确定时选择“暂不安装 Agent”。'
+    return '保存后可在服务端详情中测试连接、安装 Agent，或前往公网反代配置域名规则。'
+  }
   if (serverFormTab.value === 'advanced') return '传输参数需与 frps 服务端配置匹配；修改后保存即可生效。'
   if (serverFormTab.value === 'server') return 'frps 参数修改后需保存并「下发 frps 配置」，再重启 frps 才会生效。'
   if (serverFormTab.value === 'remote') return '首次安装/升级需 SSH；安装成功后建议使用 SSH 隧道或 HTTPS 固定接入，不要长期暴露公网 7700。'
@@ -1454,7 +1858,7 @@ function statusBarTooltip(sample: FrpServerDetail['status']['samples'][number]) 
 function resetServerForm() {
   Object.assign(serverForm, {
     name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
-    agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: true,
+    agent_url: '', agent_token: '', ssh_host: '', ssh_port: 22, ssh_user: 'root', ssh_auth: 'key', ssh_secret: '', mgmt_enabled: false,
     oidc_client_secret: '', dashboard_password: '', clear_dashboard_password: false, tls_certificate: '', tls_key: '', tls_trusted_ca: '', clear_tls_certificate: false,
     clear_tls_key: false, clear_tls_trusted_ca: false,
   })
@@ -1462,14 +1866,52 @@ function resetServerForm() {
   serverForm.options = defaultServerOptions()
 }
 
+function applyServerPreset(value: ServerPreset) {
+  serverPreset.value = value
+  serverForm.options.vhost_http_port = 8080
+  serverForm.options.vhost_https_port = 8443
+  if (value === 'existing-agent') {
+    agentSetupMode.value = 'existing'
+    serverForm.mgmt_enabled = true
+    return
+  }
+  agentSetupMode.value = 'none'
+  serverForm.mgmt_enabled = false
+}
+
+function setAgentSetupMode(value: AgentSetupMode) {
+  agentSetupMode.value = value
+  serverForm.mgmt_enabled = value !== 'none'
+}
+
+function addNextStep() {
+  if (addStep.value === 1 && !canProceedAddStep1.value) {
+    message.error('请先填写服务端名称、地址、端口和认证信息')
+    return
+  }
+  if (addStep.value === 2 && !canProceedAddStep2.value) {
+    message.error('请先补充 Agent 接入所需信息')
+    return
+  }
+  addStep.value = Math.min(3, addStep.value + 1) as ServerAddStep
+}
+
+function addPrevStep() {
+  addStep.value = Math.max(1, addStep.value - 1) as ServerAddStep
+}
+
 function openServerModal(server?: FrpServer) {
   editingServer.value = server ?? null
   serverFormTab.value = 'basic'
+  addStep.value = 1
+  agentSetupMode.value = server?.agent_configured ? 'existing' : server?.ssh_configured ? 'ssh' : 'none'
+  serverPreset.value = 'standard'
   confirmedPrivilegedVhost.value = ''
   resetServerForm()
   if (server) {
     Object.assign(serverForm, { ...server, token: '', oidc_client_secret: '', agent_token: '', ssh_secret: '' })
     Object.assign(serverForm.options, server.options)
+    agentSetupMode.value = server.agent_configured ? 'existing' : server.ssh_configured ? 'ssh' : 'none'
   }
   showServerModal.value = true
 }
@@ -1731,7 +2173,7 @@ function confirmPrivilegedVhostPorts(ports: number[]): Promise<boolean> {
   })
 }
 
-async function saveServer() {
+async function saveServer(pushAfterSave = false) {
   const invalid = validateServerForm()
   if (invalid) {
     message.error(invalid)
@@ -1761,11 +2203,28 @@ async function saveServer() {
       clear_tls_trusted_ca: serverForm.clear_tls_trusted_ca,
       allow_privileged_vhost_ports: privileged.length > 0,
     }
-    if (editingServer.value) await api.updateFrpServer(editingServer.value.id, payload)
-    else await api.createFrpServer(payload)
+    const saved = editingServer.value
+      ? await api.updateFrpServer(editingServer.value.id, payload)
+      : await api.createFrpServer(payload)
+    let savedMessage = '服务端配置已保存'
+    if (pushAfterSave) {
+      if (saved.agent_configured) {
+        await api.pushFrpConfigToAgent(saved.id)
+        savedMessage = '服务端已保存，frps 配置已下发'
+      } else {
+        message.warning('服务端已保存；Agent 安装完成后再下发 frps 配置')
+      }
+    }
     showServerModal.value = false
-    message.success('服务端配置已保存')
+    message.success(savedMessage)
     await load()
+    if (!editingServer.value) {
+      dialog.info({
+        title: '服务端已保存',
+        content: '下一步：安装并测试 Agent，然后前往「公网反代」部署域名规则。',
+        positiveText: '知道了',
+      })
+    }
   } catch (error) { message.error(error instanceof Error ? error.message : '保存失败') }
   finally { savingServer.value = false }
 }
@@ -1911,7 +2370,7 @@ useVisibilityPolling(() => {
 .stat-card__label { margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--havline-text); }
 .stat-card__sub { margin-top: 4px; font-size: 12px; color: var(--havline-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .port-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.port-item { font-family: var(--havline-mono); font-size: 12.5px; padding: 1px 6px; border-radius: 999px; background: var(--havline-bg-muted); color: var(--havline-text-muted); }
+.port-item { display: inline-flex; align-items: center; gap: 4px; font-family: var(--havline-mono); font-size: 12.5px; padding: 1px 6px; border-radius: 999px; background: var(--havline-bg-muted); color: var(--havline-text-muted); }
 .port-item--on { background: var(--havline-brand-soft); color: var(--havline-brand-text); }
 
 .dep-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--havline-space-4); margin-bottom: var(--havline-space-4); }
@@ -1999,10 +2458,12 @@ useVisibilityPolling(() => {
   .agent-actions .n-button { min-height: 44px; flex: 1 1 auto; }
   .entrance-row { flex-direction: column; align-items: flex-start; }
 }
-/* VPS 资源：占满「环境与依赖」整行，避免单独占一格显得突兀 */
-/* 选择器带 .dep-grid 前缀，避免被上面的 .dep-grid > .section-card（同权重、更早）压过 */
-.dep-grid > .vps-resource-card {
-  grid-column: span 3;
+/* 概览页签：指标卡一行，VPS 资源与证书并排；窄屏再纵向排列 */
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--havline-space-4);
+  margin-bottom: var(--havline-space-4);
 }
 
 .res-strip {
@@ -2136,8 +2597,34 @@ useVisibilityPolling(() => {
 
 .logs-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: var(--havline-space-3); }
 
-.frp-proxy-modal { display: flex; width: 900px; max-width: 95vw; max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
-.frp-proxy-modal .proxy-modal__form { flex: 1; min-width: 0; display: flex; flex-direction: column; max-height: 90vh; }
+.frp-proxy-modal { display: flex; width: min(1120px, 96vw); max-width: 96vw; max-height: 90vh; background: var(--havline-surface); border-radius: var(--havline-radius); overflow: hidden; box-shadow: var(--havline-shadow-md); }
+.frp-proxy-modal--creating { width: min(1180px, 96vw); }
+.server-edit-summary { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); margin: var(--havline-space-4) var(--havline-space-5) 0; padding: 14px 16px 16px; background: var(--havline-bg); border: 1px solid var(--havline-border); border-radius: 10px; flex-shrink: 0; }
+.server-edit-summary__identity { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--havline-space-3); min-width: 0; }
+.server-edit-summary__identity strong { color: var(--havline-text); font-size: 14px; }
+.server-edit-summary__identity span { color: var(--havline-text-secondary); font-size: 12.5px; }
+.server-edit-summary__badges { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.server-config-notice { margin-bottom: var(--havline-space-3); }
+.server-config-collapse, .agent-ssh-collapse, .tls-cert-collapse, .oidc-advanced-collapse { width: 100%; border: 1px solid var(--havline-border); border-radius: 10px; overflow: hidden; background: var(--havline-surface); }
+.agent-ssh-collapse { margin-top: var(--havline-space-3); }
+.oidc-advanced-collapse { margin-top: var(--havline-space-3); }
+.server-config-collapse :deep(.n-collapse-item), .agent-ssh-collapse :deep(.n-collapse-item), .tls-cert-collapse :deep(.n-collapse-item), .oidc-advanced-collapse :deep(.n-collapse-item) { margin: 0 !important; border: none !important; border-radius: 0 !important; }
+.server-config-collapse :deep(.n-collapse-item + .n-collapse-item), .agent-ssh-collapse :deep(.n-collapse-item + .n-collapse-item), .tls-cert-collapse :deep(.n-collapse-item + .n-collapse-item), .oidc-advanced-collapse :deep(.n-collapse-item + .n-collapse-item) { border-top: 1px solid var(--havline-border) !important; }
+.server-config-collapse :deep(.n-collapse-item__header), .agent-ssh-collapse :deep(.n-collapse-item__header), .tls-cert-collapse :deep(.n-collapse-item__header), .oidc-advanced-collapse :deep(.n-collapse-item__header) { min-height: 44px; padding: 12px 14px !important; box-sizing: border-box; font-weight: 600; background: var(--havline-bg); }
+.server-config-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header), .agent-ssh-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header), .tls-cert-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header), .oidc-advanced-collapse :deep(.n-collapse-item:first-child > .n-collapse-item__header) { padding-top: 12px !important; }
+.server-config-collapse :deep(.n-collapse-item__content-inner), .agent-ssh-collapse :deep(.n-collapse-item__content-inner), .tls-cert-collapse :deep(.n-collapse-item__content-inner), .oidc-advanced-collapse :deep(.n-collapse-item__content-inner) { padding: 0 14px 14px; }
+.server-config-collapse .form-section { padding-top: var(--havline-space-4); }
+.agent-mgmt-option { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-4); padding: 12px 0; border-bottom: 1px solid var(--havline-border); }
+.agent-mgmt-option__text { display: grid; gap: 2px; min-width: 0; }
+.agent-mgmt-option__label { color: var(--havline-text); font-size: 14px; font-weight: 500; }
+.agent-mgmt-option__hint { color: var(--havline-text-muted); font-size: 12px; line-height: 1.45; }
+.agent-action-panel { margin-top: var(--havline-space-3); padding: 14px 16px; border: 1px solid var(--havline-border); border-radius: 10px; background: var(--havline-bg); }
+.agent-action-panel__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--havline-space-3); flex-wrap: wrap; }
+.agent-action-panel__title { color: var(--havline-text); font-size: 14px; font-weight: 600; }
+.agent-action-panel__hint { color: var(--havline-text-muted); font-size: 12px; }
+.agent-action-panel__buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--havline-border); }
+.agent-action-panel__note { margin: 10px 0 0; color: var(--havline-text-muted); font-size: 12px; line-height: 1.5; }
+.frp-proxy-modal .proxy-modal__form { flex: 1 1 790px; min-width: 790px; display: flex; flex-direction: column; max-height: 90vh; }
 .frp-proxy-modal .proxy-modal__header { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); padding: var(--havline-space-5) var(--havline-space-5) 0; }
 .frp-proxy-modal .modal-title { margin: 0; font-size: 18px; font-weight: 600; }
 .frp-proxy-modal .proxy-modal__tabbar { display: flex; gap: var(--havline-space-5); padding: var(--havline-space-3) var(--havline-space-5) 0; border-bottom: 1px solid var(--havline-border); flex-shrink: 0; }
@@ -2146,9 +2633,7 @@ useVisibilityPolling(() => {
 .frp-proxy-modal .proxy-modal__tab--active { color: var(--havline-brand-text); font-weight: 600; border-bottom-color: var(--havline-brand); }
 .frp-proxy-modal .proxy-modal__scroll { flex: 1; min-height: 0; overflow-y: auto; }
 .frp-proxy-modal .proxy-modal__pane { width: 100%; box-sizing: border-box; padding: var(--havline-space-4) var(--havline-space-5) 0; }
-.frp-proxy-modal .proxy-modal__pane > .modal-actions { padding-bottom: var(--havline-space-5); }
-.frp-proxy-modal__basic .form-grid { grid-template-columns: 1fr; }
-.frp-server-modal__basic .form-grid { grid-template-columns: 1fr; }
+.frp-proxy-modal .proxy-modal__pane > .modal-actions { margin-top: var(--havline-space-5); padding-bottom: var(--havline-space-5); }
 
 .form-section { padding: var(--havline-space-4) 0; border-bottom: 1px solid var(--havline-border); }
 .form-section:first-child { padding-top: 0; }
@@ -2169,8 +2654,11 @@ useVisibilityPolling(() => {
 .frp-detail-card :deep(.n-card__content) { padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5); }
 
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 var(--havline-space-4); }
+.configured-secret-form-label { display: inline-flex; align-items: center; gap: 8px; min-height: 22px; }
+.frp-proxy-modal :deep(.n-form-item-label) { min-height: 22px; align-items: center; }
 .form-grid--wide > :first-child { grid-column: 1 / -1; }
 .tls-panel { padding: var(--havline-space-4); border-radius: var(--havline-radius-sm); background: var(--havline-bg-muted); }
+.tls-cert-collapse { margin-top: var(--havline-space-3); }
 .tls-file-field { margin-bottom: var(--havline-space-4); }
 .tls-file-field__head { display: flex; align-items: center; justify-content: space-between; gap: var(--havline-space-3); margin-bottom: var(--havline-space-2); font-size: 14px; font-weight: 500; }
 .file-input { display: none; }
@@ -2242,11 +2730,112 @@ useVisibilityPolling(() => {
 }
 /* 服务端表单沿用内网穿透页的提示排版；本页既有的 .form-hint 服务于详情卡，保持不动 */
 .frp-proxy-modal .form-hint { margin: 0 0 var(--havline-space-4); font-size: 13px; line-height: 1.55; }
+
+@media (max-width: 1200px) {
+  .frp-proxy-modal .proxy-modal__form { flex-basis: auto; min-width: 0; }
+}
+
+/* 新增服务端向导：只保留连接 frps 的最小字段，低频参数留到确认步骤折叠 */
+.server-wizard {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.server-wizard__steps {
+  padding: var(--havline-space-4) var(--havline-space-5) 0;
+  flex-shrink: 0;
+}
+
+.server-wizard__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--havline-space-4) var(--havline-space-5);
+}
+
+.server-wizard__form {
+  max-width: 720px;
+}
+
+.server-wizard__agent-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--havline-space-2);
+  margin: var(--havline-space-3) 0;
+}
+
+.server-wizard__grid {
+  margin-top: var(--havline-space-3);
+}
+
+.server-wizard__switch-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.server-wizard__switch-inline span {
+  color: var(--havline-text-secondary);
+  font-size: 12.5px;
+}
+
+.server-wizard__summary {
+  display: grid;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4);
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg-muted);
+}
+
+.server-wizard__summary > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.server-wizard__summary span {
+  color: var(--havline-text-secondary);
+  font-size: 12px;
+}
+
+.server-wizard__summary strong {
+  color: var(--havline-text);
+  overflow-wrap: anywhere;
+}
+
+.server-wizard__advanced {
+  margin-top: var(--havline-space-4);
+}
+
+.server-wizard__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  padding: var(--havline-space-4) var(--havline-space-5) var(--havline-space-5);
+  border-top: 1px solid var(--havline-border);
+  flex-shrink: 0;
+}
+
+.server-wizard__footer-right {
+  display: flex;
+  align-items: center;
+  gap: var(--havline-space-2);
+  margin-left: auto;
+}
+
 @media (max-width: 760px) {
   .frp-proxy-modal { display: block; max-height: 92vh; overflow-y: auto; }
   .frp-proxy-modal .proxy-modal__form { max-height: none; }
   .frp-proxy-modal .proxy-modal__scroll { overflow: visible; }
   .frp-proxy-modal .proxy-modal__help { width: auto; border-top: 1px solid var(--havline-border); border-left: 0; }
+  .server-wizard__body { overflow: visible; }
+  .server-wizard__footer { align-items: stretch; flex-direction: column; }
+  .server-wizard__footer-right { justify-content: flex-end; margin-left: 0; }
 }
 @media (max-width: 700px) {
   .server-detail__grid, .detail-fields, .form-grid { grid-template-columns: 1fr; }
@@ -2305,8 +2894,203 @@ useVisibilityPolling(() => {
 .server-toolbar__endpoint { font-size: 12.5px; color: var(--havline-text-secondary); }
 .server-toolbar__actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--havline-space-2); }
 
+/* Agent 状态总览：结论、链路、指标、端口按阅读顺序排列 */
+.agent-hero-card {
+  margin-bottom: var(--havline-space-4);
+}
+
+.agent-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--havline-space-4);
+  padding: 14px;
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-bg);
+}
+
+.agent-hero--on {
+  border-color: color-mix(in srgb, var(--havline-success) 35%, var(--havline-border));
+  background: color-mix(in srgb, var(--havline-success) 6%, var(--havline-bg));
+}
+
+.agent-hero--warn {
+  border-color: color-mix(in srgb, var(--havline-warning) 35%, var(--havline-border));
+  background: color-mix(in srgb, var(--havline-warning) 6%, var(--havline-bg));
+}
+
+.agent-hero--off {
+  border-color: var(--havline-border);
+  background: color-mix(in srgb, var(--havline-text-muted) 6%, var(--havline-bg));
+}
+
+.agent-hero__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.agent-hero__icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--havline-surface);
+  color: var(--havline-text-secondary);
+  font-size: 22px;
+}
+
+.agent-hero--on .agent-hero__icon {
+  color: var(--havline-success);
+}
+
+.agent-hero--warn .agent-hero__icon {
+  color: var(--havline-warning);
+}
+
+.agent-hero__text {
+  min-width: 0;
+}
+
+.agent-hero__title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--havline-text);
+}
+
+.agent-hero__sub {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--havline-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.agent-hero__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.agent-hero__time {
+  font-size: 12px;
+  color: var(--havline-text-muted);
+}
+
+.agent-hero__flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--havline-space-4);
+  padding: 12px;
+  border: 1px dashed color-mix(in srgb, var(--havline-info) 28%, var(--havline-border));
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-info-soft);
+}
+
+.agent-hero__flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--havline-text-secondary);
+}
+
+.agent-hero__flow-step--accent {
+  color: var(--havline-brand-text);
+  font-weight: 600;
+}
+
+.agent-hero__flow-arrow {
+  color: var(--havline-text-muted);
+}
+
+.agent-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--havline-space-3);
+  margin-top: var(--havline-space-4);
+  padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
+}
+
+.agent-hero__metrics > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-hero__metrics span {
+  font-size: 12px;
+  color: var(--havline-text-secondary);
+}
+
+.agent-hero__metrics strong {
+  font-size: 15px;
+  color: var(--havline-text);
+  overflow-wrap: anywhere;
+}
+
+.agent-hero__ports {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--havline-space-3);
+}
+
+.agent-hero__ports-label {
+  margin-right: 4px;
+  font-size: 12px;
+  color: var(--havline-text-secondary);
+}
+
+.agent-tabs :deep(.n-tabs-nav) {
+  margin-bottom: var(--havline-space-4);
+}
+
+.agent-tabs :deep(.n-tabs-tab) {
+  font-weight: 500;
+}
+
 @media (max-width: 1100px) {
   .agent-layout { grid-template-columns: 1fr; }
   .server-sidebar__list { max-height: none; }
+}
+
+@media (max-width: 1199px) {
+  .overview-grid { grid-template-columns: 1fr; }
+  .agent-hero__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .agent-hero {
+    flex-direction: column;
+  }
+
+  .agent-hero__aside {
+    align-items: flex-start;
+  }
+
+  .agent-hero__flow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .agent-hero__flow-arrow {
+    transform: rotate(90deg);
+  }
+
+  .agent-hero__metrics {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

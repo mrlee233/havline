@@ -69,9 +69,13 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimSpace(header[len(prefix):])
 }
 
-// tokenDeniedPath 是只允许浏览器会话的路径（账号与令牌管理）。
+// tokenDeniedPath 是只允许浏览器会话的路径（账号与令牌管理，以及需要二次认证的终端）。
 func tokenDeniedPath(path string) bool {
 	if path == "/api/auth/password" || path == "/api/auth/logout" {
+		return true
+	}
+	// 终端是 root shell 入口：API Token 不能绕过二次认证，一律要求浏览器会话
+	if strings.HasPrefix(path, "/api/terminal") {
 		return true
 	}
 	return strings.HasPrefix(path, "/api/settings/tokens") ||

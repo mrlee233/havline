@@ -1,8 +1,11 @@
 package api
 
 import (
+	"bufio"
+	"fmt"
 	"io/fs"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -24,8 +27,10 @@ func NewRouter(deps Deps) http.Handler {
 
 func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 	logsHandler := NewLogsHandler(deps.Config)
+	// 终端二次认证票据：登录处理器与终端处理器共用一份，改密即可让当前会话失效
+	terminalUnlocks := newTerminalUnlockStore()
 	r := &Router{
-		authHandler:       NewAuthHandler(deps.Auth, deps.Notify),
+		authHandler:       NewAuthHandler(deps.Auth, deps.Notify, terminalUnlocks),
 		proxyHandler:      NewProxyHandler(deps.Config, deps.Proxy, logsHandler, deps.Traffic),
 		nginxHandler:      NewNginxHandler(deps.Proxy),
 		statusHandler:     NewStatusHandler(deps.Config, deps.Proxy, deps.DDNS, deps.ACME, deps.Cloudflare, deps.StartedAt, deps.Config.NginxPIDFile),
@@ -41,8 +46,19 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		frpmultiHandler:   NewFRPMultiHandler(deps.FRPMulti, deps.Auth),
 		cloudflareHandler: NewCloudflareHandler(deps.Cloudflare),
 		updateHandler:     NewUpdateHandler(deps.Updater),
-		authSvc:           deps.Auth,
-		staticFS:          deps.StaticFS,
+		terminalHandler: NewTerminalHandler(TerminalHandlerOptions{
+			FRP:        deps.FRPMulti,
+			Settings:   deps.Settings,
+			Auth:       deps.Auth,
+			Manager:    deps.Terminal,
+			Audits:     deps.TerminalAudits,
+			Commands:   deps.TerminalCommands,
+			Recordings: deps.TerminalRecordings,
+			Unlocks:    terminalUnlocks,
+			Logger:     deps.Logger,
+		}),
+		authSvc:  deps.Auth,
+		staticFS: deps.StaticFS,
 	}
 
 	mux := http.NewServeMux()
@@ -226,6 +242,28 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("POST /api/cloudflare/routes/test", cf.TestRoute)
 	}
 
+	if deps.Terminal != nil {
+		term := r.terminalHandler
+		protect("GET /api/terminal/targets", term.ListTargets)
+		protect("GET /api/terminal/unlock", term.UnlockStatus)
+		protect("POST /api/terminal/unlock", term.Unlock)
+		protect("DELETE /api/terminal/unlock", term.Lock)
+		protect("GET /api/terminal/commands", term.ListCommands)
+		protect("POST /api/terminal/commands", term.CreateCommand)
+		protect("DELETE /api/terminal/commands/{id}", term.DeleteCommand)
+		protect("GET /api/terminal/recordings", term.ListRecordings)
+		protect("GET /api/terminal/recordings/{id}", term.GetRecording)
+		protect("GET /api/terminal/sessions", term.ListSessions)
+		protect("POST /api/terminal/sessions", term.CreateSession)
+		protect("GET /api/terminal/sessions/{id}/ws", term.Stream)
+		protect("DELETE /api/terminal/sessions/{id}", term.CloseSession)
+	}
+
+	// 审计不依赖终端开关：功能关掉后，历史记录仍然应该查得到
+	if deps.TerminalAudits != nil {
+		protect("GET /api/terminal/audits", r.terminalHandler.ListAudits)
+	}
+
 	if deps.StaticFS != nil {
 		mux.Handle("/", r.spaHandler())
 	}
@@ -262,6 +300,7 @@ type Router struct {
 	frpmultiHandler   *FRPMultiHandler
 	cloudflareHandler *CloudflareHandler
 	updateHandler     *UpdateHandler
+	terminalHandler   *TerminalHandler
 	authSvc           *auth.Service
 	staticFS          fs.FS
 }
@@ -300,6 +339,15 @@ func (w *statusRecorder) Flush() {
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack 转发给底层 ResponseWriter：WebSocket 升级（内置 SSH 终端）需要拿到原始连接。
+func (w *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("底层 ResponseWriter 不支持 Hijack")
+	}
+	return hijacker.Hijack()
 }
 
 func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {

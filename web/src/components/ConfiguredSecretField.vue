@@ -1,6 +1,6 @@
 <template>
   <div class="settings-field">
-    <div class="settings-field__label configured-secret-label">
+    <div v-if="!hideLabel" class="settings-field__label configured-secret-label">
       <span>{{ label }}</span>
       <n-tag v-if="configured" size="small" type="success" :bordered="false">{{ CONFIGURED_SECRET_TAG }}</n-tag>
     </div>
@@ -24,10 +24,12 @@ withDefaults(
     modelValue: string
     configured?: boolean
     placeholder?: string
+    hideLabel?: boolean
   }>(),
   {
     configured: false,
     placeholder: '',
+    hideLabel: false,
   },
 )
 

@@ -133,6 +133,7 @@ import {
   PersonOutline,
   SunnyOutline,
   SwapHorizontalOutline,
+  TerminalOutline,
   HardwareChipOutline,
   ShieldCheckmarkOutline,
 } from '@vicons/ionicons5'
@@ -203,6 +204,7 @@ const menuDefs = [
   { label: '公网服务端', key: 'frp-agent', icon: HardwareChipOutline },
   { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
   { label: 'Cloudflare 隧道', key: 'cloudflare', icon: CloudOutline },
+  { label: 'SSH 终端', key: 'terminal', icon: TerminalOutline },
   { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
   { label: '系统设置', key: 'settings', icon: CogOutline },
   { label: '关于项目', key: 'about', icon: InformationCircleOutline },
@@ -218,6 +220,8 @@ const menuOptions = computed<MenuOption[]>(() =>
 
 const activeKey = computed(() => {
   const name = route.name
+  // 终端审计是终端页的子页面：菜单里只有「SSH 终端」，这里让它保持高亮
+  if (name === 'terminal-audits') return 'terminal'
   return typeof name === 'string' ? name : 'dashboard'
 })
 

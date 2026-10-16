@@ -34,7 +34,7 @@ func Load() Config {
 		dataDir = abs
 	}
 	return Config{
-		ListenAddr:            envOr("HAVLINE_LISTEN", ":6893"),
+		ListenAddr:            envOrAllowEmpty("HAVLINE_LISTEN", ":6893"),
 		GatewaySocket:         envOr("HAVLINE_GATEWAY_SOCKET", ""),
 		GatewayPrefix:         envOr("HAVLINE_GATEWAY_PREFIX", ""),
 		DataDir:               dataDir,
@@ -48,7 +48,7 @@ func Load() Config {
 		FrpPIDFile:            envOr("HAVLINE_FRP_PID", dataDir+"/frp/frpc.pid"),
 		UpdaterSocket:         updaterSocket(),
 		UpdaterToken:          envOr("HAVLINE_UPDATER_TOKEN", ""),
-		UpdaterTokenFile:      envOr("HAVLINE_UPDATER_TOKEN_FILE", defaultUpdaterTokenFile()),
+		UpdaterTokenFile:      envOrAllowEmpty("HAVLINE_UPDATER_TOKEN_FILE", defaultUpdaterTokenFile()),
 	}
 }
 
@@ -217,6 +217,15 @@ func defaultDataDir() string {
 
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// envOrAllowEmpty 区分“未配置”和“显式配置为空”。
+// 原生版用它关闭 TCP 监听（避免与 Docker 版争用 6893）并禁用 updater Token 文件。
+func envOrAllowEmpty(key, fallback string) string {
+	if v, ok := os.LookupEnv(key); ok {
 		return v
 	}
 	return fallback

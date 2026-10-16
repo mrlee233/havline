@@ -46,6 +46,14 @@ import type {
   CfTunnelRoutes,
   CfPreflightResult,
   CfRouteTestResult,
+  TerminalTarget,
+  TerminalAuditEntry,
+  TerminalSessionInfo,
+  TerminalCreateResult,
+  TerminalUnlockStatus,
+  TerminalUnlockResult,
+  TerminalCommand,
+  TerminalRecording,
 } from './types'
 import { withBase } from './base'
 
@@ -56,6 +64,22 @@ export function asList<T>(value: T[] | null | undefined): T[] {
 const REQUEST_TIMEOUT_MS = 30_000
 const CERT_REQUEST_TIMEOUT_MS = 10 * 60_000
 const AGENT_OPERATION_TIMEOUT_MS = 5 * 60_000
+// SSH 建连包含认证 + 申请 PTY，给到 60 秒（后端自身 30 秒超时）
+const TERMINAL_CREATE_TIMEOUT_MS = 60_000
+
+// ApiRequestError 带上 HTTP 状态码与后端返回的稳定错误码，
+// 让调用方能按 code 分支（例如 terminal_locked），而不是去匹配提示文案。
+export class ApiRequestError extends Error {
+  readonly status: number
+  readonly code: string
+
+  constructor(message: string, status: number, code = '') {
+    super(message)
+    this.name = 'ApiRequestError'
+    this.status = status
+    this.code = code
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const controller = new AbortController()
@@ -89,15 +113,19 @@ async function requestWithSignal<T>(path: string, init?: RequestInit, signal?: A
 
   if (!response.ok) {
     let message = '请求失败'
+    let code = ''
     try {
       const body = (await response.json()) as ApiError
       if (body.error) {
         message = body.error
       }
+      if (body.code) {
+        code = body.code
+      }
     } catch {
       // ignore
     }
-    throw new Error(message)
+    throw new ApiRequestError(message, response.status, code)
   }
 
   if (response.status === 204) {
@@ -550,4 +578,52 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ enabled }),
     }),
+
+  // ===== 内置 SSH 终端 =====
+  // 二次认证：解锁一次 10 分钟，期间新建会话不再重复输入管理员密码
+  getTerminalUnlock: () => request<TerminalUnlockStatus>('/api/terminal/unlock'),
+  unlockTerminal: (password: string) =>
+    request<TerminalUnlockResult>('/api/terminal/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+  lockTerminal: () => request<{ ok: boolean }>('/api/terminal/unlock', { method: 'DELETE' }),
+  listTerminalTargets: () => request<{ targets: TerminalTarget[] }>('/api/terminal/targets'),
+  listTerminalSessions: () => request<{ sessions: TerminalSessionInfo[] }>('/api/terminal/sessions'),
+  createTerminalSession: (payload: { server_id: number; cols: number; rows: number }) =>
+    request<TerminalCreateResult>('/api/terminal/sessions', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }, TERMINAL_CREATE_TIMEOUT_MS),
+  closeTerminalSession: (id: string) =>
+    request<{ ok: boolean }>(`/api/terminal/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // 会话审计：谁、何时、连了哪台、多久、为什么断开
+  listTerminalAudits: (limit = 100) =>
+    request<{ entries: TerminalAuditEntry[] }>(`/api/terminal/audits?limit=${limit}`),
+  // 常用命令
+  listTerminalCommands: () => request<{ commands: TerminalCommand[] }>('/api/terminal/commands'),
+  createTerminalCommand: (payload: { name: string; command: string }) =>
+    request<TerminalCommand>('/api/terminal/commands', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  deleteTerminalCommand: (id: number) =>
+    request<{ ok: boolean }>(`/api/terminal/commands/${id}`, { method: 'DELETE' }),
+  // 录像审计：列表是 JSON，内容本身是 asciinema v2 文本，单独取
+  listTerminalRecordings: () => request<{ recordings: TerminalRecording[] }>('/api/terminal/recordings'),
+  getTerminalRecording: async (id: string) => {
+    const response = await fetch(withBase(`/api/terminal/recordings/${encodeURIComponent(id)}`), {
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      throw new ApiRequestError('读取录像失败，可能已被清理', response.status)
+    }
+    return await response.text()
+  },
+}
+
+// terminalSocketURL 拼出终端通道地址：按当前协议选择 ws/wss，并带上部署前缀。
+export function terminalSocketURL(id: string): string {
+  const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${scheme}//${window.location.host}${withBase(`/api/terminal/sessions/${encodeURIComponent(id)}/ws`)}`
 }

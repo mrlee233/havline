@@ -274,7 +274,11 @@
             <img :src="providerIcon(cfg.provider)" :alt="providerLabel(cfg.provider)" />
           </span>
           <div class="verify-option__body">
-            <div class="verify-option__title">{{ providerLabel(cfg.provider) }}</div>
+            <!-- 有自定义名称时优先显示名称，服务商名退到后面，多个同服务商任务才分得清 -->
+            <div class="verify-option__title">
+              {{ cfg.name || providerLabel(cfg.provider) }}
+              <span v-if="cfg.name" class="verify-option__provider">{{ providerLabel(cfg.provider) }}</span>
+            </div>
             <div class="verify-option__sub">上次同步 {{ formatRelativeTime(cfg.last_updated_at) || '从未' }}</div>
             <div class="verify-option__zones">{{ ddnsTaskSummary(cfg) }}</div>
           </div>
@@ -1802,6 +1806,13 @@ html.dark .apply-log-box {
   font-size: 14px;
   font-weight: 600;
   color: var(--havline-text);
+}
+
+.verify-option__provider {
+  margin-left: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--havline-text-muted);
 }
 
 .verify-option__sub {
