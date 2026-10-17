@@ -285,7 +285,10 @@
                 <div class="form-switch-row">
                   <div class="form-switch-row__text">
                     <div class="form-switch-row__label">WebSocket 支持</div>
-                    <div class="form-switch-row__hint">附加 Upgrade / Connection 头，实时服务（家庭影院、监控等）需要</div>
+                    <div class="form-switch-row__hint">
+                      附加 Upgrade / Connection 头。关闭后，依赖 WebSocket 的页面（NAS 桌面、各类控制台、Portainer、
+                      Home Assistant 等）会表现为请求一直挂起、进不去；家庭影院与监控同样需要它
+                    </div>
                   </div>
                   <n-switch v-model:value="settingsForm.websocket" size="small" />
                 </div>
@@ -1054,7 +1057,8 @@ function openDeploySettings(candidate: FrpProxy) {
   settingsTarget.value = candidate
   settingsTab.value = 'basic'
   settingsForm.value = {
-    websocket: candidate.options?.websocket ?? false,
+    // 缺省视为开启：老规则没有这个键时按新默认走，显式关掉的仍然是关
+    websocket: candidate.options?.websocket ?? true,
     https_enabled: !(candidate.options?.https_disabled ?? false),
     redirect_https: candidate.options?.redirect_https ?? false,
     client_max_body_size: candidate.options?.client_max_body_size ?? '',

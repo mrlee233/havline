@@ -831,7 +831,10 @@ const editingProxy = ref<FrpProxy | null>(null)
 const downloadPolling = ref(false)
 
 function defaultProxyOptions(): FrpProxyOptions & { allow_ips_text?: string } {
-  return { transport: {}, health_check: {}, load_balancer: {}, nat_traversal: { disable_assisted_addrs: false }, allow_ips_text: '' }
+  // websocket 默认开启：公网反代模板只有打开它才会转发 Upgrade/Connection 头，
+  // 关掉后 NAS 桌面、控制台、Portainer 这类页面的 WebSocket 会一直挂起。
+  // 需要关掉的规则可在「公网反代 → 部署设置」里单独改。
+  return { websocket: true, transport: {}, health_check: {}, load_balancer: {}, nat_traversal: { disable_assisted_addrs: false }, allow_ips_text: '' }
 }
 
 const proxyForm = reactive({ server_id: 0, name: '', type: 'tcp' as FrpProxy['type'], local_ip: '127.0.0.1', local_port: 80, remote_port: 0, domains_text: '', locations_text: '', allow_users_text: '', metadatas_text: '', request_headers_text: '', response_headers_text: '', host_header_rewrite: '', enabled: true, remark: '', options: defaultProxyOptions() as FrpProxyOptions & { allow_ips_text?: string }, plugin_type: '', plugin_local_addr: '', plugin_unix_path: '', plugin_local_path: '', plugin_username: '', plugin_password: '' })
