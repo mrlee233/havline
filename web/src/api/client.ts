@@ -322,6 +322,7 @@ export const api = {
   deleteFrpProxy: (id: number) => request<void>(`/api/frpmulti/proxies/${id}`, { method: 'DELETE' }),
   startFrp: () => request<FrpStatus>('/api/frpmulti/start', { method: 'POST' }),
   stopFrp: () => request<FrpStatus>('/api/frpmulti/stop', { method: 'POST' }),
+  restartFrp: () => request<FrpStatus>('/api/frpmulti/restart', { method: 'POST' }),
   reloadFrp: () => request<FrpStatus>('/api/frpmulti/reload', { method: 'POST' }),
   getFrpLogs: (limit = 200, serverID?: number) => {
     const query = new URLSearchParams({ limit: String(limit) })

@@ -724,6 +724,44 @@
           <n-form-item label="自定义 404 页面（VPS 路径）"><n-input v-model:value="serverForm.options.custom_404_page" placeholder="例如 /var/www/404.html；留空用默认" /></n-form-item>
           <div class="switch-row"><span>强制 TLS（frps 只接受 TLS 连接）</span><n-switch v-model:value="serverForm.options.tls_force" /></div>
         </div>
+        <!-- 直接写/导入 404 页面内容：Havline 负责写到 VPS 上，不用自己去放文件 -->
+        <div class="frp-404-block">
+          <div class="frp-404-block__head">
+            <div>
+              <div class="frp-404-block__title">自定义 404 页面内容</div>
+              <div class="frp-404-block__hint">
+                填了这里就不用管上面的 VPS 路径：保存后点「下发配置」，Havline 会把内容写到 VPS 的
+                <code>/etc/frp/havline-404.html</code> 并让 frps 指向它；清空即恢复默认页面。
+              </div>
+            </div>
+            <div class="frp-404-block__actions">
+              <n-button size="small" @click="pick404File">导入 HTML 文件</n-button>
+              <n-button
+                v-if="serverForm.options.custom_404_html"
+                size="small"
+                quaternary
+                type="warning"
+                @click="serverForm.options.custom_404_html = ''"
+              >
+                清空
+              </n-button>
+            </div>
+          </div>
+          <n-input
+            v-model:value="serverForm.options.custom_404_html"
+            type="textarea"
+            :rows="6"
+            placeholder="直接粘贴 HTML，例如：<!doctype html><html>…</html>"
+            class="frp-404-block__editor"
+          />
+          <input
+            ref="file404Input"
+            type="file"
+            accept=".html,.htm,text/html"
+            class="frp-404-block__file"
+            @change="on404FilePicked"
+          />
+        </div>
         <div class="switch-row"><span>frps 写文件日志（/var/log/frps.log）</span><n-switch v-model:value="serverForm.options.frps_log_to_file" /></div>
         <n-form-item v-if="serverForm.options.frps_log_to_file" label="日志保留天数"><n-input-number v-model:value="serverForm.options.frps_log_max_days" :min="1" :max="365" placeholder="默认 3" class="narrow-input" /></n-form-item>
       </section>
@@ -1656,7 +1694,7 @@ function defaultServerOptions(): FrpServerOptions {
     dial_server_keepalive: 7200, pool_count: 0, tcp_mux: true, tcp_mux_keepalive_interval: 60,
     heartbeat_interval: 30, heartbeat_timeout: 90, login_fail_exit: true, tls_disable_custom_first_byte: false, auto_start: false,
     proxy_url: '', connect_server_local_ip: '', dns_server: '',
-    vhost_http_port: 8080, vhost_https_port: 8443, sub_domain_host: '', custom_404_page: '',
+    vhost_http_port: 8080, vhost_https_port: 8443, sub_domain_host: '', custom_404_page: '', custom_404_html: '',
     tls_force: false, allow_ports: '', max_ports_per_client: 0, tcpmux_http_connect_port: 0,
     frps_log_to_file: false, frps_log_max_days: 3,
     dashboard_addr: '', dashboard_port: 0, dashboard_user: '',
@@ -1664,6 +1702,9 @@ function defaultServerOptions(): FrpServerOptions {
     oidc_insecure_skip_verify: false, oidc_proxy_url: '', remark: '',
   }
 }
+
+// 隐藏的文件选择框：导入 404 页面内容用
+const file404Input = ref<HTMLInputElement | null>(null)
 
 const serverForm = reactive({
   name: '', server_addr: '', server_port: 7000, tls_enabled: true, tls_server_name: '', enabled: true, token: '',
@@ -1914,6 +1955,28 @@ function openServerModal(server?: FrpServer) {
     agentSetupMode.value = server.agent_configured ? 'existing' : server.ssh_configured ? 'ssh' : 'none'
   }
   showServerModal.value = true
+}
+
+// 404 页面文件导入：只需要把内容读进表单，真正的落盘由 Havline 在下发配置时完成
+function pick404File() {
+  file404Input.value?.click()
+}
+
+async function on404FilePicked(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (file.size > 512 * 1024) {
+    message.warning('404 页面文件请控制在 512 KB 以内')
+    return
+  }
+  try {
+    serverForm.options.custom_404_html = await file.text()
+    message.success(`已载入 ${file.name}`)
+  } catch {
+    message.error('读取文件失败')
+  }
 }
 
 function openServerDetail(server: FrpServer) {
@@ -3093,4 +3156,28 @@ useVisibilityPolling(() => {
     grid-template-columns: 1fr;
   }
 }
+
+/* 自定义 404 页面内容：直接写 / 导入，Havline 负责写到 VPS */
+.frp-404-block {
+  margin: 4px 0 var(--havline-space-4);
+  padding: 12px;
+  border: 1px solid var(--havline-border);
+  border-radius: var(--havline-radius-sm);
+  background: var(--havline-surface);
+}
+
+.frp-404-block__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--havline-space-3);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.frp-404-block__title { font-size: 13px; font-weight: 600; color: var(--havline-text); }
+.frp-404-block__hint { margin-top: 2px; font-size: 12px; line-height: 1.6; color: var(--havline-text-muted); }
+.frp-404-block__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.frp-404-block__editor :deep(textarea) { font-family: var(--havline-mono); font-size: 12px; line-height: 1.6; }
+.frp-404-block__file { display: none; }
 </style>

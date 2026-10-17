@@ -11,6 +11,11 @@ import (
 // buildFRPSServerConfig 把多服务端模块的 frpc 侧服务端记录渲染为 VPS 侧的 frps.toml，
 // bindPort、认证、管理接口与 frpc 配置同源生成，消除两端错配（官方 BuildFRPSConfig 的多服务端版）。
 // 密钥只在生成前一刻解密进模板，永不写入日志或其他 API 响应。
+// FixedAgent404PagePath 是「自定义 404 页面内容」在 VPS 上的固定落盘位置。
+// 界面里填的内容由 Havline 写到这个路径，frps.toml 的 custom404Page 也指向它，
+// 这样用户不需要自己去 VPS 上放文件。
+const FixedAgent404PagePath = "/etc/frp/havline-404.html"
+
 func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (string, error) {
 	// token 认证才需要取同一份 token；none / oidc 不涉及
 	token := ""
@@ -77,8 +82,12 @@ func (s *Service) buildFRPSServerConfig(ctx context.Context, server Server) (str
 		b.WriteString(fmt.Sprintf("subDomainHost = %q\n", host))
 	}
 	// 自定义 404 页面（HTTP vhost 命中不到规则时的响应）
-	if page := strings.TrimSpace(server.Options.Custom404Page); page != "" {
-		b.WriteString(fmt.Sprintf("custom404Page = %q\n", page))
+	// 界面里填了「页面内容」就用 Havline 下发的那份，其次才用用户自己填的 VPS 路径。
+	switch {
+	case strings.TrimSpace(server.Options.Custom404HTML) != "":
+		b.WriteString(fmt.Sprintf("custom404Page = %q\n", FixedAgent404PagePath))
+	case strings.TrimSpace(server.Options.Custom404Page) != "":
+		b.WriteString(fmt.Sprintf("custom404Page = %q\n", strings.TrimSpace(server.Options.Custom404Page)))
 	}
 	// tcpmux 规则的硬依赖：存在 tcpmux 规则时必须配置监听端口
 	if port := server.Options.TCPMuxHTTPConnectPort; port > 0 {

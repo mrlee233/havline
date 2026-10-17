@@ -1463,6 +1463,8 @@ func (s *Service) InstallFRPSOnAgent(ctx context.Context, serverID int64, versio
 	warning := ""
 	if server, err := s.store.GetServer(ctx, serverID); err != nil {
 		warning = "frps 已安装，但读取服务端配置失败：" + err.Error()
+	} else if err := s.syncAgent404Page(ctx, client, server); err != nil {
+		warning = "frps 已安装，但自定义 404 页面下发失败：" + err.Error()
 	} else if content, err := s.buildFRPSServerConfig(ctx, server); err != nil {
 		warning = "frps 已安装，但生成 frps.toml 失败：" + err.Error()
 	} else if err := client.PushFRPSConfig(ctx, content); err != nil {
@@ -1494,12 +1496,29 @@ func (s *Service) PushFRPSConfigToAgent(ctx context.Context, serverID int64) err
 	if err != nil {
 		return err
 	}
+	// 先把「自定义 404 页面内容」落到 VPS 上：frps.toml 里写的是文件路径，文件必须先存在
+	if err := s.syncAgent404Page(ctx, client, server); err != nil {
+		return err
+	}
 	// 下发的是 frps 服务端配置（vhost 端口/auth/webServer），不是 frpc 客户端配置
 	content, err := s.buildFRPSServerConfig(ctx, server)
 	if err != nil {
 		return err
 	}
 	return client.PushFRPSConfig(ctx, content)
+}
+
+// syncAgent404Page 把界面里填写的 404 页面内容写到 VPS 的固定路径；内容清空时删掉旧文件。
+func (s *Service) syncAgent404Page(ctx context.Context, client *AgentClient, server Server) error {
+	html := strings.TrimSpace(server.Options.Custom404HTML)
+	if html == "" {
+		// 没填内容就清掉 Havline 托管的那份，避免残留旧页面
+		return client.DeleteFRPS404Page(ctx, FixedAgent404PagePath)
+	}
+	if err := client.PushFRPS404Page(ctx, FixedAgent404PagePath, html); err != nil {
+		return fmt.Errorf("自定义 404 页面下发失败：%w", err)
+	}
+	return nil
 }
 
 // errPrivilegedVhostNoPublicProxy 说明：frps 回源端口落在 80/443 时，VPS 上由 frps 直接对外，
@@ -2312,6 +2331,31 @@ func (s *Service) Stop(ctx context.Context) error {
 	}
 	if len(messages) > 0 {
 		return fmt.Errorf("%s", strings.Join(messages, "；"))
+	}
+	return nil
+}
+
+// Restart 重启全部 frpc：先停后起。
+//
+// 比手动「停止 → 启动」多一层保障：Stop 会把 Agent 隧道一起停掉，而单独点「启动」
+// 不会重建它们；重启在这里顺带把隧道重新拉起来，避免停一次之后就再也连不上。
+func (s *Service) Restart(ctx context.Context) error {
+	stopErr := s.Stop(ctx)
+	startErr := s.Start(ctx)
+	if startErr != nil {
+		if stopErr != nil {
+			return fmt.Errorf("停止阶段：%v；启动阶段：%w", stopErr, startErr)
+		}
+		return startErr
+	}
+	// 隧道重建可能要等远端，放到后台跑，不占着这次请求
+	tunnelCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Minute)
+	go func() {
+		defer cancel()
+		s.StartAgentTunnels(tunnelCtx)
+	}()
+	if stopErr != nil {
+		s.logger.Warn("frpc 重启时停止阶段报错，但已重新启动", "module", "FRP", "error", stopErr.Error())
 	}
 	return nil
 }

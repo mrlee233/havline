@@ -158,8 +158,11 @@ type ServerOptions struct {
 	VhostHTTPPort  int `json:"vhost_http_port,omitempty"`
 	VhostHTTPSPort int `json:"vhost_https_port,omitempty"`
 	// frps 进阶配置：子域名/404/强制 TLS/端口白名单/每客户端端口上限/tcpmux/文件日志
-	SubDomainHost         string `json:"sub_domain_host,omitempty"`
-	Custom404Page         string `json:"custom_404_page,omitempty"`
+	SubDomainHost string `json:"sub_domain_host,omitempty"`
+	Custom404Page string `json:"custom_404_page,omitempty"`
+	// Custom404HTML 是「自定义 404 页面内容」：填了就不用自己去 VPS 放文件，
+	// Havline 会把它写到 fixedAgent404PagePath 并让 frps.toml 指向那里。
+	Custom404HTML         string `json:"custom_404_html,omitempty"`
 	TLSForce              bool   `json:"tls_force"`
 	AllowPorts            string `json:"allow_ports,omitempty"`
 	MaxPortsPerClient     int    `json:"max_ports_per_client,omitempty"`

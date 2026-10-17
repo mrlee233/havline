@@ -54,6 +54,15 @@
             <template #icon><n-icon :component="PlayOutline" /></template>
             启动 frpc
           </n-button>
+          <!-- 重启：改完配置或进程卡住时一次到位；停掉之后隧道会断，用这个比「停止 → 启动」更稳 -->
+          <n-button
+            :loading="actionLoading === 'restart'"
+            :disabled="servers.length === 0"
+            @click="restartClient"
+          >
+            <template #icon><n-icon :component="RefreshOutline" /></template>
+            重启 frpc
+          </n-button>
         </div>
       </div>
 
@@ -800,7 +809,7 @@ const proxies = ref<FrpProxy[]>([])
 const proxyTraffic = ref<Record<number, FrpProxyTraffic>>({})
 const proxyTrafficErrors = ref<Record<number, string>>({})
 const loadError = ref('')
-const actionLoading = ref<'start' | 'stop' | 'reload' | null>(null)
+const actionLoading = ref<'start' | 'stop' | 'restart' | 'reload' | null>(null)
 const savingProxy = ref(false)
 const showProxyModal = ref(false)
 const showExport = ref(false)
@@ -1227,18 +1236,20 @@ function splitText(value: string) { return value.split(/[\n,\s]+/).map((item) =>
 function textToMap(value: string) { return Object.fromEntries(value.split('\n').map((line) => line.split('=').map((item) => item.trim())).filter(([key, item]) => key && item)) }
 function mapToText(value?: Record<string, string>) { return Object.entries(value ?? {}).map(([key, item]) => `${key}=${item}`).join('\n') }
 
-async function runAction(action: 'start' | 'stop' | 'reload') {
+async function runAction(action: 'start' | 'stop' | 'restart' | 'reload') {
   actionLoading.value = action
   try {
-    const methods = { start: api.startFrp, stop: api.stopFrp, reload: api.reloadFrp }
+    const methods = { start: api.startFrp, stop: api.stopFrp, restart: api.restartFrp, reload: api.reloadFrp }
     status.value = await methods[action]()
-    message.success(action === 'start' ? 'frpc 已启动' : action === 'stop' ? 'frpc 已停止' : '配置已应用')
+    const tips = { start: 'frpc 已启动', stop: 'frpc 已停止', restart: 'frpc 已重启', reload: '配置已应用' }
+    message.success(tips[action])
   } catch (error) { message.error(error instanceof Error ? error.message : '操作失败') }
   finally { actionLoading.value = null; await load() }
 }
 
 function startClient() { return runAction('start') }
 function stopClient() { return runAction('stop') }
+function restartClient() { return runAction('restart') }
 function reloadClient() { return runAction('reload') }
 
 async function openRuntimeModal() {

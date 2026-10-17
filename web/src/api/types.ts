@@ -406,6 +406,8 @@ export interface FrpServerOptions {
   sub_domain_host?: string
   /** HTTP vhost 404 页面路径（VPS 本地路径）*/
   custom_404_page?: string
+  /** 自定义 404 页面内容：填了就不用自己往 VPS 放文件，Havline 会写到 /etc/frp/havline-404.html */
+  custom_404_html?: string
   /** 强制 TLS：只接受 TLS 连接（frpc 必须开 transport.tls.enable）*/
   tls_force?: boolean
   /** 端口白名单：逗号分隔的单端口或范围，如 6000,6005-6010；留空不限制 */

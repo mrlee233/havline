@@ -985,6 +985,15 @@ func (h *FRPMultiHandler) Reload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
 }
 
+// Restart 重启全部 frpc：比「停止 → 启动」更稳，重启后会重建 Agent 隧道。
+func (h *FRPMultiHandler) Restart(w http.ResponseWriter, r *http.Request) {
+	if err := h.svc.Restart(r.Context()); err != nil {
+		writeError(r, w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
+}
+
 func (h *FRPMultiHandler) Logs(w http.ResponseWriter, r *http.Request) {
 	lines, err := h.svc.ReadLogs(queryInt(r, "limit", 200), int64(queryInt(r, "server_id", 0)))
 	if err != nil {

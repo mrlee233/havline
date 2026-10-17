@@ -439,6 +439,20 @@ func (c *AgentClient) PushFRPSConfig(ctx context.Context, content string) error 
 	return c.request(ctx, http.MethodPut, "/api/v1/frps/config", map[string]string{"content": content}, nil)
 }
 
+// PushFRPS404Page 把自定义 404 页面内容写到 VPS 上的指定路径。
+// frps 的 custom404Page 只认文件路径，所以内容必须先落到 VPS 上。
+func (c *AgentClient) PushFRPS404Page(ctx context.Context, path, content string) error {
+	var result map[string]any
+	return c.request(ctx, http.MethodPut, "/api/v1/frps/404-page",
+		map[string]string{"path": path, "content": content}, &result)
+}
+
+// DeleteFRPS404Page 移除 VPS 上的自定义 404 页面文件（文件不存在也算成功）。
+func (c *AgentClient) DeleteFRPS404Page(ctx context.Context, path string) error {
+	var result map[string]any
+	return c.request(ctx, http.MethodDelete, "/api/v1/frps/404-page?path="+url.QueryEscape(path), nil, &result)
+}
+
 func (c *AgentClient) PushCertificate(ctx context.Context, domain, fullchain, privateKey string) error {
 	return c.request(ctx, http.MethodPost, "/api/v1/certs", map[string]string{
 		"domain": domain, "fullchain_pem": fullchain, "key_pem": privateKey,

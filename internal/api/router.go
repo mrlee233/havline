@@ -203,6 +203,7 @@ func newRouterWithSpecs(deps Deps) (http.Handler, []routeSpec) {
 		protect("GET /api/frpmulti/proxies/{id}/logs", frpHandler.ProxyLogs)
 		protect("POST /api/frpmulti/start", frpHandler.Start)
 		protect("POST /api/frpmulti/stop", frpHandler.Stop)
+		protect("POST /api/frpmulti/restart", frpHandler.Restart)
 		protect("POST /api/frpmulti/reload", frpHandler.Reload)
 		protect("GET /api/frpmulti/logs", frpHandler.Logs)
 		protect("GET /api/frpmulti/config/export", frpHandler.ExportConfig)
