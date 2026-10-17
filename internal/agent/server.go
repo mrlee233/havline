@@ -31,7 +31,7 @@ import (
 	"github.com/havline/havline/internal/sysinfo"
 )
 
-const AgentVersion = "0.15.3"
+const AgentVersion = "0.15.4"
 
 // Config 是 havline-agent 的运行配置。agent 只在 VPS 本地管理自己的 Nginx 片段、证书和 frps 配置。
 type Config struct {
@@ -1656,10 +1656,6 @@ func nginxRoute(req routeRequest, certDir string) string {
 	if req.ConnLimitMax > 0 {
 		b.WriteString("    limit_conn_status 503;\n")
 	}
-	if req.WebSocket {
-		b.WriteString("    proxy_http_version 1.1;\n")
-		b.WriteString(nginxtmpl.UpgradeHeaders("    ", "\"upgrade\""))
-	}
 	// IP 访问控制：白名单（allow + deny all）与黑名单（deny）可同时生效；
 	// 顺序由共享模板统一：deny → 仅大陆规则 → allow → deny all。
 	chinaDeny := ""
@@ -1690,7 +1686,17 @@ func nginxRoute(req routeRequest, certDir string) string {
 		Burst: req.RateLimitBurst,
 		Conn:  req.ConnLimitMax,
 	}, "        ")
-	fmt.Fprintf(&b, "    location / {\n%s%s%s        proxy_pass http://%s;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_http_version 1.1;\n    }\n}\n", aclText, authLine, limitText, req.Upstream)
+	// WebSocket 必须写在 location 里：location 一旦自定义了 proxy_set_header，
+	// server 级的那组不会被继承——写在 server 块等于没写，表现就是升级请求一直挂起。
+	wsText := ""
+	if req.WebSocket {
+		wsText = nginxtmpl.UpgradeHeaders("        ", "\"upgrade\"")
+		// 规则没显式配 proxy_read_timeout 时给长连接留足空闲时间，避免 60 秒被 Nginx 掐断
+		if strings.TrimSpace(req.ProxyReadTimeout) == "" {
+			wsText += "        proxy_read_timeout 3600s;\n"
+		}
+	}
+	fmt.Fprintf(&b, "    location / {\n%s%s%s        proxy_pass http://%s;\n        proxy_set_header Host $host;\n        proxy_set_header X-Real-IP $remote_addr;\n        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        proxy_http_version 1.1;\n%s    }\n}\n", aclText, authLine, limitText, req.Upstream, wsText)
 	return b.String()
 }
 

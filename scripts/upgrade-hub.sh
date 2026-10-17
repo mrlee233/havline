@@ -5,7 +5,7 @@
 #
 # 可选环境变量：
 #   COMPOSE_FILE=docker-compose.hub.yml   # 要用的编排文件
-#   REPO=http://.../mrlee/Havline.git       # 源码仓库
+#   REPO=https://github.com/mrlee233/havline.git   # 源码仓库
 #   BRANCH=main                           # 分支
 #
 # 它做四件事：
@@ -16,7 +16,7 @@
 #   4) 打印「回滚到上一个 tag」的命令
 set -euo pipefail
 
-REPO="${REPO:-https://jayhub.top/mrlee/Havline.git}"
+REPO="${REPO:-https://github.com/mrlee233/havline.git}"
 BRANCH="${BRANCH:-main}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.hub.yml}"
 APP_CONTAINER="${APP_CONTAINER:-havline}"

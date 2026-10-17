@@ -4,14 +4,21 @@ Manual OCI layout pusher for registries whose token realm is misconfigured.
 This script is an emergency fallback. It reads Docker's OCI layout output,
 obtains a Bearer token over HTTPS from the Git credential store, and uploads
 the blobs and image manifest directly through the Registry HTTP API.
+
+默认面向 GitHub Container Registry（ghcr.io）。如果要用回自建 Gitea registry：
+  -Registry jayhub.top -Repository mrlee/havline -CredentialHost jayhub.top `
+  -TokenPath /v2/token -TokenService container_registry
 #>
 param(
   [Parameter(Mandatory = $true)][string]$LayoutDir,
   [Parameter(Mandatory = $true)][string]$Platform,
   [Parameter(Mandatory = $true)][string]$Tag,
-  [string]$Registry = "jayhub.top",
-  [string]$Repository = "mrlee/havline",
-  [string]$CredentialHost = "jayhub.top"
+  [string]$Registry = "ghcr.io",
+  [string]$Repository = "mrlee233/havline",
+  [string]$CredentialHost = "ghcr.io",
+  # GHCR: /token?service=ghcr.io；Gitea: /v2/token?service=container_registry
+  [string]$TokenPath = "/token",
+  [string]$TokenService = "ghcr.io"
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,7 +40,7 @@ function Get-RegistryBasicAuth {
 
 function Get-BearerToken([string]$Scope) {
   $basic = Get-RegistryBasicAuth
-  $url = "https://$Registry/v2/token?service=container_registry&scope=$Scope"
+  $url = "https://$Registry$TokenPath?service=$TokenService&scope=$Scope"
   $response = Invoke-RestMethod -Uri $url -Headers @{ Authorization = $basic }
   if (-not $response.token) { throw "Registry did not return a token" }
   return $response.token

@@ -81,6 +81,16 @@ func TestNginxRouteSharedTemplateSemantics(t *testing.T) {
 		}
 	}
 	denyIdx := strings.Index(out, "deny 8.8.8.8;")
+	// WebSocket 头必须落在 location 内部：location 自定义 proxy_set_header 后，
+	// server 级的那组不会被继承，写在 server 块里等于没生效（升级请求会一直挂起）
+	locationIdx := strings.Index(out, "location / {")
+	upgradeIdx := strings.Index(out, "proxy_set_header Upgrade $http_upgrade;")
+	if locationIdx < 0 || upgradeIdx < 0 || upgradeIdx < locationIdx {
+		t.Fatalf("Upgrade 头必须写在 location 内：\n%s", out)
+	}
+	if !strings.Contains(out, "proxy_read_timeout 3600s;") {
+		t.Fatalf("WebSocket 未配读超时时应给长连接默认超时：\n%s", out)
+	}
 	allowIdx := strings.Index(out, "allow 192.168.1.0/24;")
 	denyAllIdx := strings.Index(out, "deny all;")
 	if denyIdx < 0 || allowIdx < 0 || denyAllIdx < 0 || !(denyIdx < allowIdx && allowIdx < denyAllIdx) {
