@@ -1,6 +1,9 @@
 package frp
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateProxyInput(t *testing.T) {
 	port := 60022
@@ -76,6 +79,46 @@ func TestValidateServerInputVhostPorts(t *testing.T) {
 			err := validateServerInput(input)
 			if (err != nil) != testCase.wantErr {
 				t.Fatalf("validateServerInput() error = %v, wantErr %v", err, testCase.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateRemotePortAllowed(t *testing.T) {
+	port := func(value int) *int { return &value }
+	base := Server{Name: "雨云vps"}
+	cases := []struct {
+		name    string
+		allow   string
+		input   ProxyInput
+		wantErr bool
+	}{
+		{name: "单端口命中", allow: "6000,6095", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}},
+		{name: "区间命中", allow: "6000-6100", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}},
+		{name: "区间下界命中", allow: "6095-6200", input: ProxyInput{Type: "udp", RemotePort: port(6095)}},
+		{name: "带空格写法", allow: " 6000 - 6100 , 7000", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}},
+		{name: "不在白名单拒绝", allow: "6000-6010", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}, wantErr: true},
+		{name: "区间写反视为无效", allow: "6100-6000", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}, wantErr: true},
+		{name: "越界区间视为无效", allow: "6000-70000", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}, wantErr: true},
+		{name: "白名单为空不限制", allow: "", input: ProxyInput{Type: "tcp", RemotePort: port(6095)}},
+		{name: "HTTP 规则跳过校验", allow: "6000-6010", input: ProxyInput{Type: "http", RemotePort: port(6095)}},
+		{name: "无远程端口跳过校验", allow: "6000-6010", input: ProxyInput{Type: "tcp"}},
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := base
+			server.Options.AllowPorts = testCase.allow
+			err := validateRemotePortAllowed(server, testCase.input)
+			if (err != nil) != testCase.wantErr {
+				t.Fatalf("validateRemotePortAllowed() error = %v, wantErr %v", err, testCase.wantErr)
+			}
+			if err == nil {
+				return
+			}
+			message := err.Error()
+			if !strings.Contains(message, "6095") || !strings.Contains(message, testCase.allow) {
+				t.Fatalf("错误信息应包含端口与白名单原文，实际为 %q", message)
 			}
 		})
 	}

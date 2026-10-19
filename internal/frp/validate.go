@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -392,6 +393,50 @@ func validHost(host string) bool {
 		return true
 	}
 	return validDomain(host)
+}
+
+// validateRemotePortAllowed 检查 tcp/udp 规则的远程端口是否落在服务端的 allowPorts 白名单里。
+//
+// frps 只认 allowPorts：端口不在白名单时规则会被服务端拒绝，frpc 会一直重试并刷
+// `[规则名] start error: port not allowed`。与其等用户去翻 frpc 日志，不如保存时就说清楚。
+func validateRemotePortAllowed(server Server, in ProxyInput) error {
+	allow := strings.TrimSpace(server.Options.AllowPorts)
+	if allow == "" || in.RemotePort == nil {
+		return nil
+	}
+	if in.Type != "tcp" && in.Type != "udp" {
+		return nil
+	}
+	if portAllowed(allow, *in.RemotePort) {
+		return nil
+	}
+	return fmt.Errorf(
+		"远程端口 %d 不在服务端「%s」的 allowPorts 白名单（%s）内：frps 会拒绝这条规则，frpc 会反复报 \"port not allowed\"。请到「公网服务端 → 服务端参数」把 %d 加进白名单（或清空 allowPorts 表示不限），保存后重新下发 frps 配置",
+		*in.RemotePort, server.Name, allow, *in.RemotePort)
+}
+
+// portAllowed 按 allowPorts 的写法（单端口 / 起-止 区间，逗号分隔）判断端口是否放行。
+// 区间写反（6010-6000）、越界（0 或 >65535）与 renderAllowPorts 一样视为无效，不放行；
+// 否则会出现「校验说放行、实际生成的 frps.toml 里这条白名单被丢弃」的偏差。
+func portAllowed(allowPorts string, port int) bool {
+	for _, part := range strings.Split(allowPorts, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if start, end, ok := strings.Cut(part, "-"); ok {
+			startN, err1 := strconv.Atoi(strings.TrimSpace(start))
+			endN, err2 := strconv.Atoi(strings.TrimSpace(end))
+			if err1 == nil && err2 == nil && startN > 0 && endN >= startN && endN <= 65535 && port >= startN && port <= endN {
+				return true
+			}
+			continue
+		}
+		if n, err := strconv.Atoi(part); err == nil && n > 0 && n <= 65535 && n == port {
+			return true
+		}
+	}
+	return false
 }
 
 func validDomain(domain string) bool {

@@ -692,7 +692,11 @@ func (s *Service) CreateProxy(ctx context.Context, in ProxyInput) (Proxy, error)
 	if err := validateProxyInput(in); err != nil {
 		return Proxy{}, err
 	}
-	if _, err := s.store.GetServer(ctx, in.ServerID); err != nil {
+	server, err := s.store.GetServer(ctx, in.ServerID)
+	if err != nil {
+		return Proxy{}, err
+	}
+	if err := validateRemotePortAllowed(server, in); err != nil {
 		return Proxy{}, err
 	}
 	proxy, err := s.store.CreateProxy(ctx, in)
@@ -711,7 +715,11 @@ func (s *Service) UpdateProxy(ctx context.Context, id int64, in ProxyInput) (Pro
 	if err := validateProxyInput(in); err != nil {
 		return Proxy{}, err
 	}
-	if _, err := s.store.GetServer(ctx, in.ServerID); err != nil {
+	server, err := s.store.GetServer(ctx, in.ServerID)
+	if err != nil {
+		return Proxy{}, err
+	}
+	if err := validateRemotePortAllowed(server, in); err != nil {
 		return Proxy{}, err
 	}
 	proxy, err := s.store.UpdateProxy(ctx, id, in)
