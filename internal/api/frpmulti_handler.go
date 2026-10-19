@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -961,20 +962,33 @@ func (h *FRPMultiHandler) DeleteProxy(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// frpDetachedContext 给 frpc 的启停操作一个不随请求取消的上下文。
+//
+// 用户常常是从隧道那头点进来的（浏览器 → VPS → frpc → 本机），而「停止/重启」会先杀掉
+// frpc —— 那一刻用户的连接就断了，r.Context() 随之取消。继续拿它做后续的数据库读写，
+// 就会出现「frpc 停掉了、却再也拉不起来」的经典事故。
+func frpDetachedContext(r *http.Request) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(r.Context()), 2*time.Minute)
+}
+
 func (h *FRPMultiHandler) Start(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Start(r.Context()); err != nil {
+	ctx, cancel := frpDetachedContext(r)
+	defer cancel()
+	if err := h.svc.Start(ctx); err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.Status(ctx))
 }
 
 func (h *FRPMultiHandler) Stop(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Stop(r.Context()); err != nil {
+	ctx, cancel := frpDetachedContext(r)
+	defer cancel()
+	if err := h.svc.Stop(ctx); err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.Status(ctx))
 }
 
 func (h *FRPMultiHandler) Reload(w http.ResponseWriter, r *http.Request) {
@@ -987,11 +1001,13 @@ func (h *FRPMultiHandler) Reload(w http.ResponseWriter, r *http.Request) {
 
 // Restart 重启全部 frpc：比「停止 → 启动」更稳，重启后会重建 Agent 隧道。
 func (h *FRPMultiHandler) Restart(w http.ResponseWriter, r *http.Request) {
-	if err := h.svc.Restart(r.Context()); err != nil {
+	ctx, cancel := frpDetachedContext(r)
+	defer cancel()
+	if err := h.svc.Restart(ctx); err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, h.svc.Status(r.Context()))
+	writeJSON(w, http.StatusOK, h.svc.Status(ctx))
 }
 
 func (h *FRPMultiHandler) Logs(w http.ResponseWriter, r *http.Request) {

@@ -90,6 +90,10 @@ const (
 	KeyTerminalEnabled = "terminal_enabled"
 	// KeyTerminalRecording 会话录制开关：默认关闭，开启后把终端输出写入 logs/terminal
 	KeyTerminalRecording = "terminal_recording_enabled"
+	// KeyFrpResumeOnStart 记录「上次 frpc 是否处于运行状态」：应用被停用再启用后，
+	// 用它决定要不要自动把 frpc 拉起来（否则用户会发现应用起来了但 frpc 没起）。
+	// 该键由程序内部维护，不在设置页暴露。
+	KeyFrpResumeOnStart = "frp_resume_on_start"
 )
 
 var Defaults = map[string]string{

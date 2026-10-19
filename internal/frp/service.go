@@ -18,6 +18,7 @@ import (
 	"github.com/havline/havline/internal/config"
 	"github.com/havline/havline/internal/fsutil"
 	"github.com/havline/havline/internal/secret"
+	"github.com/havline/havline/internal/settings"
 )
 
 // maskedToken 是敏感凭据的统一回显掩码：API 永不返回明文；保存时收到掩码一律视为保留旧值
@@ -62,6 +63,13 @@ type Service struct {
 	// applyMu 保证 FRP 配置文件写入与批量启动/重载的原子边界（23.5）:
 	// SQLite 事务只保护关系数据，不保护 frpc-server-*.toml 与 frpc 进程。
 	applyMu sync.Mutex
+
+	// settings 用来记录 frpc 的启停状态（KeyFrpResumeOnStart）：应用被停用再启用后
+	// 据此自动恢复运行。未注入时自动恢复不生效。
+	settings *settings.Store
+
+	// runningProbe 仅供测试替换：默认按 Status 判断 frpc 是否在运行
+	runningProbe func(ctx context.Context) bool
 }
 
 func NewService(cfg config.Config, store *Store, secretBox *secret.Box, logger *slog.Logger, certStore *certificate.Store) *Service {
@@ -2292,6 +2300,7 @@ func (s *Service) Start(ctx context.Context) error {
 	if len(failures) > 0 {
 		return fmt.Errorf("%s", strings.Join(failures, "；"))
 	}
+	s.rememberResumeState(ctx, true)
 	return nil
 }
 
@@ -2307,10 +2316,64 @@ func (s *Service) AutoStart(ctx context.Context) error {
 			break
 		}
 	}
+	// 上次应用退出时 frpc 还在运行：这次也自动拉起来。
+	// 否则「停用应用 → 重新启用」之后 frpc 是停的，用户点图标没反应还得绕路进后台手动开。
+	if !shouldStart && len(servers) > 0 && s.lastSessionWasRunning(ctx) {
+		shouldStart = true
+	}
 	if !shouldStart {
 		return nil
 	}
 	return s.Start(ctx)
+}
+
+// SetSettingsStore 注入设置存储：用来记录/读取 frpc 的运行状态。
+func (s *Service) SetSettingsStore(store *settings.Store) {
+	s.settings = store
+}
+
+// rememberResumeState 记录 frpc 当前是否在运行，供下次应用启动时决定要不要自动拉起。
+func (s *Service) rememberResumeState(ctx context.Context, running bool) {
+	if s.settings == nil {
+		return
+	}
+	value := "0"
+	if running {
+		value = "1"
+	}
+	if err := s.settings.Set(ctx, settings.KeyFrpResumeOnStart, value); err != nil {
+		s.logger.Warn("记录 frpc 运行状态失败", "module", "FRP", "error", err.Error())
+	}
+}
+
+// lastSessionWasRunning 上次 frpc 处于运行状态时为真。
+func (s *Service) lastSessionWasRunning(ctx context.Context) bool {
+	if s.settings == nil {
+		return false
+	}
+	value, err := s.settings.Get(ctx, settings.KeyFrpResumeOnStart)
+	return err == nil && value == "1"
+}
+
+// StopForShutdown 是应用退出时的停止：行为同 Stop，但保留「上次在运行」标记。
+//
+// 否则「停用应用 → 重新启用」会被 Stop 写成「上次是停的」，自动恢复就永远不触发。
+func (s *Service) StopForShutdown(ctx context.Context) error {
+	wasRunning := s.frpRunning(ctx)
+	if err := s.Stop(ctx); err != nil {
+		return err
+	}
+	// Stop 会把标记写成「不再自动恢复」，这里按退出前的真实状态改回来
+	s.rememberResumeState(ctx, wasRunning)
+	return nil
+}
+
+// frpRunning 判断当前是否有 frpc 在运行。
+func (s *Service) frpRunning(ctx context.Context) bool {
+	if s.runningProbe != nil {
+		return s.runningProbe(ctx)
+	}
+	return s.Status(ctx).Status == "running"
 }
 
 func (s *Service) Stop(ctx context.Context) error {
@@ -2332,6 +2395,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	if len(messages) > 0 {
 		return fmt.Errorf("%s", strings.Join(messages, "；"))
 	}
+	s.rememberResumeState(ctx, false)
 	return nil
 }
 
@@ -2340,6 +2404,10 @@ func (s *Service) Stop(ctx context.Context) error {
 // 比手动「停止 → 启动」多一层保障：Stop 会把 Agent 隧道一起停掉，而单独点「启动」
 // 不会重建它们；重启在这里顺带把隧道重新拉起来，避免停一次之后就再也连不上。
 func (s *Service) Restart(ctx context.Context) error {
+	// 双保险：即使调用方传进来的是会被取消的请求上下文（用户正是从隧道那头点进来的），
+	// 重启流程也必须走完——否则就变成「停掉了却起不来」。
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+	defer cancel()
 	stopErr := s.Stop(ctx)
 	startErr := s.Start(ctx)
 	if startErr != nil {

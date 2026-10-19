@@ -127,6 +127,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		conn.Close()
 		return nil, err
 	}
+	// 记录/恢复 frpc 运行状态：应用被停用再启用后要能自动回到运行状态
+	frpMultiSvc.SetSettingsStore(settingsStore)
 	cloudflareSvc := cloudflared.NewService(cfg, cloudflared.NewStore(conn), secretBox, logger, proxySvc)
 	if err := cloudflareSvc.EnsureDirs(); err != nil {
 		conn.Close()
@@ -350,7 +352,8 @@ func (a *App) Shutdown(ctx context.Context) error {
 		a.logger.Error("nginx stop failed", "module", "NGINX", "error", err.Error())
 	}
 	if a.frpMulti != nil {
-		if err := a.frpMulti.Stop(ctx); err != nil {
+		// 退出时保留「上次在运行」标记，供下次启用应用时自动恢复 frpc
+		if err := a.frpMulti.StopForShutdown(ctx); err != nil {
 			a.logger.Error("frpc stop failed", "module", "FRP", "error", err.Error())
 		}
 	}
