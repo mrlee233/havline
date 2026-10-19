@@ -179,7 +179,7 @@
             :data="serverProxies"
             :bordered="false"
             size="small"
-            :scroll-x="1520"
+            :scroll-x="tableScrollX"
             :row-key="(row: FrpProxy) => row.id"
           />
         </div>
@@ -777,7 +777,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, reactive, ref, type VNode } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, reactive, ref, type VNode } from 'vue'
 import type { DataTableColumns } from 'naive-ui'
 import type { FrpProxyTraffic, FrpProxiesTraffic } from '../api/types'
 import { NButton, NIcon, NSwitch, NTag, useDialog, useMessage } from 'naive-ui'
@@ -935,6 +935,16 @@ const frpTypeTagType: Record<FrpProxy['type'], 'info' | 'success' | 'warning' | 
   tcp: 'info', udp: 'default', http: 'success', https: 'success', tcpmux: 'info', stcp: 'warning', sudp: 'warning', xtcp: 'warning',
 }
 
+// 视口宽度：操作列固定到右侧后必须随屏幕收窄，否则窄屏上固定列会吃掉大半个可视区
+const viewportWidth = ref(window.innerWidth)
+function syncViewportWidth() { viewportWidth.value = window.innerWidth }
+onMounted(() => window.addEventListener('resize', syncViewportWidth))
+onBeforeUnmount(() => window.removeEventListener('resize', syncViewportWidth))
+
+// 操作列宽度：详情/编辑/删除三按钮单行 156px + 单元格左右内边距 16px，取 180 留余量；
+// 窄屏（<=760）竖排，否则固定列会占满屏幕（见下方媒体查询）
+const actionColumnWidth = computed(() => (viewportWidth.value <= 760 ? 132 : 180))
+
 // 穿透规则台账：版式对齐「公网反代 → 规则台账」，列宽固定、逐行对齐（单元格由 render 创建，样式必须 :deep()）
 const columns = computed<DataTableColumns<FrpProxy>>(() => [
   {
@@ -990,7 +1000,8 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
   {
-    title: '操作', key: 'actions', width: 170, align: 'right',
+    // 固定在右侧：表格总宽远超可视区（见 tableScrollX），不固定的话按钮会被推到横向滚动区最右端
+    title: '操作', key: 'actions', width: actionColumnWidth.value, align: 'right', fixed: 'right',
     render: (row) => h('div', { class: 'cell-actions' }, [
       h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyDetail(row) }, () => '详情'),
       h(NButton, { size: 'small', quaternary: true, onClick: () => openProxyModal(row) }, () => '编辑'),
@@ -998,6 +1009,11 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
 ])
+
+// 横向滚动宽度按列宽实时求和：写死常量会与列宽脱节（原先固定 1520，改列宽后就会错位）
+const tableScrollX = computed(() =>
+  columns.value.reduce((sum: number, column: any) => sum + (Number(column?.width) || 0), 0),
+)
 
 // 左侧选中服务端 → 右侧只列该服务端的规则；存 id 而不是对象，避免列表刷新后指向旧快照
 const selectedServerId = ref<number | null>(null)
@@ -1825,8 +1841,35 @@ useVisibilityPolling(refreshDownloadTask, 500, { enabled: downloadPolling })
 .frp-rules-table :deep(.cell-health) { display: flex; align-items: center; gap: var(--havline-space-2); flex-wrap: wrap; }
 .frp-rules-table :deep(.cell-switch) { display: flex; justify-content: center; }
 .frp-rules-table :deep(.cell-time) { display: grid; gap: 2px; }
-.frp-rules-table :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.frp-rules-table :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
 /* 行高被多行内容撑高时，单元格内容保持上下居中 */
 .frp-rules-table :deep(.n-data-table-td) { vertical-align: middle; }
+/* 横向滚动提示：naive-ui 把原生滚动条设成 scrollbar-width:none，静止时自绘 thumb 也不渲染，
+   于是"右边还有内容"完全看不出来。这里在本页作用域内恢复一条常显的细滚动条。 */
+.rule-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--havline-disabled) transparent;
+}
+.rule-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.rule-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-track {
+  background: transparent;
+}
+.rule-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-thumb {
+  background: var(--havline-border);
+  border-radius: 4px;
+}
+.rule-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-thumb:hover {
+  background: var(--havline-disabled);
+}
+/* 自绘的横向轨道在静止态没有 thumb，留下会和原生滚动条叠在一起 */
+.rule-table-wrap :deep(.n-scrollbar-rail--horizontal) { display: none; }
+
 @media (max-width: 1100px) { .frp-layout { grid-template-columns: 1fr; } .server-sidebar__list { max-height: none; } }
+@media (max-width: 760px) {
+  /* 窄屏固定列只有 132px，三个按钮排一行放不下：恢复竖排 */
+  .frp-rules-table :deep(.cell-actions) { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+}
 </style>

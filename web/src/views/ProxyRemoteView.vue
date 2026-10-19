@@ -224,7 +224,7 @@
               :data="candidates"
               :bordered="false"
               size="small"
-              :scroll-x="1790"
+              :scroll-x="tableScrollX"
               :row-key="(row: FrpProxy) => row.id"
             />
           </div>
@@ -454,7 +454,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NDropdown, NIcon, NPopconfirm, useMessage, type DataTableColumns, type DropdownOption } from 'naive-ui'
 import {
@@ -914,6 +914,16 @@ function trafficErrorOf(candidate: FrpProxy) {
   return trafficErrors.value[String(candidate.id)] || undefined
 }
 
+// 视口宽度：操作列固定到右侧后必须随屏幕收窄，否则窄屏上固定列会吃掉大半个可视区
+const viewportWidth = ref(window.innerWidth)
+function syncViewportWidth() { viewportWidth.value = window.innerWidth }
+onMounted(() => window.addEventListener('resize', syncViewportWidth))
+onBeforeUnmount(() => window.removeEventListener('resize', syncViewportWidth))
+
+// 操作列宽度：四个按钮单行需要 322px 内容宽，加上单元格左右内边距各 8px，取 346 留余量。
+// 窄屏（<=760）改为竖排，否则固定列会占满整个屏幕（见下方媒体查询）。
+const actionColumnWidth = computed(() => (viewportWidth.value <= 760 ? 150 : 346))
+
 // 规则台账列定义：与本地反向代理页一致，用 n-data-table 呈现（列宽固定，各行列天然对齐）
 const columns = computed<DataTableColumns<FrpProxy>>(() => [
   {
@@ -948,7 +958,8 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
   {
-    title: '健康（DNS · 证书 · 隧道 · 服务）', key: 'health', width: 260,
+    // 四个徽章单行需要 250px 内容宽 + 16px 内边距，274 才不会把最后一个挤到第二行
+    title: '健康（DNS · 证书 · 隧道 · 服务）', key: 'health', width: 274,
     render: (row) => h('div', { class: 'cell-health' }, domainsOf(row).flatMap((domain) =>
       healthOf(domain).map((item) => h('span', { title: item.detail },
         [h(StatusBadge, { kind: item.unknown ? 'warning' : item.ok ? 'success' : 'error', text: item.label })])))),
@@ -992,7 +1003,8 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
   {
-    title: '操作', key: 'actions', width: 330, align: 'right',
+    // 固定在右侧：表格总宽远超可视区（见 tableScrollX），不固定的话按钮会被推到横向滚动区最右端
+    title: '操作', key: 'actions', width: actionColumnWidth.value, align: 'right', fixed: 'right',
     render: (row) => h('div', { class: 'cell-actions' }, [
       h(NButton, { size: 'small', quaternary: true, loading: busy.value === `conf:${row.id}`,
         disabled: busy.value !== null && busy.value !== `conf:${row.id}`, onClick: () => viewConf(row) },
@@ -1012,6 +1024,12 @@ const columns = computed<DataTableColumns<FrpProxy>>(() => [
     ]),
   },
 ])
+
+// 横向滚动宽度按列宽实时求和：写死常量会与列宽脱节（原先固定 1790，实际已是 1875，导致末列被裁）
+const tableScrollX = computed(() =>
+  columns.value.reduce((sum: number, column: any) => sum + (Number(column?.width) || 0), 0),
+)
+
 // trafficOf 返回该规则的 frps 流量快照；无数据时回落到全零，避免模板出现 undefined
 function trafficOf(candidate: FrpProxy): FrpProxyTraffic {
   return proxyTraffic.value[String(candidate.id)] ?? {
@@ -1293,7 +1311,7 @@ onMounted(() => { void load() })
 .route-table-wrap :deep(.cell-name strong) { font-size: 13.5px; color: var(--havline-text); }
 .route-table-wrap :deep(.cell-muted) { font-size: 12px; color: var(--havline-text-muted); }
 .route-table-wrap :deep(.cell-wrap) { overflow-wrap: anywhere; }
-.route-table-wrap :deep(.cell-health) { display: flex; gap: var(--havline-space-2); flex-wrap: wrap; }
+.route-table-wrap :deep(.cell-health) { display: flex; gap: var(--havline-space-2); flex-wrap: nowrap; }
 .route-table-wrap :deep(.cell-upstream) { display: grid; gap: 2px; }
 .route-table-wrap :deep(.cell-time) { display: grid; gap: 2px; }
 .route-table-wrap :deep(.cell-domains) { display: grid; gap: 2px; }
@@ -1303,8 +1321,30 @@ onMounted(() => { void load() })
 .route-table-wrap :deep(.cell-name) { align-content: center; }
 /* 域名不撑满整格：按钮紧跟在域名后面（不贴近右侧的协议列） */
 .route-table-wrap :deep(.cell-domain .mono) { flex: 0 1 auto; min-width: 0; }
-.route-table-wrap :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+.route-table-wrap :deep(.cell-actions) { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: nowrap; }
 .route-table-wrap :deep(.mono) { font-family: var(--havline-mono); font-size: 13px; }
+/* 横向滚动提示：naive-ui 把原生滚动条设成 scrollbar-width:none，静止时自绘 thumb 也不渲染，
+   于是"右边还有内容"完全看不出来。这里在本页作用域内恢复一条常显的细滚动条。 */
+.route-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--havline-disabled) transparent;
+}
+.route-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.route-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-track {
+  background: transparent;
+}
+.route-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-thumb {
+  background: var(--havline-border);
+  border-radius: 4px;
+}
+.route-table-wrap :deep(.n-data-table-base-table-body .n-scrollbar-container)::-webkit-scrollbar-thumb:hover {
+  background: var(--havline-disabled);
+}
+/* 自绘的横向轨道在静止态没有 thumb，留下会和原生滚动条叠在一起 */
+.route-table-wrap :deep(.n-scrollbar-rail--horizontal) { display: none; }
 
 .raw-routes { margin-top: var(--havline-space-4); font-size: 12px; color: var(--havline-text-secondary); }
 .raw-routes summary { cursor: pointer; color: var(--havline-text-secondary); }
@@ -1423,7 +1463,8 @@ onMounted(() => { void load() })
   .nginx-card .field-grid { grid-template-columns: 1fr; }
   .proxy-hero__top { flex-direction: column; align-items: flex-start; }
   .proxy-hero__actions { width: 100%; }
-  .route-table-wrap :deep(.cell-actions) { width: 100%; justify-content: flex-start; }
+  /* 窄屏固定列只有 150px，四个按钮排一行放不下：这里恢复竖排 */
+  .route-table-wrap :deep(.cell-actions) { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .route-table-wrap :deep(.cell-actions .n-button) { min-height: 44px; }
   .alert-body { flex-direction: column; align-items: flex-start; }
 }
