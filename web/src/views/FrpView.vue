@@ -849,7 +849,7 @@ function defaultProxyOptions(): FrpProxyOptions & { allow_ips_text?: string } {
 const proxyForm = reactive({ server_id: 0, name: '', type: 'tcp' as FrpProxy['type'], local_ip: '127.0.0.1', local_port: 80, remote_port: 0, domains_text: '', locations_text: '', allow_users_text: '', metadatas_text: '', request_headers_text: '', response_headers_text: '', host_header_rewrite: '', enabled: true, remark: '', options: defaultProxyOptions() as FrpProxyOptions & { allow_ips_text?: string }, plugin_type: '', plugin_local_addr: '', plugin_unix_path: '', plugin_local_path: '', plugin_username: '', plugin_password: '' })
 const proxyTypeOptions = [
   { label: 'TCP', value: 'tcp' }, { label: 'UDP', value: 'udp' }, { label: 'HTTP', value: 'http' }, { label: 'HTTPS', value: 'https' },
-  { label: 'TCPMUX（HTTP CONNECT）', value: 'tcpmux' }, { label: 'STCP（密钥访问）', value: 'stcp' }, { label: 'SUDP（密钥 UDP）', value: 'sudp' }, { label: 'XTCP（P2P 穿透）', value: 'xtcp' },
+  { label: 'TCPMUX（HTTP CONNECT）', value: 'tcpmux', disabled: true }, { label: 'STCP（密钥访问）', value: 'stcp', disabled: true }, { label: 'SUDP（密钥 UDP）', value: 'sudp', disabled: true }, { label: 'XTCP（P2P 穿透）', value: 'xtcp', disabled: true },
 ]
 const proxyQuickExamples: Record<FrpProxy['type'], {
   title: string
