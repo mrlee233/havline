@@ -19,14 +19,26 @@
         </div>
       </router-link>
 
-      <n-menu
-        class="app-menu"
-        :value="activeKey"
-        :collapsed="collapsed"
-        :collapsed-width="72"
-        :options="menuOptions"
-        @update:value="handleMenu"
-      />
+      <!-- 导航按业务域分组：12 个平铺项不容易扫读，分组后能按「概览 / 网络 / 运维 / 系统」定位 -->
+      <nav class="nav" aria-label="主导航">
+        <template v-for="group in menuGroups" :key="group.label">
+          <div v-if="!collapsed" class="nav__group">{{ group.label }}</div>
+          <div v-else class="nav__divider" aria-hidden="true"></div>
+          <button
+            v-for="item in group.items"
+            :key="item.key"
+            type="button"
+            class="nav__item"
+            :class="{ 'nav__item--active': activeKey === item.key, 'nav__item--icon-only': collapsed }"
+            :title="collapsed ? item.label : undefined"
+            :aria-current="activeKey === item.key ? 'page' : undefined"
+            @click="handleMenu(item.key)"
+          >
+            <n-icon class="nav__icon" :component="item.icon" />
+            <span v-if="!collapsed" class="nav__label">{{ item.label }}</span>
+          </button>
+        </template>
+      </nav>
 
       <div v-if="!collapsed" class="sider-footer">
         <div class="sider-footer__version-row">
@@ -103,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, type Component } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
@@ -112,9 +124,7 @@ import {
   NLayout,
   NLayoutContent,
   NLayoutSider,
-  NMenu,
   useMessage,
-  type MenuOption,
 } from 'naive-ui'
 import {
   ArrowUpOutline,
@@ -124,18 +134,19 @@ import {
   DocumentTextOutline,
   Ellipse,
   GitNetworkOutline,
+  GlobeOutline,
   GridOutline,
+  HardwareChipOutline,
   InformationCircleOutline,
   LockClosedOutline,
   LogoGithub,
   MoonOutline,
   OpenOutline,
   PersonOutline,
+  ShieldCheckmarkOutline,
   SunnyOutline,
   SwapHorizontalOutline,
   TerminalOutline,
-  HardwareChipOutline,
-  ShieldCheckmarkOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api/client'
 import { GITHUB_REPO, GITHUB_REPO_URL } from '../constants/app'
@@ -195,28 +206,43 @@ async function loadUpdateStatus() {
   }
 }
 
-const menuDefs = [
-  { label: '仪表盘', key: 'dashboard', icon: GridOutline },
-  { label: 'DDNS', key: 'ddns', icon: CloudOutline },
-  { label: '证书管理', key: 'certificates', icon: LockClosedOutline },
-  { label: '反向代理', key: 'proxies', icon: SwapHorizontalOutline },
-  { label: '内网穿透', key: 'frp', icon: GitNetworkOutline },
-  { label: '公网服务端', key: 'frp-agent', icon: HardwareChipOutline },
-  { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
-  { label: 'Cloudflare 隧道', key: 'cloudflare', icon: CloudOutline },
-  { label: 'SSH 终端', key: 'terminal', icon: TerminalOutline },
-  { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
-  { label: '系统设置', key: 'settings', icon: CogOutline },
-  { label: '关于项目', key: 'about', icon: InformationCircleOutline },
-]
+type NavItem = { label: string; key: string; icon: Component }
+type NavGroup = { label: string; items: NavItem[] }
 
-const menuOptions = computed<MenuOption[]>(() =>
-  menuDefs.map((item) => ({
-    label: item.label,
-    key: item.key,
-    icon: () => h(NIcon, null, { default: () => h(item.icon) }),
-  })),
-)
+// 分组与原型一致：概览 / 网络 / 运维 / 系统。
+// 顺序按「先看状态、再管流量、最后进设置」的使用路径排，而不是按模块实现顺序。
+const menuGroups: NavGroup[] = [
+  {
+    label: '概览',
+    items: [{ label: '仪表盘', key: 'dashboard', icon: GridOutline }],
+  },
+  {
+    label: '网络',
+    items: [
+      { label: '反向代理', key: 'proxies', icon: SwapHorizontalOutline },
+      { label: '内网穿透', key: 'frp', icon: GitNetworkOutline },
+      { label: '公网服务端', key: 'frp-agent', icon: HardwareChipOutline },
+      { label: '公网反代', key: 'public-proxy', icon: ShieldCheckmarkOutline },
+      { label: 'DDNS', key: 'ddns', icon: GlobeOutline },
+      { label: 'Cloudflare 隧道', key: 'cloudflare', icon: CloudOutline },
+    ],
+  },
+  {
+    label: '运维',
+    items: [
+      { label: '证书管理', key: 'certificates', icon: LockClosedOutline },
+      { label: 'SSH 终端', key: 'terminal', icon: TerminalOutline },
+      { label: '日志中心', key: 'logs', icon: DocumentTextOutline },
+    ],
+  },
+  {
+    label: '系统',
+    items: [
+      { label: '系统设置', key: 'settings', icon: CogOutline },
+      { label: '关于项目', key: 'about', icon: InformationCircleOutline },
+    ],
+  },
+]
 
 const activeKey = computed(() => {
   const name = route.name
@@ -306,6 +332,8 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+/* ------------------------------ 品牌区 ------------------------------ */
+
 .brand {
   display: flex;
   align-items: center;
@@ -347,38 +375,112 @@ onUnmounted(() => {
   line-height: 1.3;
 }
 
-.app-menu {
+/* ------------------------------ 导航 ------------------------------ */
+
+.nav {
   flex: 1;
-  padding: var(--havline-space-3);
+  overflow-y: auto;
+  padding: 10px 12px 16px;
 }
 
-.app-menu :deep(.n-menu-item) {
+.nav__group {
+  padding: 16px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--havline-text-muted);
+}
+
+.nav__group:first-child {
+  padding-top: 6px;
+}
+
+/* 折叠态没有文字标题，用细分隔线保留分组感 */
+.nav__divider {
+  height: 1px;
+  margin: 10px 8px;
+  background: var(--havline-border-soft);
+}
+
+.nav__divider:first-child {
+  display: none;
+}
+
+.nav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
   margin-bottom: 2px;
+  border: 0;
+  border-radius: 11px;
+  background: none;
+  color: var(--havline-text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.16s ease, color 0.16s ease;
 }
 
-.app-menu :deep(.n-menu-item-content) {
-  border-radius: var(--havline-radius-sm) !important;
-  padding-left: 14px !important;
+.nav__item--icon-only {
+  justify-content: center;
+  gap: 0;
+  padding: 0;
 }
 
-.app-menu :deep(.n-menu-item-content--selected) {
-  background: var(--havline-brand-soft) !important;
-  font-weight: 600;
+.nav__icon {
+  font-size: 18px;
+  flex: none;
+  color: var(--havline-text-muted);
+  transition: color 0.16s ease;
 }
 
-.app-menu :deep(.n-menu-item-content--selected .n-menu-item-content-header),
-.app-menu :deep(.n-menu-item-content--selected .n-menu-item-content-header *) {
-  color: var(--havline-brand-text) !important;
+.nav__item:hover {
+  background: var(--havline-bg-muted);
+  color: var(--havline-text);
 }
 
-.app-menu :deep(.n-menu-item-content--selected .n-icon),
-.app-menu :deep(.n-menu-item-content--selected .n-menu-item-content__icon) {
-  color: var(--havline-brand) !important;
+.nav__item:hover .nav__icon {
+  color: var(--havline-text-secondary);
 }
 
-.app-menu :deep(.n-menu-item-content--selected::before) {
-  display: none !important;
+.nav__item--active {
+  background: linear-gradient(90deg, var(--havline-brand-soft), rgba(16, 185, 129, 0.03));
+  color: var(--havline-brand-text);
+  font-weight: 650;
 }
+
+.nav__item--active .nav__icon {
+  color: var(--havline-brand);
+}
+
+/* 选中态左侧竖条：比整块底色更容易在长列表里定位当前页 */
+.nav__item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--havline-brand);
+}
+
+.nav__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------- 底部状态区 --------------------------- */
 
 .sider-footer {
   padding: var(--havline-space-4);
@@ -468,6 +570,8 @@ onUnmounted(() => {
 .sider-footer__github :deep(.n-icon) {
   font-size: 15px;
 }
+
+/* ------------------------------ 顶栏与内容 ------------------------------ */
 
 .app-main {
   display: flex;

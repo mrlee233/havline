@@ -2,28 +2,84 @@
   <LoadError v-if="loadError" :message="loadError" @retry="load" />
 
   <template v-else>
-    <section class="hero-banner">
-      <div class="hero-content">
-        <h1 class="hero-banner__title">{{ greetingText }}</h1>
-        <p class="hero-banner__desc">Havline 正在为你的 NAS 提供稳定、安全的访问服务。</p>
-        <div class="hero-banner__badges">
-          <span class="hero-banner__badge"><n-icon :component="CheckmarkCircleOutline" /> 简单易用</span>
-          <span class="hero-banner__badge"><n-icon :component="FlashOutline" /> 安全稳定</span>
-          <span class="hero-banner__badge"><n-icon :component="GlobeOutline" /> 随时随地访问</span>
+    <!-- 顶部不写问候语，直接给结论：一眼看到「几项正常 / 哪条链路有问题」，
+         右侧把公网访问链路按 入口 → DDNS → 证书 → Nginx → 穿透 排出来 -->
+    <section class="hero">
+      <div class="hero__main">
+        <div class="hero__lead">
+          <div class="hero__topline">
+            <span class="hero__medal" :class="{ 'hero__medal--warn': !coreHealthy }">
+              <n-icon :component="coreHealthy ? CheckmarkOutline : AlertCircleOutline" />
+            </span>
+            <span class="hero__kicker">
+              <i :class="{ 'is-warn': !coreHealthy }"></i>
+              {{ coreHealthy ? 'LIVE · 核心链路正常' : 'DEGRADED · 核心链路异常' }}
+            </span>
+          </div>
+          <h1 class="hero__title">{{ heroTitle }}</h1>
+          <p class="hero__sub">{{ heroSub }}</p>
+          <div class="hero__actions">
+            <button
+              v-if="attentionCount > 0"
+              type="button"
+              class="hero__alert"
+              :title="attentionHint"
+              @click="goToAttention"
+            >
+              <n-icon :component="AlertCircleOutline" />
+              处理 {{ attentionCount }} 项提醒
+            </button>
+            <button type="button" class="hero__ghost" @click="load">
+              <n-icon :component="PulseOutline" />
+              刷新状态
+            </button>
+            <button type="button" class="hero__primary" @click="router.push({ name: 'proxies' })">
+              <n-icon :component="AddOutline" />
+              新建反代
+            </button>
+          </div>
+        </div>
+
+        <div class="hero__edge">
+          <div class="hero__edge-head">
+            <span>PUBLIC EDGE / 公网访问链路</span>
+            <span>{{ linkWarningCount }} 项提醒 · {{ linkNodes.length }} 个节点</span>
+          </div>
+          <div class="edge">
+            <div
+              v-for="node in linkNodes"
+              :key="node.name"
+              class="edge__node"
+              :class="{ 'edge__node--warn': node.warn }"
+            >
+              <span class="edge__dot"></span>
+              <span class="edge__name">{{ node.name }}</span>
+              <span class="edge__value mono">{{ node.value }}</span>
+              <span class="edge__state">{{ node.state }}</span>
+            </div>
+          </div>
         </div>
       </div>
-      <img class="hero-art" :src="bannerImg" alt="" aria-hidden="true" />
     </section>
 
     <n-spin :show="loading && !status">
       <div class="stats-row">
         <StatCard label="公网 IP" tone="blue">
           <template #icon><n-icon :component="GlobeOutline" /></template>
-          <template #extra><StatusBadge v-if="publicIPv4Label !== '-'" value="ok" text="正常" /></template>
+          <template #extra><StatusBadge v-if="publicIPEntries.length > 0" value="ok" text="正常" /></template>
           <template #value>
-            <span class="stat-primary mono">{{ publicIPv4Label }}</span>
+            <!-- 多个 DDNS 服务商可能对应不同的出口 IP（家宽/多线/VPS），
+                 只显示「最后更新的那条」会让人以为只配了一个。
+                 这里按配置逐条列出，并标出来源名称。 -->
+            <ul v-if="publicIPEntries.length > 0" class="ip-list">
+              <li v-for="item in publicIPEntries" :key="item.key" class="ip-list__row">
+                <span class="ip-list__addr mono">{{ item.address }}</span>
+                <span class="ip-list__tag">{{ item.label }}</span>
+              </li>
+            </ul>
+            <span v-else class="stat-primary mono">-</span>
           </template>
-          <p class="stat-desc mono">{{ publicIPv6Label }}</p>
+          <p class="stat-desc">{{ publicIPSecondaryLabel }}</p>
           <div class="stat-foot">
             <div class="stat-foot__line">{{ publicIPSourceLabel }}</div>
             <div class="stat-foot__muted">上次更新 {{ formatRelativeTime(status?.ddns_last_updated) || '刚刚' }}</div>
@@ -354,11 +410,14 @@
 
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NDataTable, NIcon, NSpin, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import {
+  AddOutline,
   AlertCircleOutline,
   AppsOutline,
   CheckmarkCircleOutline,
+  CheckmarkOutline,
   ChevronForwardOutline,
   CloudOutline,
   DocumentTextOutline,
@@ -373,7 +432,6 @@ import {
   SwapVerticalOutline,
   WifiOutline,
 } from '@vicons/ionicons5'
-import bannerImg from '../assets/brand/banner.png'
 import { api, asList } from '../api/client'
 import { useVisibilityPolling } from '../composables/useVisibilityPolling'
 import type {
@@ -422,6 +480,7 @@ import { displaySystemLog } from '../utils/logDisplay'
 import { httpStatusKind, statusLabel } from '../utils/status'
 
 const message = useMessage()
+const router = useRouter()
 const status = ref<DashboardStatus | null>(null)
 const ddnsConfigs = ref<DDNSConfig[]>([])
 const certificates = ref<CertificateRecord[]>([])
@@ -469,13 +528,155 @@ const activeTrafficRows = computed<TrafficRow[]>(() => {
   })
 })
 
-function timeGreeting(hour: number): string {
-  if (hour >= 5 && hour < 12) return '上午好'
-  if (hour >= 12 && hour < 18) return '下午好'
-  return '晚上好'
+// 顶部主视觉的三段结论：
+// 1) 核心服务几项在线（标题）
+// 2) 一句话说清「哪条链路有问题」或「一切正常」（副标题）
+// 3) 需要处理的提醒数量（按钮）
+//
+// 「未配置」不算故障：新装用户一点 DDNS/证书/隧道都没配时，
+// 如果按「非 running 即异常」判定，顶部会直接显示降级，看起来像系统坏了。
+function isProblemStatus(status?: string): boolean {
+  if (!status) return false
+  return status !== 'running' && status !== 'ok' && status !== 'none'
 }
 
-const greetingText = computed(() => `${timeGreeting(new Date().getHours())}，管理员`)
+const badHealthItems = computed(() => healthItems.value.filter(
+  (item) => isProblemStatus(item.status),
+))
+
+const coreHealthy = computed(() => badHealthItems.value.length === 0)
+
+const heroTitle = computed(() => {
+  const items = healthItems.value
+  const bad = badHealthItems.value
+  if (bad.length === 0) return `${items.length} 个核心服务全部在线。`
+  return `${items.length - bad.length}/${items.length} 个核心服务在线。`
+})
+
+const heroSub = computed(() => {
+  const bad = badHealthItems.value
+  const proxyCount = status.value?.proxy_count ?? proxyRules.value.length
+  const certDays = status.value?.certificate_days ?? primaryCert.value?.days_left ?? 0
+  const certClause = certDays > 0 && certDays <= 14
+    ? `有 1 张证书将在 ${certDays} 天后到期。`
+    : ''
+  if (bad.length === 0) {
+    return `Havline、Nginx、DDNS 与证书服务运行正常；${proxyCount} 条反代规则已生效。${certClause}`
+  }
+  return `${bad.map((item) => item.name).join('、')} 状态异常；${proxyCount} 条反代规则。${certClause}`
+})
+
+// 需要提醒的项：服务异常 + 证书临期，作为顶部「处理 N 项提醒」的来源
+const attentionCount = computed(() => attentionTargets.value.length)
+
+// 提醒各自的跳转目标。
+//
+// 之前这里写死跳证书页，但提醒可能来自 Nginx 停止、DDNS 未同步、公网反代健康下降、
+// Cloudflare 隧道异常——统一跳证书页等于把用户送到一个和问题无关的页面。
+// 这里按异常项推导出「去哪修」，按钮文案也带上第一个问题的名字。
+const attentionTargets = computed(() => {
+  const out: { label: string; routeName: string }[] = []
+  for (const item of badHealthItems.value) {
+    const routeName = attentionRouteFor(item.name)
+    if (routeName) out.push({ label: item.name, routeName })
+  }
+  const certDays = status.value?.certificate_days ?? primaryCert.value?.days_left ?? 0
+  if (certDays > 0 && certDays <= 14) {
+    out.push({ label: `证书 ${certDays} 天后到期`, routeName: 'certificates' })
+  }
+  return out
+})
+
+function attentionRouteFor(name: string): string {
+  switch (name) {
+    case 'Nginx':
+      return 'proxies'
+    case 'DDNS':
+      return 'ddns'
+    case 'HTTPS 证书':
+      return 'certificates'
+    case '公网反代':
+    case '公网服务端':
+      return 'public-proxy'
+    case 'Cloudflare 隧道':
+      return 'cloudflare'
+    default:
+      // Havline 自身异常没有可跳转的页面，就不提供入口
+      return ''
+  }
+}
+
+const attentionHint = computed(() => {
+  const first = attentionTargets.value[0]
+  return first ? `处理「${first.label}」` : ''
+})
+
+function goToAttention() {
+  const first = attentionTargets.value[0]
+  if (first) {
+    router.push({ name: first.routeName })
+  }
+}
+
+// 「未配置」不算提醒：新装用户一点 DDNS/证书都没配时，
+// 链路图会全程黄点，看起来像系统坏了。这里只统计「已配置但状态不对」的段落。
+const linkWarningCount = computed(() => linkNodes.value.filter((n) => n.warn && !n.unconfigured).length)
+
+// 公网访问链路：入口 → DDNS → 证书 → Nginx → 穿透，每段给出实际值，异常段标黄
+const linkNodes = computed(() => {
+  const ip = status.value?.public_ipv4 || '-'
+  const ddnsCount = status.value?.ddns_count ?? ddnsConfigs.value.length
+  const recordCount = ddnsConfigs.value.reduce(
+    (sum, cfg) => sum + (cfg.record_names?.length || (cfg.record_name ? 1 : 0)),
+    0,
+  )
+  const certCount = status.value?.certificate_count ?? certificates.value.length
+  const certDays = status.value?.certificate_days ?? primaryCert.value?.days_left ?? 0
+  const proxyCount = status.value?.proxy_count ?? proxyRules.value.length
+  const enabledCount = proxyRules.value.filter((rule) => rule.enabled).length
+  const frpCount = Object.keys(frpProxyNames.value).length
+  const ddnsOk = status.value?.ddns_status === 'ok'
+  const nginxOk = status.value?.nginx_status === 'running'
+
+  return [
+    {
+      name: '公网入口',
+      value: ip,
+      state: ip === '-' ? '未检测到' : '可达',
+      warn: ip === '-',
+      unconfigured: ip === '-',
+    },
+    {
+      name: 'DDNS',
+      value: ddnsCount > 0 ? `${ddnsCount} 条配置 · ${recordCount} 条记录` : '未配置',
+      state: ddnsOk ? '已同步' : ddnsCount > 0 ? '待同步' : '未配置',
+      warn: !ddnsOk && ddnsCount > 0,
+      unconfigured: ddnsCount === 0,
+    },
+    {
+      name: 'HTTPS 证书',
+      value: certCount > 0 ? `${certCount} 张` : '未申请',
+      state: certDays > 0 ? `${certDays} 天到期` : certCount > 0 ? '已过期' : '未申请',
+      // 已配置但临期/过期才算提醒；一张证书都没有时不标黄
+      warn: certCount > 0 && certDays <= 14,
+      unconfigured: certCount === 0,
+    },
+    {
+      name: 'Nginx',
+      value: `${proxyCount} 条规则 · ${enabledCount} 启用`,
+      state: nginxOk ? '运行中' : '已停止',
+      warn: !nginxOk,
+      unconfigured: false,
+    },
+    {
+      name: 'FRP 穿透',
+      value: frpCount > 0 ? `${frpCount} 条隧道` : '未配置',
+      state: frpCount > 0 ? '已连接' : '未配置',
+      warn: false,
+      unconfigured: frpCount === 0,
+    },
+  ]
+})
 
 const primaryCert = computed(() => {
   if (certificates.value.length === 0) return null
@@ -487,14 +688,64 @@ const certWildcard = computed(() => {
 })
 const certDisplayName = computed(() => certWildcard.value || primaryCert.value?.domain || '')
 
-const publicIPv4Label = computed(() => status.value?.public_ipv4 || '-')
-const publicIPv6Label = computed(() => {
-  if (status.value?.public_ip_source === 'ddns' && !status.value?.public_ipv6) return '未获取'
-  return status.value?.public_ipv6 || '-'
+// 公网 IP 逐条列出。
+//
+// 后端 /api/status 只给一条 public_ipv4（取「最后更新的那条 DDNS 配置」），
+// 多条配置各自的 IP 在 ddnsConfigs 里。这里按配置聚合去重：
+// 同一出口 IP 被多个域名共用时只显示一次，标签合并成「名称1 / 名称2」，
+// 避免卡片被重复的同一串 IP 撑满。
+type PublicIPEntry = { key: string; address: string; label: string }
+
+const publicIPEntries = computed<PublicIPEntry[]>(() => {
+  const byAddress = new Map<string, string[]>()
+  for (const cfg of ddnsConfigs.value) {
+    if (!cfg.enabled) continue
+    // 自定义 IP 优先生效（配置了就按它同步），其次才是上次同步到的 IP
+    const v4 = (cfg.custom_ipv4 || cfg.last_ipv4 || '').trim()
+    const v6 = (cfg.custom_ipv6 || cfg.last_ipv6 || '').trim()
+    const label = cfg.name?.trim() || cfg.root_domain || `配置 #${cfg.id}`
+    for (const address of [v4, v6]) {
+      if (!address) continue
+      const labels = byAddress.get(address) ?? []
+      if (!labels.includes(label)) labels.push(label)
+      byAddress.set(address, labels)
+    }
+  }
+
+  // 没有任何 DDNS 配置时，退回后端探测到的出口 IP（未配置 DDNS 的场景）
+  if (byAddress.size === 0) {
+    const fallback = (status.value?.public_ipv4 || status.value?.public_ipv6 || '').trim()
+    if (fallback) {
+      const how = status.value?.public_ip_source === 'detect' ? '出口探测' : 'DDNS'
+      return [{ key: fallback, address: fallback, label: how }]
+    }
+    return []
+  }
+
+  return [...byAddress.entries()].map(([address, labels]) => ({
+    key: address,
+    address,
+    label: labels.join(' / '),
+  }))
 })
+
+// 副行：配置了多个 IP 时说明总数，只有 IPv6 时提示未获取 IPv4
+const publicIPSecondaryLabel = computed(() => {
+  const entries = publicIPEntries.value
+  if (entries.length === 0) return '暂无公网 IP'
+  if (entries.length > 1) return `共 ${entries.length} 个出口地址`
+  const hasIPv6 = entries.some((item) => item.address.includes(':'))
+  if (status.value?.public_ip_source === 'ddns' && !hasIPv6 && !status.value?.public_ipv6) {
+    return '未获取 IPv6'
+  }
+  return ''
+})
+
 const publicIPSourceLabel = computed(() => {
+  const enabledCount = ddnsConfigs.value.filter((cfg) => cfg.enabled).length
   switch (status.value?.public_ip_source) {
     case 'ddns':
+      if (enabledCount > 1) return `来源：${enabledCount} 条 DDNS 配置`
       return status.value?.public_ipv4 || status.value?.public_ipv6
         ? '来源：DDNS 已同步记录'
         : '来源：DDNS 已配置，等待同步'
@@ -1162,122 +1413,336 @@ useVisibilityPolling(pollCIDR, 2000, { enabled: cidrPolling })
 </script>
 
 <style scoped>
-.hero-banner {
+/* 顶部主视觉：左侧状态结论 + 右侧公网访问链路（两条栏在 1080px 以下堆叠） */
+.hero {
   position: relative;
   overflow: hidden;
   margin-bottom: var(--havline-space-4);
-  min-height: 208px;
-  height: 220px;
-  border-radius: 16px;
-  box-shadow: var(--havline-shadow);
-  border: 1px solid rgba(16, 185, 129, 0.08);
-  background: linear-gradient(100deg, #f4fffc 0%, #f1fbff 55%, #eef9ff 100%);
+  padding: 24px 26px;
+  border: 1px solid var(--havline-border);
+  border-radius: 24px;
+  background:
+    radial-gradient(720px 320px at 90% -30%, rgba(16, 185, 129, 0.1), transparent 60%),
+    var(--havline-surface);
+  box-shadow: 0 26px 60px -50px rgba(6, 78, 59, 0.45), var(--havline-shadow);
 }
 
-html[data-theme='dark'] .hero-banner,
-html.dark .hero-banner {
-  background: linear-gradient(100deg, #0f172a 0%, #134e4a 100%);
-  border-color: rgba(16, 185, 129, 0.15);
+.hero__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 34px;
+  align-items: center;
 }
 
-.hero-content {
-  position: relative;
-  z-index: 2;
+.hero__lead {
+  min-width: 0;
+}
+
+.hero__topline {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  width: 46%;
-  height: 100%;
-  padding: 28px 32px;
-  box-sizing: border-box;
+  align-items: center;
+  gap: 14px;
 }
 
-.hero-art {
-  position: absolute;
-  z-index: 1;
-  right: 0;
-  bottom: 0;
-  height: 100%;
-  width: auto;
-  max-width: none;
-  object-fit: contain;
-  object-position: right bottom;
-  pointer-events: none;
-  user-select: none;
+.hero__medal {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: 50%;
+  background: var(--havline-brand-soft);
+  color: var(--havline-brand-text);
+  box-shadow: inset 0 0 0 5px var(--havline-surface);
 }
 
-html[data-theme='dark'] .hero-art,
-html.dark .hero-art {
-  opacity: 0.9;
+.hero__medal .n-icon {
+  font-size: 20px;
 }
 
-.hero-banner__title {
-  margin: 0;
-  font-size: 30px;
-  font-weight: 700;
+.hero__medal--warn {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--havline-warning);
+}
+
+.hero__kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--havline-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--havline-text-muted);
+}
+
+.hero__kicker i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--havline-brand);
+}
+
+.hero__kicker i.is-warn {
+  background: var(--havline-warning);
+}
+
+.hero__title {
+  margin: 16px 0 0;
+  font-size: 32px;
+  font-weight: 750;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
   color: var(--havline-text);
-  letter-spacing: -0.03em;
 }
 
-.hero-banner__desc {
-  margin: 10px 0 0;
-  font-size: 14px;
-  color: var(--havline-text-secondary);
-  max-width: 520px;
+.hero__sub {
+  margin: 9px 0 0;
+  max-width: 46ch;
+  font-size: 12.5px;
   line-height: 1.65;
+  color: var(--havline-text-muted);
 }
 
-.hero-banner__badges {
+.hero__actions {
   display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
-.hero-banner__badge {
+.hero__alert,
+.hero__ghost,
+.hero__primary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  color: var(--havline-text-secondary);
+  padding: 8px 13px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+}
+
+.hero__alert {
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--havline-warning);
+  font-weight: 650;
+}
+
+.hero__alert:hover {
+  border-color: var(--havline-warning);
+}
+
+.hero__ghost {
+  border: 1px solid var(--havline-border);
   background: var(--havline-surface);
-  border: 1px solid rgba(16, 185, 129, 0.14);
+  color: var(--havline-text-secondary);
 }
 
-.hero-banner__badge .n-icon {
-  font-size: 16px;
-  color: var(--havline-brand);
+.hero__ghost:hover {
+  border-color: var(--havline-brand);
+  color: var(--havline-text);
 }
 
-@media (max-width: 768px) {
-  .hero-content {
-    width: 100%;
-    padding: 22px 20px;
+.hero__primary {
+  border: 1px solid transparent;
+  background: var(--havline-brand);
+  color: #fff;
+}
+
+.hero__primary:hover {
+  background: var(--havline-brand-hover);
+}
+
+.hero__alert .n-icon,
+.hero__ghost .n-icon,
+.hero__primary .n-icon {
+  font-size: 13px;
+}
+
+/* ------------------------- 右侧公网访问链路 ------------------------- */
+
+.hero__edge {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--havline-border);
+  border-radius: 16px;
+  background: var(--havline-bg-muted);
+}
+
+/* 顶部元信息行：左标题 + 右侧统计，两端分别贴住容器左右边界。
+   容器宽度与下方的 flex 链路一致，所以文字与首尾圆点自然对齐。 */
+.hero__edge-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--havline-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--havline-text-muted);
+}
+
+.hero__edge-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero__edge-head > :last-child {
+  white-space: nowrap;
+}
+
+/* 链路节点：5 个节点用 flex 等距分布，首尾贴住容器两端。
+   不能用 5 等分 grid —— 那样第一个圆点在 0%、最后一个在 80%，
+   右端会空出近一整列，看起来左边顶满、右边悬空。 */
+.edge {
+  --edge-gap: 12px;
+  --edge-dot: 9px;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--edge-gap);
+  margin-top: 20px;
+}
+
+.edge__node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* 等宽分配剩余空间：连接线要靠这个宽度精确接到下一个圆点 */
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 0;
+  text-align: left;
+}
+
+/* 最后一个节点不参与等宽拉伸，贴住右边界，两端留白才对称。
+   注意圆点仍要左对齐：它前面还要接上一段的连接线，右对齐会让线断开。 */
+.edge__node:last-child {
+  flex: 0 0 auto;
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* 连接线：每个节点各画一小段，从自己的圆点连到下一个圆点。
+   - left 取圆点半径，从圆心起步（圆点 z-index 更高，会盖住重合部分）
+   - right 取负的「gap + 圆点半径」，跨过 flex 间隙接到下一个圆心；
+     只写 -半径 的话线会在间隙处断开，看起来像几段悬空的短线。 */
+.edge__node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--edge-dot) / 2 - 0.5px);
+  left: calc(var(--edge-dot) / 2);
+  right: calc(-1 * (var(--edge-gap) + var(--edge-dot) / 2));
+  height: 1px;
+  background: rgba(16, 185, 129, 0.35);
+}
+
+.edge__dot {
+  position: relative;
+  z-index: 1;
+  width: var(--edge-dot);
+  height: var(--edge-dot);
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--havline-brand);
+  box-shadow: 0 0 0 4px var(--havline-bg-muted);
+}
+
+.edge__node--warn .edge__dot {
+  background: var(--havline-warning);
+}
+
+.edge__name {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--havline-text);
+}
+
+.edge__value {
+  overflow: hidden;
+  font-size: 9.5px;
+  color: var(--havline-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edge__state {
+  font-size: 9.5px;
+  color: var(--havline-text-muted);
+}
+
+.edge__node--warn .edge__state {
+  color: var(--havline-warning);
+}
+
+@media (max-width: 1080px) {
+  .hero__main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
   }
 
-  .hero-banner {
-    height: auto;
-    min-height: 180px;
+  .hero__edge {
+    padding: 12px 14px 14px;
+  }
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding: 18px;
   }
 
-  .hero-art {
-    height: 100%;
-    opacity: 0.28;
-  }
-
-  html[data-theme='dark'] .hero-art,
-  html.dark .hero-art {
-    opacity: 0.22;
-  }
-
-  .hero-banner__title {
+  .hero__title {
     font-size: 24px;
   }
 
-  .hero-banner__badges {
-    gap: 8px;
+  .hero__medal {
+    width: 38px;
+    height: 38px;
+  }
+
+  .hero__medal .n-icon {
+    font-size: 17px;
+  }
+
+  .hero__actions {
+    margin-top: 16px;
+  }
+
+  .hero__actions > * {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* 窄屏改成两列换行：节点不再「一行串起来」，连线会指向错的地方，直接去掉 */
+  .edge {
+    --edge-gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px var(--edge-gap);
+    margin-top: 16px;
+  }
+
+  .edge__node,
+  .edge__node:last-child {
+    flex: initial;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .edge__node:not(:last-child)::after {
+    display: none;
   }
 }
 
@@ -1293,6 +1758,46 @@ html.dark .hero-art {
   font-weight: 700;
   color: var(--havline-text);
   line-height: 1.3;
+}
+
+/* 公网 IP 逐条列表：地址与来源标签同一行，地址过长时省略而不是换行，
+   保证多条 IP 时卡片高度可控。 */
+.ip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ip-list__row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ip-list__addr {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--havline-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ip-list__tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--havline-bg-muted);
+  font-size: 10px;
+  color: var(--havline-text-muted);
+  white-space: nowrap;
 }
 
 .stat-desc {

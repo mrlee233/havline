@@ -19,6 +19,8 @@
   --havline-banner-border: rgba(16, 185, 129, 0.2);
   --havline-surface: #ffffff;
   --havline-border: #e5e7eb;
+  /* 比 --havline-border 更淡的分隔线：用于分组标题、卡片内部分隔等弱边界 */
+  --havline-border-soft: #eef2f6;
   --havline-text: #111827;
   --havline-text-secondary: #6b7280;
   --havline-text-muted: #9ca3af;
@@ -54,6 +56,7 @@ html.dark,
   --havline-bg-muted: #1e293b;
   --havline-surface: #1e293b;
   --havline-border: #334155;
+  --havline-border-soft: #263449;
   --havline-text: #f1f5f9;
   --havline-text-secondary: #94a3b8;
   --havline-text-muted: #64748b;
