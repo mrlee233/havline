@@ -19,6 +19,12 @@ func reloadProcess(pid int) error {
 	return fmt.Errorf("signal reload unsupported on windows")
 }
 
+// reopenLogsProcess 在 Windows 上没有 USR1 这类单用途信号，
+// Nginx 侧只能通过 reload 达成同样的效果（会重启 worker，但日志句柄会被重开）。
+func reopenLogsProcess(pid int) error {
+	return fmt.Errorf("signal reopen unsupported on windows")
+}
+
 func terminateProcess(pid int, sig syscall.Signal) error {
 	args := []string{"/PID", strconv.Itoa(pid)}
 	if sig == syscall.SIGKILL {

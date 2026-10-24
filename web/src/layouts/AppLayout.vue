@@ -77,7 +77,7 @@
       <header class="topbar">
         <span class="topbar__datetime">{{ datetime }}</span>
         <div class="topbar__right">
-          <n-button quaternary circle @click="toggleTheme">
+          <n-button quaternary circle @click="handleToggleTheme">
             <template #icon>
               <n-icon :component="isDark ? MoonOutline : SunnyOutline" />
             </template>
@@ -148,7 +148,7 @@ import UpdateModal from '../components/UpdateModal.vue'
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
-const { isDark, toggleTheme } = useTheme()
+const { isDark, themeMode, toggleTheme, syncFromSettings } = useTheme()
 const collapsed = ref(false)
 const datetime = ref('')
 const appVersion = ref(__APP_VERSION__)
@@ -243,6 +243,18 @@ function handleMenu(key: string) {
   router.push({ name: key })
 }
 
+// handleToggleTheme 顶栏的快捷切换：本地立即生效，同时回写后端设置。
+// 不回写的话会出现「这里切了、设置页显示的还是旧值」，下次任何一次保存设置
+// 又会把主题改回去。
+async function handleToggleTheme() {
+  toggleTheme()
+  try {
+    await api.saveSettings({ theme: themeMode.value })
+  } catch {
+    // 回写失败不影响当前会话的外观，下次进设置页仍能看到服务端的值
+  }
+}
+
 async function handleUserMenu(key: string) {
   if (key === 'logout') {
     await api.logout()
@@ -255,6 +267,16 @@ onMounted(() => {
   loadVersion()
   updateClock()
   clockTimer = window.setInterval(updateClock, 30_000)
+  // 主题以后端设置为准：localStorage 只是首屏回显，登录后要用服务端的值覆盖，
+  // 否则换设备/换浏览器两个人看到的是不同主题（而设置页显示的是服务端那个）。
+  api
+    .getSettings()
+    .then((settings) => {
+      syncFromSettings(settings.theme)
+    })
+    .catch(() => {
+      // 读不到设置就沿用本地偏好，不影响使用
+    })
 })
 
 onUnmounted(() => {

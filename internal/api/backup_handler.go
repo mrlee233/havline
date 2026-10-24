@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/havline/havline/internal/backup"
 	"github.com/havline/havline/internal/settings"
@@ -19,8 +20,14 @@ func NewBackupHandler(svc *backup.Service, settingsStore *settings.Store) *Backu
 	return &BackupHandler{svc: svc, settings: settingsStore}
 }
 
+// passphraseFromHeader 读取可选的归档口令。
+// 放在请求头而不是查询串：查询串会进访问日志，口令不该落盘。
+func passphraseFromHeader(r *http.Request) string {
+	return strings.TrimSpace(r.Header.Get("X-Backup-Passphrase"))
+}
+
 func (h *BackupHandler) Export(w http.ResponseWriter, r *http.Request) {
-	path, err := h.svc.Export(r.Context())
+	path, err := h.svc.ExportWith(r.Context(), backup.Options{Passphrase: passphraseFromHeader(r)})
 	if err != nil {
 		writeError(r, w, http.StatusInternalServerError, "创建备份失败")
 		return
@@ -66,7 +73,7 @@ func (h *BackupHandler) Restore(w http.ResponseWriter, r *http.Request) {
 	}
 	out.Close()
 
-	if err := h.svc.Restore(r.Context(), tmpPath); err != nil {
+	if err := h.svc.RestoreWith(r.Context(), tmpPath, backup.Options{Passphrase: passphraseFromHeader(r)}); err != nil {
 		_ = os.Remove(tmpPath)
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
@@ -91,14 +98,15 @@ func (h *BackupHandler) ListArchives(w http.ResponseWriter, r *http.Request) {
 
 // CreateArchive 立即备份一份并保留在服务器上，顺带按保留份数剪枝
 func (h *BackupHandler) CreateArchive(w http.ResponseWriter, r *http.Request) {
-	path, err := h.svc.Export(r.Context())
+	opts := backup.Options{Passphrase: passphraseFromHeader(r)}
+	path, err := h.svc.ExportWith(r.Context(), opts)
 	if err != nil {
 		writeError(r, w, http.StatusInternalServerError, "创建备份失败", err)
 		return
 	}
 	name := filepath.Base(path)
 	// 写失败的备份不能留在列表里冒充可用备份
-	if _, err := h.svc.Verify(r.Context(), path); err != nil {
+	if _, err := h.svc.VerifyWith(r.Context(), path, opts); err != nil {
 		_ = h.svc.Remove(name)
 		writeError(r, w, http.StatusInternalServerError, "备份校验失败："+err.Error(), err)
 		return
@@ -141,12 +149,13 @@ func (h *BackupHandler) RestoreArchive(w http.ResponseWriter, r *http.Request) {
 		writeError(r, w, http.StatusBadRequest, err.Error())
 		return
 	}
+	opts := backup.Options{Passphrase: passphraseFromHeader(r)}
 	// 恢复前先校验：半个包不能拿去覆盖现有数据
-	if _, err := h.svc.Verify(r.Context(), path); err != nil {
+	if _, err := h.svc.VerifyWith(r.Context(), path, opts); err != nil {
 		writeError(r, w, http.StatusBadRequest, "该备份不可用："+err.Error(), err)
 		return
 	}
-	if err := h.svc.Restore(r.Context(), path); err != nil {
+	if err := h.svc.RestoreWith(r.Context(), path, opts); err != nil {
 		writeError(r, w, http.StatusBadRequest, err.Error(), err)
 		return
 	}

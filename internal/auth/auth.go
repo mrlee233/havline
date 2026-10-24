@@ -197,6 +197,18 @@ func (s *Service) Logout(ctx context.Context, sessionID string) error {
 	return err
 }
 
+// PruneExpiredSessions 删除已经过期的会话，返回删除条数。
+// 过期会话只有在自己被再次访问时才会删掉自己，于是「登录过又再也不回来的设备」
+// 会永久留着一条记录；这里由日任务统一清掉，顺便让会话表大小与实际活跃设备一致。
+func (s *Service) PruneExpiredSessions(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM sessions WHERE expires_at < ?`, time.Now().UTC().Format(time.RFC3339))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 func (s *Service) ValidateSession(ctx context.Context, sessionID string) error {
 	if sessionID == "" {
 		return ErrUnauthorized

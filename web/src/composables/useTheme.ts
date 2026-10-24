@@ -115,6 +115,19 @@ export function useTheme() {
     themeMode.value = isDark.value ? 'light' : 'dark'
   }
 
+  // syncFromSettings 用后端设置覆盖本地偏好。
+  //
+  // 后端 settings.theme 是唯一权威来源（这样换浏览器、换设备看到的是同一个主题），
+  // localStorage 只作为「拿到后端值之前」的快速回显，避免首屏闪一下浅色。
+  // 调用方在登录后拉一次 /api/settings 时调用它。
+  function syncFromSettings(mode: string | undefined) {
+    const value = (mode ?? '').trim()
+    if (!value) return
+    if (value !== 'system' && value !== 'light' && value !== 'dark') return
+    if (value === themeMode.value) return
+    themeMode.value = value
+  }
+
   watch(
     themeMode,
     (value) => {
@@ -132,5 +145,5 @@ export function useTheme() {
     })
   }
 
-  return { themeMode, naiveTheme, themeOverrides, isDark, toggleTheme, setThemeMode }
+  return { themeMode, naiveTheme, themeOverrides, isDark, toggleTheme, setThemeMode, syncFromSettings }
 }

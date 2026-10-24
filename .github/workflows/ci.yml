@@ -16,6 +16,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 版本号是构建的唯一事实来源（VERSION 文件）：前端 package.json 与它不一致时，
+      # 界面上显示的版本和二进制里的版本会对不上，所以在构建前先卡住。
+      - name: Check version consistency
+        run: |
+          version="$(tr -d ' \t\r\n' < VERSION)"
+          pkg="$(node -p "require('./web/package.json').version")"
+          echo "VERSION=$version package.json=$pkg"
+          if [ "$version" != "$pkg" ]; then
+            echo "::error::版本不一致：VERSION=$version，web/package.json=$pkg。请把两者改成同一个版本号。"
+            exit 1
+          fi
+
       # 顺序不能颠倒：cmd/havline/main.go 用 //go:embed all:web/dist 嵌入前端，
       # 干净检出时该目录不存在，go vet / go build 会直接失败。
       - name: Setup Node
@@ -28,6 +40,10 @@ jobs:
       - name: Install web dependencies
         working-directory: web
         run: npm ci
+
+      - name: Lint web
+        working-directory: web
+        run: npm run lint
 
       - name: Type-check and build web
         working-directory: web
@@ -48,6 +64,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # 格式化门禁：历史文件已在 M2 一次性 gofmt -w 过，从这里开始保持零容忍，
+      # 避免再退回「改动时顺手格式化一大片、review 看不出真实差异」的状态。
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l internal cmd)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::以下文件未格式化，请运行 gofmt -w internal cmd"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: go vet
         run: go vet ./...
 
@@ -56,6 +83,3 @@ jobs:
 
       - name: go build
         run: go build ./...
-
-      # 说明：gofmt 卡口暂未开启——仓库里还有 25 个历史未格式化文件（见 docs/project-audit-2026-09-24.md §八），
-      # 全仓 `gofmt -w` 之后再补一步 `gofmt -l internal cmd` 作为门禁。

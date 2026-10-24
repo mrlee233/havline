@@ -44,67 +44,9 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 		writeError(r, w, http.StatusBadRequest, "请求格式无效")
 		return
 	}
-	allowed := map[string]bool{
-		settings.KeyTheme:                       true,
-		settings.KeyTimezone:                    true,
-		settings.KeyLogRetentionDays:            true,
-		settings.KeyDDNSCheckInterval:           true,
-		settings.KeyCertRenewThreshold:          true,
-		settings.KeyRootDomain:                  true,
-		settings.KeyACMEEmail:                   true,
-		settings.KeyACMECA:                      true,
-		settings.KeyZeroSSLAPIKey:               true,
-		settings.KeyACMEDNSResolvers:            true,
-		settings.KeyLiteSSLEABKid:               true,
-		settings.KeyLiteSSLEABHMAC:              true,
-		settings.KeyNotifyWebhookURL:            true,
-		settings.KeyNotifyType:                  true,
-		settings.KeyNotifyEmailJSON:             true,
-		settings.KeyNotifySMTPPassword:          true,
-		settings.KeyNotifyWebhookJSON:           true,
-		settings.KeyNotifyWebhookSecret:         true,
-		settings.KeyNotifyTelegramJSON:          true,
-		settings.KeyNotifyTelegramToken:         true,
-		settings.KeyNotifyOnDDNSIPChange:        true,
-		settings.KeyNotifyOnDDNSFailure:         true,
-		settings.KeyNotifyOnCertExpiry:          true,
-		settings.KeyNotifyOnCertRenewSuccess:    true,
-		settings.KeyNotifyOnIPFrequentAccess:    true,
-		settings.KeyNotifyOnCertRenewFailure:    true,
-		settings.KeyNotifyOnLoginFailure:        true,
-		settings.KeyNotifyOnNginxReloadFailure:  true,
-		settings.KeyNotifyIPFrequentThreshold:   true,
-		settings.KeyNotifyIPFrequentWindowSec:   true,
-		settings.KeyNotifyLoginFailureThreshold: true,
-		settings.KeyNotifyLoginFailureWindowSec: true,
-		settings.KeyNotifyOnResourceThreshold:   true,
-		settings.KeyNotifyOnTunnelDown:          true,
-		settings.KeyNotifyCPUThreshold:          true,
-		settings.KeyNotifyMemoryThreshold:       true,
-		settings.KeyNotifyDiskThreshold:         true,
-		settings.KeyNotifyTunnelFailThreshold:   true,
-		settings.KeyNotifyOnFrpsDown:            true,
-		settings.KeyNotifyOnAgentUnreachable:    true,
-		settings.KeyNotifyOnRouteDrift:          true,
-		settings.KeyNotifyFrpsFailThreshold:     true,
-		settings.KeyNotifyAgentFailThreshold:    true,
-		settings.KeyNotifyDriftCooldownHours:    true,
-		settings.KeyBackupAutoEnabled:           true,
-		settings.KeyRouteHealthEnabled:          true,
-		settings.KeyStatusPageEnabled:           true,
-		settings.KeyMetricsHistoryEnabled:       true,
-		settings.KeyStatusPageCode:              true,
-		settings.KeyBackupKeepCount:             true,
-		settings.KeyNotifyOnBackupFailure:       true,
-		settings.KeyTrustedProxy:                true,
-		settings.KeyGlobalIPBlacklist:           true,
-		settings.KeyGlobalIPWhitelist:           true,
-		settings.KeyChinaCIDRUpdateHours:        true,
-		settings.KeyChinaCIDRSourceV4:           true,
-		settings.KeyChinaCIDRSourceV6:           true,
-		settings.KeyTerminalEnabled:             true,
-		settings.KeyTerminalRecording:           true,
-	}
+	// 白名单从设置注册表派生（settings.Specs 里 Writable=true 的键）。
+	// 之前是手写 map，新增设置项时容易只改前端与常量、忘了加白名单。
+	allowed := settings.WritableKeys()
 	filtered := map[string]string{}
 	for key, value := range req {
 		if !allowed[key] {
@@ -115,6 +57,13 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		filtered[key] = value
+	}
+	// 时区在写入前先校验：写进库之后才发现不合法，就得再回滚一次。
+	if tz, ok := filtered[settings.KeyTimezone]; ok {
+		if _, err := settings.LoadTimezone(tz); err != nil {
+			writeError(r, w, http.StatusBadRequest, err.Error(), err)
+			return
+		}
 	}
 	// 状态页访问码走「掩码往返」：客户端提交明文，这里落 SHA-256；
 	// 空串 = 清除访问码，掩码值 = 保持不变。哈希字段不接受客户端直接写入。
@@ -145,6 +94,14 @@ func (h *SettingsHandler) Put(w http.ResponseWriter, r *http.Request) {
 	if err := h.store.SetMany(r.Context(), filtered); err != nil {
 		writeError(r, w, http.StatusInternalServerError, "保存设置失败", err)
 		return
+	}
+	// 时区是进程级状态：保存后立即生效，不必等重启（否则用户改了看不到变化，
+	// 又会变成「界面能改、实际不生效」的观感）。
+	if tz, ok := filtered[settings.KeyTimezone]; ok && strings.TrimSpace(tz) != "" {
+		if _, err := settings.ApplyTimezone(r.Context(), h.store); err != nil {
+			writeError(r, w, http.StatusBadRequest, err.Error(), err)
+			return
+		}
 	}
 	if h.proxy != nil && (filtered[settings.KeyTrustedProxy] != "" || filtered[settings.KeyGlobalIPBlacklist] != "" || filtered[settings.KeyGlobalIPWhitelist] != "") {
 		if err := h.proxy.ReloadAll(r.Context()); err != nil {
@@ -265,6 +222,19 @@ func (h *SettingsHandler) validateSetting(key, value string) error {
 			var raw map[string]any
 			if err := json.Unmarshal([]byte(value), &raw); err != nil {
 				return err
+			}
+		}
+	case settings.KeyTheme:
+		switch strings.TrimSpace(value) {
+		case "system", "light", "dark":
+		default:
+			return fmt.Errorf("无效的主题：只支持 system / light / dark")
+		}
+	case settings.KeyLogRetentionDays:
+		if value != "" {
+			n, err := strconv.Atoi(value)
+			if err != nil || n < 1 || n > 365 {
+				return fmt.Errorf("日志保留天数需在 1–365 之间")
 			}
 		}
 	}

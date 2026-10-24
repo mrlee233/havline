@@ -13,9 +13,9 @@ func TestTencentSubdomain(t *testing.T) {
 
 func TestCredentialsTencentCloud(t *testing.T) {
 	cred := CredentialsFromSave(SaveInput{
-		Provider:   "tencentcloud",
-		APIToken:   "AKIDxxx",
-		APISecret:  "secret",
+		Provider:  "tencentcloud",
+		APIToken:  "AKIDxxx",
+		APISecret: "secret",
 	})
 	if cred.Provider != "tencentcloud" || !cred.HasValues() {
 		t.Fatal("expected tencentcloud credentials")

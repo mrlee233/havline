@@ -57,6 +57,26 @@ func (s *Store) SaveTotals(ctx context.Context, hosts map[string]hostTotals) err
 	return tx.Commit()
 }
 
+// DeleteHosts 删除指定 host:port 的累计流量。
+// 规则被删掉后这些行就成了孤儿：既没有界面能查到，又会在同名规则重建时被当成本规则的既有流量。
+func (s *Store) DeleteHosts(ctx context.Context, keys []string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM proxy_traffic WHERE host = ?`, strings.ToLower(strings.TrimSpace(key))); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 type hostTotals struct {
 	Upload   int64
 	Download int64

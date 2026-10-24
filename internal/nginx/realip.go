@@ -6,11 +6,11 @@ import (
 )
 
 type TrustedProxyConfig struct {
-	Enabled    bool     `json:"enabled"`
-	Preset     string   `json:"preset"` // "", "cloudflare", "custom"
-	CIDRs      []string `json:"cidrs,omitempty"`
-	Header     string   `json:"header,omitempty"` // CF-Connecting-IP, X-Real-IP, X-Forwarded-For
-	Recursive  bool     `json:"recursive,omitempty"`
+	Enabled   bool     `json:"enabled"`
+	Preset    string   `json:"preset"` // "", "cloudflare", "custom"
+	CIDRs     []string `json:"cidrs,omitempty"`
+	Header    string   `json:"header,omitempty"` // CF-Connecting-IP, X-Real-IP, X-Forwarded-For
+	Recursive bool     `json:"recursive,omitempty"`
 }
 
 var cloudflareIPv4 = []string{

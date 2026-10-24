@@ -50,6 +50,8 @@ func (r *AutoRunner) Run(ctx context.Context) {
 		return
 	}
 
+	// 自动备份不加密：口令没法安全地存在同一台设备上（存了就等于没加密），
+	// 需要加密归档的用户走「立即备份 / 立即下载」手动流程。
 	path, err := r.svc.Export(ctx)
 	if err != nil {
 		r.fail(ctx, fmt.Sprintf("导出备份失败：%s", err.Error()))

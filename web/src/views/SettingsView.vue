@@ -34,7 +34,7 @@
         <div class="settings-block settings-block--spaced">
           <div class="settings-block__label">时区</div>
           <n-select v-model:value="form.timezone" :options="timezoneOptions" />
-          <p class="field-hint">影响日志、证书到期时间等显示</p>
+          <p class="field-hint">决定通知消息里的时间戳与后端日志时间（保存后立即生效）</p>
         </div>
       </HavlineCard>
 
@@ -59,7 +59,9 @@
               <span class="settings-field__label">日志保留天数</span>
               <n-input-number v-model:value="logRetention" :min="1" :max="365" class="settings-field__input" />
             </div>
-            <p class="field-hint">超过保留天数的日志将被自动清理</p>
+            <p class="field-hint">
+              Nginx 访问/错误日志超过 200MB 会轮转归档，这里控制归档文件保留多少天
+            </p>
           </div>
         </div>
       </HavlineCard>
@@ -129,6 +131,19 @@
               <div class="data-action-card__hint">从备份文件还原系统配置</div>
             </div>
           </n-upload>
+        </div>
+        <div class="backup-passphrase">
+          <n-input
+            v-model:value="backupPassphrase"
+            type="password"
+            show-password-on="click"
+            placeholder="归档口令（可选）"
+            class="backup-passphrase__input"
+          />
+          <p class="field-hint">
+            填写后导出与「立即备份」会产出加密归档，恢复与校验时需要同一个口令；
+            自动备份不加密（口令存在同一台设备上等于没有加密）。留空则使用原有未加密格式。
+          </p>
         </div>
         <div class="backup-auto">
           <div class="form-switch-row">
@@ -917,6 +932,8 @@ const backupKeepCount = ref(DEFAULT_BACKUP_KEEP_COUNT)
 const backupArchives = ref<BackupArchive[]>([])
 const backupBusy = ref<string | null>(null)
 const backupError = ref('')
+// 可选的归档口令：只放内存，不写 localStorage（加密归档的口令不该留在浏览器里）
+const backupPassphrase = ref('')
 
 // 公开状态页：开关与访问码走设置项（访问码按「掩码往返」处理）
 const statusPageEnabled = ref(false)
@@ -1700,7 +1717,7 @@ async function createBackupArchive() {
   if (backupBusy.value) return
   backupBusy.value = 'create'
   try {
-    await api.createBackupArchive()
+    await api.createBackupArchive(backupPassphrase.value)
     await loadBackupArchives()
     message.success('已创建一份备份')
   } catch (error) {
@@ -1730,7 +1747,7 @@ async function downloadBackupArchive(archive: BackupArchive) {
 async function restoreBackupArchive(archive: BackupArchive) {
   backupBusy.value = `restore:${archive.name}`
   try {
-    const result = await api.restoreBackupArchive(archive.name)
+    const result = await api.restoreBackupArchive(archive.name, backupPassphrase.value)
     message.success(result.message || '备份已恢复，建议重启 Havline')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '恢复失败')
@@ -1756,7 +1773,7 @@ function openStatusPage() {
 async function exportBackup() {
   exporting.value = true
   try {
-    await api.exportBackup()
+    await api.exportBackup(backupPassphrase.value)
     message.success('备份已开始下载')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '导出失败')
@@ -1769,7 +1786,7 @@ async function onRestoreFile({ file }: { file: UploadFileInfo }) {
   if (!file.file) return
   restoring.value = true
   try {
-    const result = await api.restoreBackup(file.file)
+    const result = await api.restoreBackup(file.file, backupPassphrase.value)
     message.success(result.message)
   } catch (error) {
     message.error(error instanceof Error ? error.message : '恢复失败')
@@ -1925,6 +1942,12 @@ useVisibilityPolling(loadChinaCIDRStatus, 2000, { enabled: chinaCIDRPolling })
 .config-versions__error { margin: 8px 0 0; font-size: 12px; color: var(--havline-error); line-height: 1.6; }
 
 /* 自动备份：开关 + 保留份数 + 备份列表 */
+.backup-passphrase {
+  display: grid; gap: 6px;
+  margin-top: var(--havline-space-4); padding-top: var(--havline-space-4);
+  border-top: 1px solid var(--havline-border);
+}
+.backup-passphrase__input { max-width: 320px; }
 .backup-auto {
   display: grid; gap: var(--havline-space-3);
   margin-top: var(--havline-space-4); padding-top: var(--havline-space-4);

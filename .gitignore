@@ -34,3 +34,8 @@ scripts/*
 *.7z
 *.tar.gz
 *.log
+# 前端 UI 原型（HTML 草稿与截图，约 2.8MB）：只作设计参考，不是构建输入
+/prototype/
+# 只保留 npm 一份 lockfile：仓库里曾同时存在 pnpm-lock.yaml，
+# 两份锁文件各自记录不同版本，装出哪个依赖取决于用哪个包管理器，容易排查不清
+web/pnpm-lock.yaml

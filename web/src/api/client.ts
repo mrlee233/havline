@@ -61,6 +61,14 @@ export function asList<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
 
+// backupHeaders 把可选的归档口令放进请求头。
+// 用请求头而不是查询串：查询串会进 Nginx 访问日志，口令不该落盘。
+function backupHeaders(passphrase?: string): HeadersInit | undefined {
+  const value = passphrase?.trim()
+  if (!value) return undefined
+  return { 'X-Backup-Passphrase': value }
+}
+
 const REQUEST_TIMEOUT_MS = 30_000
 const CERT_REQUEST_TIMEOUT_MS = 10 * 60_000
 const AGENT_OPERATION_TIMEOUT_MS = 5 * 60_000
@@ -455,8 +463,11 @@ export const api = {
     return request<DiscoveredService[]>(`/api/discovery/scan?${q}`)
   },
 
-  async exportBackup() {
-    const response = await fetch(withBase('/api/backup/export'), { credentials: 'include' })
+  async exportBackup(passphrase?: string) {
+    const response = await fetch(withBase('/api/backup/export'), {
+      credentials: 'include',
+      headers: backupHeaders(passphrase),
+    })
     if (!response.ok) {
       throw new Error('导出备份失败')
     }
@@ -471,10 +482,16 @@ export const api = {
 
   listBackupArchives: () =>
     request<{ archives: import('./types').BackupArchive[]; keep: number }>('/api/backup/archives'),
-  createBackupArchive: () =>
-    request<{ name: string; removed: number }>('/api/backup/archives', { method: 'POST' }),
-  restoreBackupArchive: (name: string) =>
-    request<{ message: string }>(`/api/backup/archives/${encodeURIComponent(name)}/restore`, { method: 'POST' }),
+  createBackupArchive: (passphrase?: string) =>
+    request<{ name: string; removed: number }>('/api/backup/archives', {
+      method: 'POST',
+      headers: backupHeaders(passphrase),
+    }),
+  restoreBackupArchive: (name: string, passphrase?: string) =>
+    request<{ message: string }>(`/api/backup/archives/${encodeURIComponent(name)}/restore`, {
+      method: 'POST',
+      headers: backupHeaders(passphrase),
+    }),
   deleteBackupArchive: (name: string) =>
     request<{ ok: boolean }>(`/api/backup/archives/${encodeURIComponent(name)}`, { method: 'DELETE' }),
   async downloadBackupArchive(name: string) {
@@ -491,12 +508,13 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 
-  async restoreBackup(file: File) {
+  async restoreBackup(file: File, passphrase?: string) {
     const form = new FormData()
     form.append('file', file)
     const response = await fetch(withBase('/api/backup/restore'), {
       method: 'POST',
       credentials: 'include',
+      headers: backupHeaders(passphrase),
       body: form,
     })
     if (!response.ok) {

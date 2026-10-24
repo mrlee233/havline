@@ -25,12 +25,12 @@ func TestGenerateMixedRulesWithoutCerts(t *testing.T) {
 	rules := []proxy.Rule{
 		{
 			ID: 1, Upstream: "http://192.168.1.10:5666", ListenPort: 443, ListenIPv4: true,
-			Hosts: []proxy.Host{{Hostname: "nas.example.com"}},
+			Hosts:        []proxy.Host{{Hostname: "nas.example.com"}},
 			HTTPSEnabled: true, HTTPRedirect: true, Enabled: true,
 		},
 		{
 			ID: 2, Upstream: "http://192.168.8.3:6893", ListenPort: 8011, ListenIPv4: true, ListenIPv6: true,
-			Hosts: []proxy.Host{{Hostname: "app.example.com"}},
+			Hosts:        []proxy.Host{{Hostname: "app.example.com"}},
 			HTTPSEnabled: true, HTTPRedirect: true, Enabled: true,
 		},
 	}

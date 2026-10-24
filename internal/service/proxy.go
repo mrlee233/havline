@@ -24,11 +24,19 @@ type ProxyService struct {
 	nginx     *nginx.Manager
 	notify    *notify.Service
 	exitSync  ExitSync
+	traffic   TrafficCleaner
 }
 
 // ExitSync 处理服务发布规则变化后的外部出口同步。
 type ExitSync interface {
 	SyncRules(ctx context.Context) error
+}
+
+// TrafficCleaner 清掉某条规则对应的流量累计（内存 + 落库）。
+// 用接口注入而不是直接依赖 traffic 包：service 是编排层，不该反过来知道采集细节。
+// 参数用 proxy.Endpoint 而不是拼好的字符串，键格式由 traffic 包自己决定。
+type TrafficCleaner interface {
+	ForgetEndpoints(ctx context.Context, endpoints []proxy.Endpoint) error
 }
 
 func NewProxyService(cfg config.Config, db *sql.DB, store *proxy.Store, certStore *certificate.Store, settingsStore *settings.Store, nginxMgr *nginx.Manager) *ProxyService {
@@ -41,6 +49,10 @@ func (s *ProxyService) SetNotify(notifySvc *notify.Service) {
 
 func (s *ProxyService) SetExitSync(sync ExitSync) {
 	s.exitSync = sync
+}
+
+func (s *ProxyService) SetTrafficCleaner(cleaner TrafficCleaner) {
+	s.traffic = cleaner
 }
 
 func (s *ProxyService) List(ctx context.Context) ([]proxy.Rule, error) {
@@ -119,10 +131,16 @@ func (s *ProxyService) Reorder(ctx context.Context, ids []int64) error {
 }
 
 func (s *ProxyService) Delete(ctx context.Context, id int64) error {
+	// 先取出规则：删除后就查不到域名与端口，没法定位要清理的流量键
+	rule, err := s.store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
 	if err := s.store.Delete(ctx, id); err != nil {
 		return err
 	}
 	_ = nginx.RemoveRuleCustom(s.cfg, id)
+	s.forgetTraffic(ctx, rule)
 	if err := s.applyNginx(ctx); err != nil {
 		return fmt.Errorf("规则已删除，但 Nginx 重载失败：%w", err)
 	}
@@ -130,6 +148,15 @@ func (s *ProxyService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("规则已删除，但 Cloudflare 同步失败：%w", err)
 	}
 	return nil
+}
+
+// forgetTraffic 清掉规则对应端点的流量累计。失败不影响删除本身：
+// 残留的统计行只是脏数据，而规则已经删了，没必要为此把删除操作报成失败。
+func (s *ProxyService) forgetTraffic(ctx context.Context, rule proxy.Rule) {
+	if s.traffic == nil {
+		return
+	}
+	_ = s.traffic.ForgetEndpoints(ctx, rule.Endpoints())
 }
 
 func (s *ProxyService) ReloadAll(ctx context.Context) error {

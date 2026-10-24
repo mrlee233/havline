@@ -31,10 +31,10 @@ type JobDonePayload struct {
 }
 
 type Job struct {
-	id     string
-	mu     sync.Mutex
-	events []JobEvent
-	done   bool
+	id      string
+	mu      sync.Mutex
+	events  []JobEvent
+	done    bool
 	waiters map[chan JobEvent]struct{}
 }
 

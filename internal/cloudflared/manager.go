@@ -2,6 +2,7 @@ package cloudflared
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -35,10 +36,29 @@ type Manager struct {
 	logger    *slog.Logger
 	mu        sync.Mutex
 	processes map[int64]*processState
+	// baseCtx 是应用级 ctx：应用退出时用它连带结束未显式 Stop 的子进程。
+	// 不能用请求 ctx——HTTP 请求一结束子进程就会被杀掉。
+	baseCtx context.Context
 }
 
 func NewManager(cfg config.Config, logger *slog.Logger) *Manager {
 	return &Manager{cfg: cfg, logger: logger, processes: map[int64]*processState{}}
+}
+
+// SetBaseContext 注入应用级 ctx，供子进程生命周期绑定。
+func (m *Manager) SetBaseContext(ctx context.Context) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.baseCtx = ctx
+}
+
+func (m *Manager) lifecycleContext() context.Context {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.baseCtx == nil {
+		return context.Background()
+	}
+	return m.baseCtx
 }
 
 func buildRunArgs(tunnel Tunnel, configPath, token string) []string {
@@ -116,7 +136,7 @@ func (m *Manager) Start(tunnel Tunnel, binaryPath, configPath, token string) err
 		m.remove(tunnel.ID)
 		return err
 	}
-	cmd := exec.Command(binaryPath, buildRunArgs(tunnel, configPath, token)...)
+	cmd := exec.CommandContext(m.lifecycleContext(), binaryPath, buildRunArgs(tunnel, configPath, token)...)
 	cmd.Env = buildEnv(tunnel.Network)
 	cmd.SysProcAttr = hideWindowAttr()
 	stdout, err := cmd.StdoutPipe()

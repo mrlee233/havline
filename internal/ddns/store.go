@@ -10,18 +10,18 @@ import (
 )
 
 type Config struct {
-	ID            int64      `json:"id"`
-	Provider      string     `json:"provider"`
-	Name          string     `json:"name"`
-	RootDomain    string     `json:"root_domain"`
-	RecordName    string     `json:"record_name"`
-	RecordNames   []string   `json:"record_names"`
-	IPv4Enabled   bool       `json:"ipv4_enabled"`
-	IPv6Enabled   bool       `json:"ipv6_enabled"`
-	Enabled       bool       `json:"enabled"`
-	HasToken      bool       `json:"has_token"`
-	CustomIPv4    string     `json:"custom_ipv4,omitempty"`
-	CustomIPv6    string     `json:"custom_ipv6,omitempty"`
+	ID            int64          `json:"id"`
+	Provider      string         `json:"provider"`
+	Name          string         `json:"name"`
+	RootDomain    string         `json:"root_domain"`
+	RecordName    string         `json:"record_name"`
+	RecordNames   []string       `json:"record_names"`
+	IPv4Enabled   bool           `json:"ipv4_enabled"`
+	IPv6Enabled   bool           `json:"ipv6_enabled"`
+	Enabled       bool           `json:"enabled"`
+	HasToken      bool           `json:"has_token"`
+	CustomIPv4    string         `json:"custom_ipv4,omitempty"`
+	CustomIPv6    string         `json:"custom_ipv6,omitempty"`
 	LastIPv4      string         `json:"last_ipv4"`
 	LastIPv6      string         `json:"last_ipv6"`
 	LastStatus    string         `json:"last_status"`

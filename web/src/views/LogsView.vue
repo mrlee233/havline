@@ -130,7 +130,7 @@
           :show-status="true"
           :auto-refresh="autoRefresh"
           @refresh="loadAccess"
-          @toggle-auto="autoRefresh = !autoRefresh"
+          @toggle-auto="toggleAutoRefresh"
         />
         <n-data-table
           v-if="filteredAccessLogs.length > 0"
@@ -317,6 +317,13 @@ function resolveTab(queryTab: unknown): LogTab {
 const tab = ref(resolveTab(route.query.tab))
 const pageError = ref('')
 const autoRefresh = ref(false)
+
+// toggleAutoRefresh 用函数而不是在模板里直接赋值：
+// LogToolbar 是 defineComponent + props 的子组件，在模板里写 autoRefresh = !autoRefresh
+// 会被 eslint 判成「修改 prop」（模板作用域里分不清 ref 与 prop），也容易误改到子组件状态。
+function toggleAutoRefresh() {
+  autoRefresh.value = !autoRefresh.value
+}
 
 const accessLogs = ref<AccessLogEntry[]>([])
 const proxyRules = ref<ProxyRule[]>([])

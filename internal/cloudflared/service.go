@@ -47,6 +47,11 @@ func (s *Service) EnsureDirs() error {
 	return os.MkdirAll(filepath.Join(s.cfg.DataDir, "cloudflared", "bin"), 0o755)
 }
 
+// SetBaseContext 注入应用级 ctx：应用退出时 cloudflared 子进程随之结束。
+func (s *Service) SetBaseContext(ctx context.Context) {
+	s.manager.SetBaseContext(ctx)
+}
+
 func (s *Service) List(ctx context.Context) ([]Tunnel, error) {
 	items, err := s.store.List(ctx)
 	if err != nil {
@@ -752,6 +757,18 @@ func (s *Service) IngressCandidates(ctx context.Context) ([]string, error) {
 	return hosts, nil
 }
 
+// autoStartTargets 从隧道列表里挑出启动时应被拉起的隧道。
+// 单独抽出来是为了能用纯函数覆盖「只启动 auto_start」这条语义。
+func autoStartTargets(tunnels []Tunnel) []Tunnel {
+	out := make([]Tunnel, 0, len(tunnels))
+	for _, tunnel := range tunnels {
+		if tunnel.AutoStart {
+			out = append(out, tunnel)
+		}
+	}
+	return out
+}
+
 // StartAuto 在应用启动时拉起标记了 auto_start 的隧道。
 func (s *Service) StartAuto(ctx context.Context) {
 	settings, err := s.store.GetSettingsRaw(ctx)
@@ -767,10 +784,7 @@ func (s *Service) StartAuto(ctx context.Context) {
 		s.logger.Warn("读取 Cloudflare 隧道失败", "error", err.Error())
 		return
 	}
-	for _, tunnel := range tunnels {
-		if !tunnel.AutoStart {
-			continue
-		}
+	for _, tunnel := range autoStartTargets(tunnels) {
 		if _, err := s.Start(ctx, tunnel.ID); err != nil {
 			s.logger.Warn("自动启动 Cloudflare 隧道失败", "tunnel_id", tunnel.ID, "error", err.Error())
 		}

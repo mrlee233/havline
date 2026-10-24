@@ -96,17 +96,6 @@ const (
 	KeyFrpResumeOnStart = "frp_resume_on_start"
 )
 
-var Defaults = map[string]string{
-	KeyTheme:                "system",
-	KeyTimezone:             "Asia/Shanghai",
-	KeyLogRetentionDays:     "30",
-	KeyDDNSCheckInterval:    "5",
-	KeyCertRenewThreshold:   "30",
-	KeyACMECA:               "letsencrypt",
-	KeyChinaCIDRUpdateHours: "24",
-	KeyNginxGlobalMode:      "auto",
-}
-
 type Store struct {
 	db *sql.DB
 }

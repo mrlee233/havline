@@ -43,7 +43,7 @@ export function displaySystemLog(entry: SystemLogEntry): DisplaySystemLogEntry {
   const message = entry.message.trim()
   const msgLower = message.toLowerCase()
   let level = entry.level.trim().toUpperCase()
-  let displayModule = systemModuleLabel(entry.module)
+  const displayModule = systemModuleLabel(entry.module)
 
   if (
     level === 'INFO' &&

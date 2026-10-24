@@ -16,11 +16,11 @@ func TestGenerateMultiHostCustomPort(t *testing.T) {
 	}
 	port6893 := 6893
 	rules := []proxy.Rule{{
-		ID:           1,
-		Upstream:     "http://192.168.8.3:6893",
-		ListenPort:   8011,
-		ListenIPv4:   true,
-		ListenIPv6:   true,
+		ID:         1,
+		Upstream:   "http://192.168.8.3:6893",
+		ListenPort: 8011,
+		ListenIPv4: true,
+		ListenIPv6: true,
 		Hosts: []proxy.Host{
 			{Hostname: "1.example.com"},
 			{Hostname: "2.example.com"},

@@ -103,6 +103,13 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 	proxyStore := proxy.NewStore(conn)
 	settingsStore := settings.NewStore(conn)
+	// 时区必须在任何业务开始前生效：通知时间戳、日志时间、调度判断都依赖 time.Local。
+	// 设置项缺失或写坏时退回 TZ 环境变量，不让应用起不来。
+	if loc, err := settings.ApplyTimezone(context.Background(), settingsStore); err != nil {
+		logger.Warn("应用时区设置失败，沿用系统 TZ", "module", "SYSTEM", "error", err.Error())
+	} else {
+		logger.Info("时区已应用", "module", "SYSTEM", "timezone", loc.String())
+	}
 	ddnsStore := ddns.NewStore(conn)
 	certStore := certificate.NewStore(conn)
 	nginxMgr := nginx.NewManager(cfg, logger.With("module", "NGINX"))
@@ -118,6 +125,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	ddnsSvc := ddns.NewService(ddnsStore, settingsStore, secretBox, logger, notifySvc)
 	acmeSvc := acme.NewService(cfg, certStore, ddnsSvc, settingsStore, proxySvc, logger, notifySvc)
 	backupSvc := backup.New(cfg.DataDir)
+	// 注入数据库连接：导出时用 VACUUM INTO 拿一致性快照，而不是直接打包正在写的文件
+	backupSvc.SetDB(conn)
 	// 指标历史：与巡检同生命周期，采样跟随巡检轮次
 	metricsStore := metrics.NewStore(conn)
 	discoverySvc := discovery.New()
@@ -137,6 +146,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	proxySvc.SetExitSync(cloudflareSvc)
 	startedAt := time.Now().UTC().Format(time.RFC3339)
 	trafficCollector := traffic.NewCollector(conn, filepath.Join(cfg.LogsDir(), "access.log"), notifySvc)
+	// 删规则时连带清掉它的流量累计，否则同名规则重建会继承上一轮的读数
+	proxySvc.SetTrafficCleaner(trafficCollector)
 	updaterClient := updater.NewClient(cfg.UpdaterSocket, updaterToken)
 	// 内置 SSH 终端：会话管理借用 frp 的 SSH 凭据与 known_hosts；开关默认关闭，见 settings.KeyTerminalEnabled
 	// 会话审计落 SQLite：谁、何时、连了哪台、多久、为什么断开
@@ -195,9 +206,8 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	// 终端会话回收：空闲超时、超长会话与已结束会话都靠它清理
 	terminalManager.StartSweeper(ctx, time.Minute)
 	frpMultiSvc.SetBaseContext(ctx)
-	go frpMultiSvc.StartAgentTunnels(ctx)
-	go frpMultiSvc.StartAgentCertificateRenewal(ctx)
-	go cloudflareSvc.StartAll(ctx)
+	// cloudflared 子进程跟随应用 ctx：应用退出时不会留下孤儿进程
+	cloudflareSvc.SetBaseContext(ctx)
 	intervalMinutes, _ := settingsStore.GetInt(ctx, settings.KeyDDNSCheckInterval)
 	if intervalMinutes <= 0 {
 		intervalMinutes = 5
@@ -257,6 +267,30 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 				}
 			},
 		},
+		scheduler.Job{
+			Name:     "session_prune",
+			Interval: 24 * time.Hour,
+			// 过期会话否则只能等自己被访问时删掉自己，长期不登录的设备会一直留在表里
+			Run: func(ctx context.Context) {
+				removed, err := authSvc.PruneExpiredSessions(ctx)
+				if err != nil {
+					logger.Warn("过期会话清理失败", "module", "AUTH", "error", err.Error())
+					return
+				}
+				if removed > 0 {
+					logger.Info("过期会话清理完成", "module", "AUTH", "deleted", removed)
+				}
+			},
+		},
+		scheduler.Job{
+			Name:     "log_rotate",
+			Interval: time.Hour,
+			// Nginx 自己不会轮转：不切的话 access.log 会一直长，同时读日志的
+			// 几个接口（今日统计、小时曲线）会越来越慢。
+			Run: func(ctx context.Context) {
+				rotateNginxLogs(ctx, cfg, nginxMgr, settingsStore, logger)
+			},
+		},
 	)
 	sched.Start(ctx)
 	trafficCollector.Start(ctx)
@@ -267,22 +301,33 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 		server:     server,
 		nginx:      nginxMgr,
 		frpMulti:   frpMultiSvc,
+		cloudflare: cloudflareSvc,
 		scheduler:  sched,
 		shutdownFn: cancel,
 		db:         conn,
 	}
 
+	// 就绪门：Nginx 首轮配置应用完之前不放后台任务。
+	// 否则 Agent 路由下发、Cloudflare ingress 同步会在启动瞬间各触发一次
+	// Nginx reload，和 bootstrap 抢同一份配置与 pid。
+	ready := make(chan struct{})
 	if err := app.bootstrapNginx(context.Background(), proxySvc); err != nil {
 		cancel()
 		conn.Close()
 		return nil, err
 	}
-	if err := frpMultiSvc.ReconcileRuntime(context.Background()); err != nil {
-		logger.Warn("initial frp runtime reconcile skipped", "module", "FRP", "error", err.Error())
-	}
-	if err := frpMultiSvc.AutoStart(context.Background()); err != nil {
-		logger.Warn("initial frp autostart skipped", "module", "FRP", "error", err.Error())
-	}
+	close(ready)
+	go waitReady(ctx, ready, func() {
+		if err := frpMultiSvc.ReconcileRuntime(ctx); err != nil {
+			logger.Warn("initial frp runtime reconcile skipped", "module", "FRP", "error", err.Error())
+		}
+		if err := frpMultiSvc.AutoStart(ctx); err != nil {
+			logger.Warn("initial frp autostart skipped", "module", "FRP", "error", err.Error())
+		}
+		cloudflareSvc.StartAuto(ctx)
+	})
+	go waitReady(ctx, ready, func() { frpMultiSvc.StartAgentTunnels(ctx) })
+	go waitReady(ctx, ready, func() { frpMultiSvc.StartAgentCertificateRenewal(ctx) })
 
 	listen := strings.TrimSpace(cfg.ListenAddr)
 	if listen == "" {
@@ -290,6 +335,42 @@ func New(cfg config.Config, staticFS fs.FS, migrationsDir string) (*App, error) 
 	}
 	logger.Info("application started", "module", "SYSTEM", "listen", listen)
 	return app, nil
+}
+
+// waitReady 等到 ready 关闭（或 ctx 取消）后再执行 fn。
+func waitReady(ctx context.Context, ready <-chan struct{}, fn func()) {
+	select {
+	case <-ready:
+	case <-ctx.Done():
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	fn()
+}
+
+// rotateNginxLogs 轮转 access.log 与 error.log。
+// 保留天数接「设置 → 常规 → 日志保留天数」，份数用 logstore 默认值兜底。
+func rotateNginxLogs(ctx context.Context, cfg config.Config, nginxMgr *nginx.Manager, store *settings.Store, logger *slog.Logger) {
+	retentionDays, err := store.GetInt(ctx, settings.KeyLogRetentionDays)
+	if err != nil || retentionDays <= 0 {
+		retentionDays = 30
+	}
+	logsDir := cfg.LogsDir()
+	for _, name := range []string{"access.log", "error.log"} {
+		rotator := logstore.NewRotator(filepath.Join(logsDir, name), retentionDays, func() error {
+			return nginxMgr.ReopenLogs(ctx)
+		})
+		rotated, err := rotator.RotateIfNeeded(time.Now())
+		if err != nil {
+			logger.Warn("日志轮转失败", "module", "LOGSTORE", "file", name, "error", err.Error())
+			continue
+		}
+		if rotated {
+			logger.Info("日志已轮转", "module", "LOGSTORE", "file", name)
+		}
+	}
 }
 
 func (a *App) bootstrapNginx(ctx context.Context, proxySvc *service.ProxyService) error {
@@ -356,6 +437,12 @@ func (a *App) Shutdown(ctx context.Context) error {
 		if err := a.frpMulti.StopForShutdown(ctx); err != nil {
 			a.logger.Error("frpc stop failed", "module", "FRP", "error", err.Error())
 		}
+	}
+	// cloudflared 不保留「上次在运行」：AutoStart 是用户的显式选择，
+	// 这里只负责把当前子进程收干净，避免退出后残留进程占着 Cloudflare 连接。
+	// 放在 nginx 之后：ingress 还指向本机 Nginx，先收隧道再做别的没有意义。
+	if a.cloudflare != nil {
+		a.cloudflare.StopAll(ctx)
 	}
 	if a.db != nil {
 		return a.db.Close()

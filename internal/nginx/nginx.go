@@ -298,6 +298,28 @@ func (m *Manager) Stop(ctx context.Context) error {
 	return nil
 }
 
+// ReopenLogs 让 Nginx 关掉旧日志句柄并按配置里的路径重新打开。
+// 日志轮转（把 access.log 改名归档）之后必须调用它，否则 Nginx 会继续写旧 inode，
+// 新日志永远落不到 access.log 上。
+func (m *Manager) ReopenLogs(ctx context.Context) error {
+	pid, err := readPIDFile(m.cfg.NginxPIDFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// 没在运行就没什么要重开的：轮转本身已经把文件归档了
+			return nil
+		}
+		return err
+	}
+	if !isPIDAlive(pid) {
+		return nil
+	}
+	if err := reopenLogsProcess(pid); err != nil {
+		return err
+	}
+	m.logger.Info("nginx log files reopened")
+	return nil
+}
+
 func (m *Manager) runNginx(ctx context.Context, args []string, prefix string) error {
 	ctx, cancel := context.WithTimeout(ctx, nginxCmdTimeout)
 	defer cancel()

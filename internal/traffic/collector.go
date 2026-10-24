@@ -382,3 +382,23 @@ func (c *Collector) ClientsForRule(rule proxy.Rule) []ClientConn {
 	})
 	return out
 }
+
+// ForgetEndpoints 丢弃这些端点的内存累计与速率样本，并删掉落库的累计行。
+// 规则删除时调用：否则同名规则重建会直接继承上一轮的流量总量。
+func (c *Collector) ForgetEndpoints(ctx context.Context, endpoints []proxy.Endpoint) error {
+	if len(endpoints) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(endpoints))
+	for _, ep := range endpoints {
+		keys = append(keys, EndpointKey(ep.Hostname, ep.Port))
+	}
+
+	c.mu.Lock()
+	for _, key := range keys {
+		delete(c.hosts, key)
+	}
+	c.mu.Unlock()
+
+	return c.store.DeleteHosts(ctx, keys)
+}

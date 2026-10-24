@@ -15,9 +15,9 @@ const (
 	diagStateFailed  = "failed"
 	diagStateUnknown = "unknown"
 
-	diagTCPTimeout       = 3 * time.Second
-	diagDNSTimeout       = 2 * time.Second
-	diagnosticsCacheTTL  = 15 * time.Second
+	diagTCPTimeout         = 3 * time.Second
+	diagDNSTimeout         = 2 * time.Second
+	diagnosticsCacheTTL    = 15 * time.Second
 	diagnosticsMaxInFlight = 4
 )
 
